@@ -15,7 +15,7 @@ app = FastAPI()
 # ==========================================
 
 # This looks for the variable you set in Render's "Environment" tab
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = os.environ.get('postgresql://marketscope_db_3u8k_user:KzksmIncH8nm5FUC0EuR2ZKaCYNQxfwQ@dpg-d7cblqjbc2fs73egkcs0-a/marketscope_db_3u8k')
 
 def get_db_connection():
     try:
