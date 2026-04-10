@@ -8,7 +8,22 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import bcrypt
 import os
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI()
+
+# Add this block right after app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173", # For local testing
+        "market-scope-m6yitcpas-crlrmenn1s-projects.vercel.app", # Your Vercel domain
+    ],
+    allow_credentials=True,
+    allow_methods=["*"], # Allows GET, POST, etc.
+    allow_headers=["*"], # Allows all headers
+)
 # ==========================================
 # DATABASE CONFIGURATION
 # ==========================================

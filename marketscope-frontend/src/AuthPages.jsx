@@ -8,6 +8,10 @@ export default function AuthPages({ onLoginSuccess }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Dynamic API URL: Uses the Vercel environment variable in production 
+  // and falls back to localhost during development.
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
   useEffect(() => {
     let score = 0;
     if (password.length > 5) score += 1;
@@ -32,7 +36,7 @@ export default function AuthPages({ onLoginSuccess }) {
     const pwd = e.target.password.value;
 
     try {
-      const response = await fetch('http://localhost:8000/login', {
+      const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pwd })
@@ -67,7 +71,7 @@ export default function AuthPages({ onLoginSuccess }) {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/register', {
+      const response = await fetch(`${API_URL}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ full_name: name, email, password: pwd })
@@ -87,7 +91,6 @@ export default function AuthPages({ onLoginSuccess }) {
     }
   };
 
-  // --- INTEGRATED HEADER LOGO ---
   const LandingBrand = () => (
     <div className="landing-brand-container mb-6">
       <div className="brand-wrapper" style={{ justifyContent: 'center' }}>
@@ -110,7 +113,6 @@ export default function AuthPages({ onLoginSuccess }) {
     <div className="auth-card animate-fade-in">
       <LandingBrand />
       
-      {/* MOBILE ONLY: Brings the Hero text to life on small screens */}
       <div className="mobile-hero-text mb-8">
         <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>
         <h2>Discover Panabo's<br/>Hidden Markets.</h2>
@@ -140,10 +142,10 @@ export default function AuthPages({ onLoginSuccess }) {
       </div>
 
       {errorMsg && (
-  <div className={errorMsg.includes('successful') ? "success-alert fade-in" : "error-alert fade-in"}>
-    {errorMsg}
-  </div>
-)}
+        <div className={errorMsg.includes('successful') ? "success-alert fade-in" : "error-alert fade-in"}>
+          {errorMsg}
+        </div>
+      )}
 
       <form onSubmit={handleLogin}>
         <div className="input-group">
@@ -225,10 +227,7 @@ export default function AuthPages({ onLoginSuccess }) {
   );
 
   return (
-    // We add a dynamic class based on the view to change the mobile background!
     <div className={`auth-container ${currentView === 'landing' ? 'view-landing' : ''}`}>
-      
-      {/* Desktop Hero Side */}
       <div className="auth-hero">
         <div className="hero-text">
           <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
@@ -237,7 +236,6 @@ export default function AuthPages({ onLoginSuccess }) {
         </div>
       </div>
 
-      {/* Form Side */}
       <div className="auth-form-wrapper">
         {currentView === 'landing' && renderLanding()}
         {currentView === 'login' && renderLogin()}
