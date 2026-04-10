@@ -1,0 +1,289 @@
+/* =========================================
+   1. CORE LAYOUT
+   ========================================= */
+.auth-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  background-color: #0b1120; /* Very dark slate/navy */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  transition: background-color 0.3s ease;
+}
+
+/* Left side hero (hidden on mobile, visible on desktop) */
+.auth-hero {
+  display: none;
+  flex: 1.2;
+  background-color: #3b0764; /* Deep purple base */
+  background-image: 
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: center center;
+  color: white;
+  padding: 80px;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+.hero-text {
+  max-width: 500px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  background-color: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 6px;
+  color: #d8b4fe;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.hero-text h1 {
+  font-size: 3.5rem;
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 24px;
+  letter-spacing: -1px;
+}
+
+.hero-text p {
+  font-size: 1.1rem;
+  color: #d8b4fe;
+  opacity: 0.9;
+  line-height: 1.6;
+}
+
+.auth-form-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: transparent;
+  transition: background-color 0.3s ease;
+}
+
+/* =========================================
+   MOBILE LANDING SPECIFICS (Add Life!)
+   ========================================= */
+.mobile-hero-text {
+  text-align: center;
+}
+
+.mobile-hero-text h2 {
+  font-size: 2.2rem;
+  font-weight: 900;
+  line-height: 1.1;
+  color: white;
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+
+.mobile-hero-text p {
+  font-size: 1rem;
+  color: #d8b4fe;
+  line-height: 1.5;
+}
+
+/* On Mobile, give the landing page the cool grid background */
+@media (max-width: 1023px) {
+  .auth-container.view-landing {
+    background-color: #3b0764;
+    background-image: 
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  
+  /* Make the card slightly transparent so the grid shows through! */
+  .auth-container.view-landing .auth-card {
+    background-color: rgba(21, 30, 46, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .auth-hero { display: flex; align-items: center; justify-content: center; }
+  .auth-form-wrapper { max-width: 600px; background-color: #0b1120; }
+  
+  /* Hide the mobile text on desktop so it doesn't duplicate the hero panel */
+  .mobile-hero-text { display: none; }
+}
+
+/* =========================================
+   2. CARDS & TYPOGRAPHY
+   ========================================= */
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background-color: #151e2e;
+  padding: 48px 40px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.05);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
+}
+
+.landing-brand-container { text-align: center; }
+
+.auth-header h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: white;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.auth-header p { font-size: 1rem; color: #94a3b8; }
+
+.back-link {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+.back-link:hover { color: white; }
+
+/* =========================================
+   3. FORMS & INPUTS
+   ========================================= */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 24px;
+}
+
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+
+.input-group input {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 1rem;
+  color: white;
+  background-color: #0b1120;
+  transition: all 0.2s ease;
+}
+.input-group input:focus {
+  outline: none;
+  border-color: #a855f7;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+}
+
+/* =========================================
+   4. BUTTONS
+   ========================================= */
+.auth-actions-row {
+  display: flex;
+  flex-direction: column; /* Stack buttons on mobile for easier tapping */
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .auth-actions-row { flex-direction: row; }
+}
+
+.btn-primary {
+  flex: 1;
+  background: #a855f7;
+  color: white;
+  padding: 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+.btn-primary:hover { background-color: #9333ea; }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+
+.btn-secondary {
+  flex: 1;
+  background-color: rgba(255,255,255,0.05);
+  color: white;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.btn-secondary:hover { background-color: rgba(255,255,255,0.1); }
+
+/* =========================================
+   5. EXTRAS (Meters, Links, Alerts)
+   ========================================= */
+.password-strength-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.strength-meter {
+  flex: 1;
+  height: 4px;
+  background-color: #334155;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.auth-footer {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #94a3b8;
+}
+
+.auth-footer span {
+  color: #a855f7;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 6px;
+}
+.auth-footer span:hover { text-decoration: underline; }
+
+.error-alert {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* Utilities */
+.w-full { width: 100%; }
+.mb-4 { margin-bottom: 16px; }
+.mb-6 { margin-bottom: 24px; }
+.mb-8 { margin-bottom: 32px; }
+.mt-2 { margin-top: 8px; }
+.mt-4 { margin-top: 16px; }
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
