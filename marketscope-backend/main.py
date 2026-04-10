@@ -7,39 +7,42 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import bcrypt
-import os
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Add this block right after app = FastAPI()
+# ==========================================
+# DATABASE & CORS CONFIGURATION
+# ==========================================
+
+# This looks for the variable you set in Render's "Environment" tab
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db_connection():
+    try:
+        if DATABASE_URL:
+            # Production: Use the Cloud URL from Render
+            return psycopg2.connect(DATABASE_URL)
+        else:
+            # Local: Use your laptop's settings
+            return psycopg2.connect(
+                dbname="marketscope_db",
+                user="postgres", 
+                password="1234", 
+                host="localhost",
+                port="5432"
+            )
+    except Exception as e:
+        print(f"Database Connection Error: {e}")
+        raise e
+
+# Combined CORS Settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173", # For local testing
-        "market-scope-m6yitcpas-crlrmenn1s-projects.vercel.app", # Your Vercel domain
+        "http://localhost:5173", 
+        "https://market-scope-m6yitcpas-crlrmenn1s-projects.vercel.app", # Your Preview URL
+        "https://market-scope.vercel.app", # Add your main production URL here too
     ],
-    allow_credentials=True,
-    allow_methods=["*"], # Allows GET, POST, etc.
-    allow_headers=["*"], # Allows all headers
-)
-# ==========================================
-# DATABASE CONFIGURATION
-# ==========================================
-DB_CONFIG = {
-    "dbname": "marketscope_db",
-    "user": "postgres", 
-    "password": "1234", # <-- PUT YOUR PASSWORD HERE
-    "host": "localhost",
-    "port": "5432"
-}
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,8 +71,9 @@ class AnalysisRequest(BaseModel):
 # ==========================================
 @app.post("/register")
 def register(user: RegisterUser):
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # Check if email already exists
@@ -89,23 +93,24 @@ def register(user: RegisterUser):
         new_user = cursor.fetchone()
         conn.commit()
         cursor.close()
-        conn.close()
 
         return {"status": "success", "user": {"id": new_user[0], "name": new_user[1], "email": user.email}}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn: conn.close()
 
 @app.post("/login")
 def login(user: LoginUser):
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         cursor.execute("SELECT id, full_name, email, password_hash FROM users WHERE email = %s", (user.email,))
         db_user = cursor.fetchone()
         cursor.close()
-        conn.close()
 
         # Verify password
         if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
@@ -115,6 +120,8 @@ def login(user: LoginUser):
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn: conn.close()
 
 # ==========================================
 # GEOSPATIAL ANALYSIS ROUTE
@@ -171,17 +178,19 @@ def check_inside_bounds(lat, lon, bounds):
     return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
 
 def fetch_custom_msmes(business_key):
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT name, latitude, longitude FROM custom_msme WHERE business_type = %s", (business_key,))
         results = cursor.fetchall()
         cursor.close()
-        conn.close()
         return results
     except Exception as e:
         print(f"Database Error: {e}")
         return []
+    finally:
+        if conn: conn.close()
 
 @app.post("/analyze")
 def perform_analysis(data: AnalysisRequest):
@@ -315,4 +324,4 @@ def perform_analysis(data: AnalysisRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
