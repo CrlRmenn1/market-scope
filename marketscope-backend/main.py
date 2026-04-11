@@ -7,43 +7,31 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import bcrypt
+import os
+
+# ==========================================
+# DATABASE CONFIGURATION
+# ==========================================
+DB_CONFIG = {
+    "dbname": "marketscope_db",
+    "user": "postgres", 
+    "password": "1234", # <-- PUT YOUR PASSWORD HERE
+    "host": "localhost",
+    "port": "5432"
+}
 
 app = FastAPI()
 
-# ==========================================
-# 1. CORE APP & DB CONFIGURATION
-# ==========================================
-DATABASE_URL = os.environ.get('DATABASE_URL')
-
-def get_db_connection():
-    try:
-        if DATABASE_URL:
-            # Production: Uses your Render Cloud Database URL
-            return psycopg2.connect(DATABASE_URL)
-        else:
-            # Local: Uses your laptop's settings
-            return psycopg2.connect(
-                dbname="marketscope_db",
-                user="postgres", 
-                password="1234", 
-                host="localhost",
-                port="5432"
-            )
-    except Exception as e:
-        print(f"Database Connection Error: {e}")
-        raise e
-
-# BULLETPROOF CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ==========================================
-# 2. DATA MODELS (PYDANTIC)
+# PYDANTIC MODELS
 # ==========================================
 class RegisterUser(BaseModel):
     full_name: str
@@ -61,21 +49,24 @@ class AnalysisRequest(BaseModel):
     radius: int = 340 
 
 # ==========================================
-# 3. AUTHENTICATION ROUTES
+# AUTHENTICATION ROUTES
 # ==========================================
 @app.post("/register")
 def register(user: RegisterUser):
-    conn = None
     try:
-        conn = get_db_connection()
+        conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
+        
+        # Check if email already exists
         cursor.execute("SELECT id FROM users WHERE email = %s", (user.email,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Email already registered")
 
+        # Hash the password
         salt = bcrypt.gensalt()
         hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), salt).decode('utf-8')
 
+        # Save to database
         cursor.execute(
             "INSERT INTO users (full_name, email, password_hash) VALUES (%s, %s, %s) RETURNING id, full_name",
             (user.full_name, user.email, hashed_password)
@@ -83,24 +74,25 @@ def register(user: RegisterUser):
         new_user = cursor.fetchone()
         conn.commit()
         cursor.close()
+        conn.close()
 
         return {"status": "success", "user": {"id": new_user[0], "name": new_user[1], "email": user.email}}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if conn: conn.close()
 
 @app.post("/login")
 def login(user: LoginUser):
-    conn = None
     try:
-        conn = get_db_connection()
+        conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
         cursor.execute("SELECT id, full_name, email, password_hash FROM users WHERE email = %s", (user.email,))
         db_user = cursor.fetchone()
         cursor.close()
+        conn.close()
 
+        # Verify password
         if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -108,11 +100,9 @@ def login(user: LoginUser):
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if conn: conn.close()
 
 # ==========================================
-# 4. GEOSPATIAL ANALYSIS ENGINE
+# GEOSPATIAL ANALYSIS ROUTE
 # ==========================================
 PBF_PATH = "panabo.pbf"
 
@@ -165,21 +155,18 @@ def check_inside_bounds(lat, lon, bounds):
     min_lat, max_lat, min_lon, max_lon = bounds
     return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
 
-# HELPER: Fetch competitor locations from the Cloud Database
 def fetch_custom_msmes(business_key):
-    conn = None
     try:
-        conn = get_db_connection()
+        conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT name, latitude, longitude FROM custom_msme WHERE business_type = %s", (business_key,))
         results = cursor.fetchall()
         cursor.close()
+        conn.close()
         return results
     except Exception as e:
         print(f"Database Error: {e}")
         return []
-    finally:
-        if conn: conn.close()
 
 @app.post("/analyze")
 def perform_analysis(data: AnalysisRequest):
@@ -210,10 +197,9 @@ def perform_analysis(data: AnalysisRequest):
         hazard_score = 15
         hazard_status = "Moderate Risk (Slight Flood Susceptibility)"
 
-    # FACTOR 3: LOCAL COMPETITOR SCAN (RESTORED)
+    # FACTOR 3: LOCAL COMPETITOR SCAN 
     competitors_list = []
     
-    # Attempt to read PBF (If uploaded to Render)
     if os.path.exists(PBF_PATH):
         try:
             for layer in ["points", "multipolygons"]:
@@ -229,21 +215,27 @@ def perform_analysis(data: AnalysisRequest):
                             
                             if dist <= data.radius:
                                 competitors_list.append({
-                                    "lat": p_lat, "lon": p_lon, "name": row.get('name', f"Local {sme_profile['name']}")
+                                    "lat": p_lat, 
+                                    "lon": p_lon, 
+                                    "name": row.get('name', f"Local {sme_profile['name']}")
                                 })
         except Exception as e:
             print(f"Spatial Scan Error: {e}")
 
-    # Scan Cloud Database for User-Added MSMEs
+    # Scan PostgreSQL Database
     custom_shops = fetch_custom_msmes(data.business_type)
     for shop in custom_shops:
-        dist = calculate_distance(data.lat, data.lon, shop['latitude'], shop['longitude'])
+        p_lat = shop['latitude']
+        p_lon = shop['longitude']
+        dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
+        
         if dist <= data.radius:
             competitors_list.append({
-                "lat": shop['latitude'], "lon": shop['longitude'], "name": shop['name']
+                "lat": p_lat, 
+                "lon": p_lon, 
+                "name": shop['name']
             })
 
-    # Calculate Saturation Score
     competitors_found = len(competitors_list)
     base_saturation = 22 if competitors_found == 0 else 25
     saturation_score = max(0, base_saturation - (competitors_found * sme_profile["fear"])) 
@@ -269,8 +261,6 @@ def perform_analysis(data: AnalysisRequest):
         demand_status = "Low Visibility"
         
     demand_desc = f"Proximate to: {', '.join(anchors_found)}." if anchors_found else "No major Panabo infrastructure anchors detected."
-    
-    # FINAL CALCULATION
     total_score = zoning_score + hazard_score + saturation_score + demand_score
 
     # STATIC REPORTING MODULE (Combinational Matrix)
@@ -291,7 +281,7 @@ def perform_analysis(data: AnalysisRequest):
     else:
         generated_insight = f"Not Recommended (Score: {int(total_score)}). Poor overall suitability. A combination of low demand, environmental hazards, or zoning issues makes this a highly unfavorable location."
 
-    # FINAL PAYLOAD (With Saturation Included)
+    # FINAL PAYLOAD
     return {
         "viability_score": int(total_score),
         "business_type": sme_profile["name"], 
@@ -310,5 +300,4 @@ def perform_analysis(data: AnalysisRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

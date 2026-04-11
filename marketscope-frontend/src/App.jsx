@@ -13,19 +13,23 @@ export default function App() {
   // 1. SESSION STATE
   const [session, setSession] = useState(null);
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'profile', 'history'
-  const [theme, setTheme] = useState('dark');
+  
+  // ---> CHANGED HERE: Default is now 'light'
+  const [theme, setTheme] = useState('light');
 
   // 2. ANALYSIS STATES
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [reportData, setReportData] = useState(null);
 
-  // Check for existing session on load
+  // Check for existing session on load AND force Light Mode CSS
   useEffect(() => {
     const savedUser = localStorage.getItem('marketscope_session');
     if (savedUser) {
       setSession(JSON.parse(savedUser));
     }
+    // ---> CHANGED HERE: Forces the CSS to recognize Light Mode immediately
+    document.documentElement.setAttribute('data-theme', 'light');
   }, []);
 
   // Auth Handlers
@@ -99,8 +103,10 @@ export default function App() {
         )}
       </main>
 
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      {/* BOTTOM NAVIGATION */}
+      {!showBottomSheet && !reportData && (
+        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      )}
     </div>
-    
   );
 }

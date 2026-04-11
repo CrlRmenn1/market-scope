@@ -286,4 +286,42 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}/* =========================================
+   6. PASSWORD REVEAL TOGGLE
+   ========================================= */
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* Ensure the input takes full width and leaves room for the icon */
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 45px; /* Prevents text from hiding behind the icon */
+}
+
+/* The Eye Button */
+.password-toggle-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: color 0.2s ease;
+}
+
+.password-toggle-btn:hover {
+  color: #a855f7; /* MarketScope Purple */
+}
+
+.password-toggle-btn svg {
+  width: 20px;
+  height: 20px;
 }

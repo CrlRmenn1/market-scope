@@ -8,11 +8,10 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: '', iconUrl: '', shadowUrl: ''
 });
 
-export default function Home({ onMapTap, theme = 'dark' }) {
+export default function Home({ onMapTap, theme }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markerInstance = useRef(null);
-  const tileLayerInstance = useRef(null); // We use this to switch tiles safely
   const [selectedCoord, setSelectedCoord] = useState(null);
 
   useEffect(() => {
@@ -23,7 +22,13 @@ export default function Home({ onMapTap, theme = 'dark' }) {
         zoomControl: false 
       });
 
-      // Your custom animated icon HTML
+      // Switch to the OFFICIAL OpenStreetMap Standard Tiles
+      // This natively includes Commercial Zoning, Buildings, Roads, and Water bodies!
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(mapInstance.current);
+
       const customIcon = L.divIcon({
         className: 'custom-pin-wrapper',
         html: `
@@ -36,7 +41,7 @@ export default function Home({ onMapTap, theme = 'dark' }) {
           </div>
         `,
         iconSize: [40, 40],
-        iconAnchor: [20, 40]
+        iconAnchor: [20, 40] 
       });
 
       mapInstance.current.on('click', (e) => {
@@ -45,6 +50,7 @@ export default function Home({ onMapTap, theme = 'dark' }) {
         } else {
           markerInstance.current = L.marker(e.latlng, { icon: customIcon }).addTo(mapInstance.current);
         }
+        
         setSelectedCoord(e.latlng);
         mapInstance.current.panTo(e.latlng);
       });
@@ -56,47 +62,16 @@ export default function Home({ onMapTap, theme = 'dark' }) {
         mapInstance.current = null;
       }
     };
-  }, [onMapTap]);
-
-  // ==========================================
-  // DYNAMIC MAP THEME TOGGLE
-  // ==========================================
-  useEffect(() => {
-    if (mapInstance.current) {
-      // Remove old tile layer to prevent layering issues
-      if (tileLayerInstance.current) {
-        mapInstance.current.removeLayer(tileLayerInstance.current);
-      }
-
-      // Default to Dark Mode (CartoDB), switch to OSM on Light Mode
-      const tileUrl = theme === 'light' 
-        ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-
-      const attribution = theme === 'light'
-        ? '&copy; OpenStreetMap contributors'
-        : '&copy; CARTO &copy; OpenStreetMap';
-
-      tileLayerInstance.current = L.tileLayer(tileUrl, {
-        attribution: attribution,
-        maxZoom: 19
-      }).addTo(mapInstance.current);
-    }
-  }, [theme]); // Runs whenever the theme state changes
+  }, []);
 
   return (
-    <div className="home-container fade-in">
-      <div className="search-overlay">
-        <div className="search-bar">
-          <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" placeholder="Search target location in Panabo..." />
-        </div>
-      </div>
-
-      <div ref={mapRef} className="map-view"></div>
-
+    <div className="home-container relative">
+      {/* The map container (CSS will handle the dark mode inversion automatically) */}
+      <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }}></div>
+      
+      {/* NATIVE OSM LEGEND */}
       <div className="map-legend">
-        <h4 className="legend-title">Panabo Geodata</h4>
+        <h4 className="legend-title">OSM Native Layers</h4>
         <div className="legend-item">
           <span className="legend-color" style={{ background: '#f2dad9', border: '1px solid #e2caca' }}></span>
           <span className="legend-text">Commercial/Retail Zone</span>
@@ -115,6 +90,7 @@ export default function Home({ onMapTap, theme = 'dark' }) {
         </div>
       </div>
 
+      {/* DYNAMIC ACTION BAR */}
       {selectedCoord && (
         <div className="map-action-bar">
           <button 
@@ -124,7 +100,7 @@ export default function Home({ onMapTap, theme = 'dark' }) {
             <svg className="analyze-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            Analyze Site Viability
+            <span className="analyze-btn-text">Lock on this location</span>
           </button>
         </div>
       )}

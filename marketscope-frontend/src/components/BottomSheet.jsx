@@ -5,14 +5,10 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
   const [businessType, setBusinessType] = useState('');
   const [apiData, setApiData] = useState(null);
 
-  // Use an environment variable for the API URL to handle production deployments
-  // It will fall back to localhost during local development
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
   const startAnalysis = async () => {
     setStep(3); 
     try {
-      const response = await fetch(`${API_URL}/analyze`, {
+      const response = await fetch('http://localhost:8000/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -22,6 +18,7 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
         }),
       });
 
+      // THE FIX: If the server throws an error (503 or 429), catch it BEFORE parsing the JSON
       if (!response.ok) {
         throw new Error(`Server responded with status ${response.status}`);
       }
@@ -32,7 +29,7 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
 
     } catch (e) {
       console.error("Backend Error:", e);
-      setStep(1); 
+      setStep(1); // Kick them back to step 1
       alert("⚠️ The MarketScope Geospatial Engine is temporarily overwhelmed or offline. Please wait a few seconds and try again.");
     }
   };
@@ -42,13 +39,11 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
       <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
         <div className="drag-handle"></div>
         <button className="close-btn" onClick={onClose}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
 
         <div className="sheet-content">
+          {/* STEP 1 & 2 REMAIN THE SAME... */}
           {step === 1 && (
             <div className="fade-in">
               <h2 className="sheet-title">MarketScope Analysis</h2>
@@ -57,21 +52,21 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
               <div className="input-group">
                 <label className="input-label">Industry Category</label>
                 <select className="styled-select" value={businessType} onChange={(e) => setBusinessType(e.target.value)}>
-                  <option value="" disabled>Choose a category...</option>
-                  <option value="coffee">Coffee Shops / Cafes</option>
-                  <option value="print">Print / Copy Centers</option>
-                  <option value="laundry">Laundry Shops</option>
-                  <option value="carwash">Car Washes</option>
-                  <option value="kiosk">Food Kiosks / Stalls</option>
-                  <option value="water">Water Refilling Stations</option>
-                  <option value="bakery">Bakeries</option>
-                  <option value="pharmacy">Small Pharmacies</option>
-                  <option value="barber">Barbershops / Salons</option>
-                  <option value="moto">Motorcycle Repair Shops</option>
-                  <option value="internet">Internet Cafes</option>
-                  <option value="meat">Meat Shops</option>
-                  <option value="hardware">Hardware / Construction Supplies</option>
-                </select>
+  <option value="" disabled>Choose a category...</option>
+  <option value="coffee">Coffee Shops / Cafes</option>
+  <option value="print">Print / Copy Centers</option>
+  <option value="laundry">Laundry Shops</option>
+  <option value="carwash">Car Washes</option>
+  <option value="kiosk">Food Kiosks / Stalls</option>
+  <option value="water">Water Refilling Stations</option>
+  <option value="bakery">Bakeries</option>
+  <option value="pharmacy">Small Pharmacies</option>
+  <option value="barber">Barbershops / Salons</option>
+  <option value="moto">Motorcycle Repair Shops</option>
+  <option value="internet">Internet Cafes</option>
+  <option value="meat">Meat Shops</option>
+  <option value="hardware">Hardware / Construction Supplies</option>
+</select>
               </div>
               <button className="primary-btn mt-6" disabled={!businessType} onClick={() => setStep(2)}>Next Step</button>
             </div>
@@ -89,6 +84,7 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
             </div>
           )}
 
+          {/* NEW STEP 3: STAGGERED TASKBAR LOADING */}
           {step === 3 && (
             <div className="fade-in py-10">
               <div className="engine-loader">
@@ -118,6 +114,7 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
             </div>
           )}
 
+          {/* STEP 4 */}
           {step === 4 && apiData && (
             <div className="fade-in text-center">
               <div className="score-container">

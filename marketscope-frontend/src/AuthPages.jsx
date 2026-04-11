@@ -8,9 +8,9 @@ export default function AuthPages({ onLoginSuccess }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Dynamic API URL: Uses the Vercel environment variable in production 
-  // and falls back to localhost during development.
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  // NEW: State to track password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     let score = 0;
@@ -28,6 +28,21 @@ export default function AuthPages({ onLoginSuccess }) {
     return '#334155';
   };
 
+  // SVG Icons for the Toggle Button
+  const EyeIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+      <circle cx="12" cy="12" r="3"></circle>
+    </svg>
+  );
+
+  const EyeSlashIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+      <line x1="1" y1="1" x2="23" y2="23"></line>
+    </svg>
+  );
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -36,20 +51,17 @@ export default function AuthPages({ onLoginSuccess }) {
     const pwd = e.target.password.value;
 
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      const response = await fetch('http://localhost:8000/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pwd })
       });
       const data = await response.json();
       
-      if (response.ok) {
-        onLoginSuccess(data.user);
-      } else {
-        setErrorMsg(data.detail || 'Invalid credentials');
-      }
+      if (!response.ok) throw new Error(data.detail || 'Login failed');
+      onLoginSuccess(data.user);
     } catch (err) {
-      setErrorMsg('Server connection failed. Is the backend running?');
+      setErrorMsg(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -59,160 +71,140 @@ export default function AuthPages({ onLoginSuccess }) {
     e.preventDefault();
     setErrorMsg('');
     setIsLoading(true);
-    const name = e.target.name.value;
+    
+    const fullName = e.target.full_name.value;
     const email = e.target.email.value;
-    const pwd = password;
-    const confirmPwd = e.target.confirm.value;
+    const pwd = e.target.password.value;
+    const confirm = e.target.confirm.value;
 
-    if (pwd !== confirmPwd) {
-      setErrorMsg("Passwords do not match!");
+    if (pwd !== confirm) {
+      setErrorMsg("Passwords do not match");
       setIsLoading(false);
       return;
     }
 
     try {
-      const response = await fetch(`${API_URL}/register`, {
+      const response = await fetch('http://localhost:8000/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: name, email, password: pwd })
+        body: JSON.stringify({ full_name: fullName, email, password: pwd })
       });
       const data = await response.json();
       
-      if (response.ok) {
-        setCurrentView('login');
-        setErrorMsg('Registration successful! Please log in.');
-      } else {
-        setErrorMsg(data.detail || 'Registration failed');
-      }
+      if (!response.ok) throw new Error(data.detail || 'Registration failed');
+      onLoginSuccess(data.user);
     } catch (err) {
-      setErrorMsg('Server connection failed.');
+      setErrorMsg(err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const LandingBrand = () => (
-    <div className="landing-brand-container mb-6">
-      <div className="brand-wrapper" style={{ justifyContent: 'center' }}>
-        <div className="brand-mark mark-pulse">
-          <div className="lens-left"></div>
-          <div className="lens-center">
-            <div className="lens-reflection"></div>
-          </div>
-          <div className="lens-right"></div>
-        </div>
-        
-        <h1 className="app-title" style={{ fontSize: '2.5rem', margin: 0, color: 'white' }}>
-          Market<span className="highlight-text" style={{ color: '#a855f7' }}>Scope</span>
-        </h1>
-      </div>
-    </div>
-  );
-
-  const renderLanding = () => (
-    <div className="auth-card animate-fade-in">
-      <LandingBrand />
-      
-      <div className="mobile-hero-text mb-8">
-        <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>
-        <h2>Discover Panabo's<br/>Hidden Markets.</h2>
-        <p>The ultimate geospatial viability engine designed exclusively for local MSMEs.</p>
-      </div>
-      
-      <div className="auth-actions-row">
-        <button className="btn-primary" onClick={() => setCurrentView('register')}>
-          Get Started
-        </button>
-        <button className="btn-secondary" onClick={() => setCurrentView('login')}>
-          Sign In
-        </button>
-      </div>
-    </div>
-  );
-
   const renderLogin = () => (
-    <div className="auth-card animate-fade-in">
-      <button className="back-link mb-6" onClick={() => setCurrentView('landing')}>
-        &larr; Back
-      </button>
+    <div className="fade-in">
+      <h2 style={{ color: "white" }}>Welcome Back</h2>
+      <p className="auth-subtitle" style={{ color: "white" }}>Access your MarketScope dashboard.</p>
+      <br />
       
-      <div className="auth-header mb-8">
-        <h2>Welcome Back</h2>
-        <p>Log in to continue to MarketScope</p>
-      </div>
+      {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
-      {errorMsg && (
-        <div className={errorMsg.includes('successful') ? "success-alert fade-in" : "error-alert fade-in"}>
-          {errorMsg}
-        </div>
-      )}
-
-      <form onSubmit={handleLogin}>
+      <form onSubmit={handleLogin} className="mt-6">
         <div className="input-group">
-          <label>Email</label>
-          <input type="email" name="email" placeholder="john@example.com" required />
+          <label>Email Address</label>
+          <input type="email" name="email" placeholder="msme@panabo.com" required />
         </div>
-        
+
         <div className="input-group">
           <label>Password</label>
-          <input type="password" name="password" placeholder="••••••••" required />
+          <div className="password-input-wrapper">
+            <input 
+              type={showPassword ? "text" : "password"} 
+              name="password" 
+              placeholder="••••••••" 
+              required 
+            />
+            <button 
+              type="button" 
+              className="password-toggle-btn" 
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+            </button>
+          </div>
         </div>
 
-        <button type="submit" className="btn-primary w-full mt-4 mb-8" disabled={isLoading}>
-          {isLoading ? 'Logging in...' : 'Log In'}
+        <button type="submit" className="btn-primary w-full mt-6 mb-8" disabled={isLoading}>
+          {isLoading ? 'Authenticating...' : 'Log In'}
         </button>
-        
+
         <p className="auth-footer">
-          Don't have an account? <span onClick={() => setCurrentView('register')}>Sign Up</span>
+          New to MarketScope? <span onClick={() => setCurrentView('landing')}>Create Account</span>
         </p>
       </form>
     </div>
   );
 
-  const renderRegister = () => (
-    <div className="auth-card animate-fade-in">
-      <button className="back-link mb-6" onClick={() => setCurrentView('landing')}>
-        &larr; Back
-      </button>
-
-      <div className="auth-header mb-8">
-        <h2>Create Account</h2>
-        <p>Start your journey with MarketScope</p>
-      </div>
+  const renderLanding = () => (
+    <div className="fade-in">
+      <h2>Create Account</h2>
+      <p className="auth-subtitle">Start analyzing Panabo's markets today.</p>
 
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
-      <form onSubmit={handleRegister}>
+      <form onSubmit={handleRegister} className="mt-6">
         <div className="input-group">
           <label>Full Name</label>
-          <input type="text" name="name" placeholder="John Doe" required />
-        </div>
-        
-        <div className="input-group">
-          <label>Email</label>
-          <input type="email" name="email" placeholder="john@example.com" required />
-        </div>
-        
-        <div className="input-group" style={{ marginBottom: '12px' }}>
-          <label>Password</label>
-          <input 
-            type="password" 
-            placeholder="••••••••" 
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required 
-          />
+          <input type="text" name="full_name" placeholder="Juan Dela Cruz" required />
         </div>
 
-        <div className="password-strength-wrapper mb-6">
-          <div className="strength-meter">
-            <div className="strength-fill" style={{ width: `${(passwordStrength / 4) * 100}%`, backgroundColor: getMeterColor() }}></div>
+        <div className="input-group">
+          <label>Email Address</label>
+          <input type="email" name="email" placeholder="juan@business.com" required />
+        </div>
+
+        <div className="input-group">
+          <label>Password</label>
+          <div className="password-input-wrapper">
+            <input 
+              type={showPassword ? "text" : "password"} 
+              name="password" 
+              placeholder="••••••••" 
+              required 
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button 
+              type="button" 
+              className="password-toggle-btn" 
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+            </button>
+          </div>
+          
+          <div className="password-strength-wrapper mt-2">
+            <div className="strength-meter">
+              <div className="strength-fill" style={{ width: `${(passwordStrength / 4) * 100}%`, backgroundColor: getMeterColor() }}></div>
+            </div>
           </div>
         </div>
 
         <div className="input-group">
           <label>Confirm Password</label>
-          <input type="password" name="confirm" placeholder="••••••••" required />
+          <div className="password-input-wrapper">
+            <input 
+              type={showConfirmPassword ? "text" : "password"} 
+              name="confirm" 
+              placeholder="••••••••" 
+              required 
+            />
+            <button 
+              type="button" 
+              className="password-toggle-btn" 
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
+              {showConfirmPassword ? <EyeSlashIcon /> : <EyeIcon />}
+            </button>
+          </div>
         </div>
 
         <button type="submit" className="btn-primary w-full mt-4 mb-8" disabled={isLoading}>
@@ -228,6 +220,8 @@ export default function AuthPages({ onLoginSuccess }) {
 
   return (
     <div className={`auth-container ${currentView === 'landing' ? 'view-landing' : ''}`}>
+      
+      {/* Desktop Hero Side */}
       <div className="auth-hero">
         <div className="hero-text">
           <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
@@ -236,10 +230,10 @@ export default function AuthPages({ onLoginSuccess }) {
         </div>
       </div>
 
+      {/* Form Side */}
       <div className="auth-form-wrapper">
         {currentView === 'landing' && renderLanding()}
         {currentView === 'login' && renderLogin()}
-        {currentView === 'register' && renderRegister()}
       </div>
     </div>
   );
