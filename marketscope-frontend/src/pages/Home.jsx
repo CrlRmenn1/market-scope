@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix for Vite + Leaflet image bug
+// Fix for Vite + Leaflet default icon bug
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: '', iconUrl: '', shadowUrl: ''
@@ -12,39 +12,42 @@ export default function Home({ onMapTap, theme }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markerInstance = useRef(null);
-  const tileLayerInstance = useRef(null); // We use this to switch tiles dynamically
+  const tileLayerInstance = useRef(null);
   const [selectedCoord, setSelectedCoord] = useState(null);
 
-  // Initialize the map (Runs only once)
+  // 1. Initialize Map (Runs once)
   useEffect(() => {
     if (!mapInstance.current) {
       mapInstance.current = L.map(mapRef.current, {
-        center: [7.3075, 125.6811],
+        center: [7.3075, 125.6811], // Centered on Panabo
         zoom: 15,
         zoomControl: false 
       });
 
-      const customIcon = L.divIcon({
-        className: 'custom-pin-wrapper',
-        html: `
-          <div class="pure-css-mark">
-            <div class="pure-pulse"></div>
-            <div class="pure-ring"></div>
-            <svg class="pure-pin" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-            </svg>
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 40]
-      });
-
+      // Handle map clicks
       mapInstance.current.on('click', (e) => {
+        // Foolproof, self-contained inline-styled marker
+        const customIcon = L.divIcon({
+          className: 'clear-custom-pin',
+          html: `<div style="
+            width: 24px; 
+            height: 24px; 
+            background-color: #a855f7; 
+            border: 3px solid white; 
+            border-radius: 50%; 
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transform: translate(-50%, -50%);
+          "></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [0, 0]
+        });
+
         if (markerInstance.current) {
           markerInstance.current.setLatLng(e.latlng);
         } else {
           markerInstance.current = L.marker(e.latlng, { icon: customIcon }).addTo(mapInstance.current);
         }
+        
         setSelectedCoord(e.latlng);
         mapInstance.current.panTo(e.latlng);
       });
@@ -58,69 +61,55 @@ export default function Home({ onMapTap, theme }) {
     };
   }, [onMapTap]);
 
-  // Handle Dynamic Theme Switching (Light/Dark Mode)
+  // 2. Handle Dark/Light Theme Switching dynamically
   useEffect(() => {
     if (mapInstance.current) {
-      // Remove old tile layer if it exists to avoid overlapping maps
+      // Remove old tile layer to prevent stacking memory leaks
       if (tileLayerInstance.current) {
         mapInstance.current.removeLayer(tileLayerInstance.current);
       }
 
-      // Check current theme and apply the correct tiles
+      // CARTO tiles are highly optimized for dashboards. Dark by default.
       const tileUrl = theme === 'light' 
-        ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
         : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 
       tileLayerInstance.current = L.tileLayer(tileUrl, {
-        attribution: '&copy; OpenStreetMap contributors',
+        attribution: '&copy; CARTO &copy; OpenStreetMap',
         maxZoom: 19
       }).addTo(mapInstance.current);
     }
-  }, [theme]); // This runs every time the theme changes
+  }, [theme]);
 
   return (
-    <div className="home-container fade-in">
+    <div className="home-container fade-in" style={{ height: '100%', position: 'relative' }}>
+      
       {/* Search Header */}
-      <div className="search-overlay">
-        <div className="search-bar">
-          <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" placeholder="Search target location in Panabo..." />
+      <div className="search-overlay" style={{ position: 'absolute', top: '20px', width: '100%', zIndex: 1000, padding: '0 20px' }}>
+        <div className="search-bar" style={{ background: theme === 'dark' ? 'rgba(20,20,20,0.9)' : 'white', borderRadius: '12px', padding: '12px 20px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke={theme === 'dark' ? '#a1a1aa' : '#666'} strokeWidth="2" style={{ width: '20px', height: '20px', marginRight: '10px' }}>
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input 
+            type="text" 
+            placeholder="Search target location in Panabo..." 
+            style={{ border: 'none', background: 'transparent', width: '100%', color: theme === 'dark' ? 'white' : 'black', outline: 'none' }}
+          />
         </div>
       </div>
 
-      <div ref={mapRef} className="map-view"></div>
+      {/* THE MAP (Enforced sizing) */}
+      <div ref={mapRef} style={{ width: '100%', height: 'calc(100vh - 60px)', zIndex: 1 }}></div>
 
-      {/* Dynamic Legend based on Theme */}
-      <div className="map-legend" style={{ background: theme === 'dark' ? 'rgba(10, 10, 10, 0.85)' : 'rgba(255, 255, 255, 0.9)'}}>
-        <h4 className="legend-title" style={{color: theme === 'dark' ? '#fff' : '#000'}}>Panabo Geodata</h4>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#f2dad9', border: '1px solid #e2caca' }}></span>
-          <span className="legend-text" style={{color: theme === 'dark' ? '#a1a1aa' : '#4b5563'}}>Commercial/Retail Zone</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#f6c467' }}></span>
-          <span className="legend-text" style={{color: theme === 'dark' ? '#a1a1aa' : '#4b5563'}}>High Traffic (Main Roads)</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#d9d0c9' }}></span>
-          <span className="legend-text" style={{color: theme === 'dark' ? '#a1a1aa' : '#4b5563'}}>Infrastructure (Buildings)</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#aad3df' }}></span>
-          <span className="legend-text" style={{color: theme === 'dark' ? '#a1a1aa' : '#4b5563'}}>Water Hazard Proxy</span>
-        </div>
-      </div>
-
-      {/* DYNAMIC ACTION BAR */}
+      {/* DYNAMIC ACTION BAR (Appears only when user clicks the map) */}
       {selectedCoord && (
-        <div className="map-action-bar">
+        <div style={{ position: 'absolute', bottom: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: '90%' }}>
           <button 
-            className="primary-btn map-analyze-btn" 
+            className="primary-btn w-full" 
+            style={{ padding: '16px', fontSize: '1.1rem', boxShadow: '0 8px 30px rgba(168, 85, 247, 0.4)' }}
             onClick={() => onMapTap(selectedCoord)}
           >
-            <svg className="analyze-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
             Analyze Site Viability
           </button>
         </div>
