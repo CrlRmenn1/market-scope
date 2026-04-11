@@ -825,3 +825,52 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
 }
 
 .logout-full-btn:hover { background: #f8717130; }
+
+/* =========================================
+   CUSTOM MAP PIN (PURE CSS ANIMATION)
+   ========================================= */
+.custom-pin-wrapper {
+  background: transparent;
+  border: none;
+}
+
+.pure-css-mark {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent); /* Uses your MarketScope Purple */
+}
+
+.pure-pulse {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  background-color: var(--accent);
+  border-radius: 50%;
+  opacity: 0.4;
+  animation: mapPulse 2s infinite ease-out;
+}
+
+.pure-ring {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background-color: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.pure-pin {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  z-index: 2;
+}
+
+@keyframes mapPulse {
+  0% { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
