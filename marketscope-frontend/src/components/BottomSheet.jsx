@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 export default function BottomSheet({ onClose, coords, onViewReport }) {
   const [step, setStep] = useState(1);
   const [businessType, setBusinessType] = useState('');
   const [apiData, setApiData] = useState(null);
+  const [analysisModeIndex, setAnalysisModeIndex] = useState(0);
+  const analysisModes = [
+    'Zoning Validation',
+    'Hazard Impact',
+    'Market Saturation',
+    'Demand Projection'
+  ];
 
   const startAnalysis = async () => {
     setStep(3); 
@@ -33,6 +40,18 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
       alert("⚠️ The MarketScope Geospatial Engine is temporarily overwhelmed or offline. Please wait a few seconds and try again.");
     }
   };
+
+  useEffect(() => {
+    let intervalId;
+    if (step === 3) {
+      intervalId = window.setInterval(() => {
+        setAnalysisModeIndex((prev) => (prev + 1) % analysisModes.length);
+      }, 1200);
+    }
+    return () => {
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [step]);
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
@@ -90,6 +109,9 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
               <div className="engine-loader">
                 <div className="spin-ring"></div>
                 <svg className="loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.25 4.28"/></svg>
+              </div>
+              <div className="analysis-mode-wrapper">
+                <div className="analysis-mode-pill">Analysis Mode • {analysisModes[analysisModeIndex]}</div>
               </div>
               <h3 className="loading-headline text-center mb-6">Evaluating Constraints</h3>
               

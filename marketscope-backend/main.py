@@ -7,7 +7,6 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import bcrypt
-import os
 
 # ==========================================
 # DATABASE CONFIGURATION
@@ -111,10 +110,63 @@ ZONING_LAYERS = {
     "industrial_anflo": (7.2800, 7.2950, 125.6500, 125.6700)
 }
 
-HAZARD_LAYERS = {
-    "heavy_flood": (7.3080, 7.3120, 125.6750, 125.6800),
-    "moderate_flood": (7.3050, 7.3140, 125.6720, 125.6850)
+# Temporary hazard proxy zones based on the attached Panabo DENR/MGB susceptibility map
+# These are used until official GIS hazard polygons are available.
+HAZARD_ZONES = {
+    "flood": [
+        {
+            "name": "Very High Flood Susceptibility",
+            "bounds": (7.3080, 7.3120, 125.6750, 125.6800),
+            "score": 0
+        },
+        {
+            "name": "High Flood Susceptibility",
+            "bounds": (7.3050, 7.3140, 125.6720, 125.6850),
+            "score": 10
+        },
+        {
+            "name": "Moderate Flood Susceptibility",
+            "bounds": (7.2990, 7.3150, 125.6700, 125.6860),
+            "score": 18
+        }
+    ],
+    "landslide": [
+        {
+            "name": "Very High Landslide Susceptibility",
+            "bounds": (7.3050, 7.3130, 125.6670, 125.6750),
+            "score": 0
+        },
+        {
+            "name": "High Landslide Susceptibility",
+            "bounds": (7.3030, 7.3150, 125.6680, 125.6800),
+            "score": 10
+        },
+        {
+            "name": "Moderate Landslide Susceptibility",
+            "bounds": (7.3000, 7.3150, 125.6690, 125.6830),
+            "score": 18
+        }
+    ]
 }
+
+
+def evaluate_hazard(lat, lon):
+    hazard_score = 25
+    hazard_status = "Low Risk / Safe"
+    hazard_matches = []
+
+    for hazard_type, zones in HAZARD_ZONES.items():
+        for zone in zones:
+            if check_inside_bounds(lat, lon, zone["bounds"]):
+                hazard_matches.append(f"{zone['name']} ({hazard_type.title()})")
+                if zone["score"] < hazard_score:
+                    hazard_score = zone["score"]
+                    hazard_status = f"{zone['name']} ({hazard_type.title()})"
+
+    if hazard_matches and hazard_status not in hazard_matches:
+        hazard_matches.insert(0, hazard_status)
+
+    return hazard_score, hazard_status, hazard_matches
 
 PANABO_ANCHORS = [
     {"name": "Integrated Bus and Jeepney Terminal", "lat": 7.298318, "lon": 125.680099, "power": 25},
@@ -173,8 +225,8 @@ def perform_analysis(data: AnalysisRequest):
     sme_profile = SME_DATABASE.get(data.business_type, {"key": "shop", "val": "convenience", "fear": 5, "need": 5, "name": "MSME"})
     search_val = sme_profile["val"]
     
-    # FACTOR 1: ZONING
-    zoning_score = 10
+    # FACTOR 1: ZONING - Normalized to 0-25 scale
+    zoning_score = 0
     zoning_status = "Outside Commercial Zone"
     if check_inside_bounds(data.lat, data.lon, ZONING_LAYERS["commercial_proper"]):
         zoning_score = 25
@@ -188,35 +240,37 @@ def perform_analysis(data: AnalysisRequest):
             zoning_status = "Non-Compliant (Heavy Industrial Zone)"
 
     # FACTOR 2: HAZARD
-    hazard_score = 25
-    hazard_status = "Low Risk / Safe"
-    if check_inside_bounds(data.lat, data.lon, HAZARD_LAYERS["heavy_flood"]):
-        hazard_score = 0
-        hazard_status = "High Risk (Heavy Flood Zone)"
-    elif check_inside_bounds(data.lat, data.lon, HAZARD_LAYERS["moderate_flood"]):
-        hazard_score = 15
-        hazard_status = "Moderate Risk (Slight Flood Susceptibility)"
+    hazard_score, hazard_status, hazard_matches = evaluate_hazard(data.lat, data.lon)
+    hazard_description = (
+        "Temporary Panabo flood and landslide susceptibility mapping used as a proxy for hazard evaluation. "
+        + ("Matched zones: " + ", ".join(hazard_matches) + "." if hazard_matches else "No mapped hazard zones matched.")
+    )
 
-    # FACTOR 3: LOCAL COMPETITOR SCAN 
+    # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
     competitors_list = []
-    
+
     if os.path.exists(PBF_PATH):
         try:
-            for layer in ["points", "multipolygons"]:
-                gdf = gpd.read_file(PBF_PATH, layer=layer, engine="pyogrio")
+            for layer in ["points", "multipolygons", "lines", "multilinestrings"]:
+                try:
+                    gdf = gpd.read_file(PBF_PATH, layer=layer, engine="pyogrio")
+                except Exception:
+                    continue
+
                 for col in ["amenity", "shop", "healthcare", "building"]:
                     if col in gdf.columns:
                         matches = gdf[gdf[col] == search_val]
                         for _, row in matches.iterrows():
-                            if row.geometry is None: continue
+                            if row.geometry is None:
+                                continue
                             p_lat = row.geometry.centroid.y
                             p_lon = row.geometry.centroid.x
                             dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
-                            
+
                             if dist <= data.radius:
                                 competitors_list.append({
-                                    "lat": p_lat, 
-                                    "lon": p_lon, 
+                                    "lat": p_lat,
+                                    "lon": p_lon,
                                     "name": row.get('name', f"Local {sme_profile['name']}")
                                 })
         except Exception as e:
@@ -228,17 +282,40 @@ def perform_analysis(data: AnalysisRequest):
         p_lat = shop['latitude']
         p_lon = shop['longitude']
         dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
-        
+
         if dist <= data.radius:
             competitors_list.append({
-                "lat": p_lat, 
-                "lon": p_lon, 
+                "lat": p_lat,
+                "lon": p_lon,
                 "name": shop['name']
             })
 
     competitors_found = len(competitors_list)
-    base_saturation = 22 if competitors_found == 0 else 25
-    saturation_score = max(0, base_saturation - (competitors_found * sme_profile["fear"])) 
+
+    # Normalize saturation score to 0-25 scale
+    # Lower competitors = higher score (less saturated = better)
+    if competitors_found == 0:
+        saturation_score = 25  # Perfect - no competition
+    elif competitors_found == 1:
+        saturation_score = 20  # Good - minimal competition
+    elif competitors_found <= 3:
+        saturation_score = 15  # Moderate - some competition
+    elif competitors_found <= 5:
+        saturation_score = 10  # Challenging - notable competition
+    else:
+        saturation_score = 5   # Very saturated - high competition
+
+    # Determine saturation status based on score
+    if saturation_score >= 20:
+        saturation_status = "Market Gap Available"
+    elif saturation_score >= 15:
+        saturation_status = "Low Competition"
+    elif saturation_score >= 10:
+        saturation_status = "Moderate Competition"
+    elif saturation_score >= 5:
+        saturation_status = "High Competition"
+    else:
+        saturation_status = "Oversaturated" 
 
     # FACTOR 4: PROPRIETARY DEMAND SCAN 
     raw_demand_power = 0
@@ -248,7 +325,7 @@ def perform_analysis(data: AnalysisRequest):
         if distance <= data.radius:
             raw_demand_power += anchor["power"]
             anchors_found.append(anchor["name"])
-            
+
     target_power = sme_profile['need'] * 8
     demand_ratio = (raw_demand_power / target_power) * 25 if target_power > 0 else 25
     demand_score = min(25, int(demand_ratio))
@@ -261,6 +338,27 @@ def perform_analysis(data: AnalysisRequest):
         demand_status = "Low Visibility"
         
     demand_desc = f"Proximate to: {', '.join(anchors_found)}." if anchors_found else "No major Panabo infrastructure anchors detected."
+    demand_details = (
+        f"Demand score is computed by summing the power values of nearby Panabo anchors within {data.radius} meters, then normalizing that total against a target power benchmark ({target_power}). "
+        + f"Raw anchor power is {raw_demand_power}, and the result is scaled to a 0-25 index with a maximum cap of 25."
+    )
+
+    saturation_details = (
+        f"The algorithm scanned Panabo PBF layers and local MSME records for matching businesses within {data.radius} meters. "
+        + f"It counted competitors and then mapped that count to a 0-25 score: 0 competitors => 25, 1 competitor => 20, 2-3 => 15, 4-5 => 10, 6+ => 5."
+    )
+
+    zoning_details = (
+        "The zoning score is derived by checking whether the target coordinates fall inside Panabo commercial or industrial polygon bounds. "
+        + "If the site is inside the commercial polygon, it receives 25. If it is in the industrial support polygon and the business fits that category, it also receives 25; otherwise it is penalized."
+    )
+
+    hazard_details = (
+        "The hazard score is based on temporary Panabo flood and landslide proxy zones. "
+        + ("Matched zones: " + ", ".join(hazard_matches) + ". " if hazard_matches else "No mapped hazard zones matched. ")
+        + "The lowest matched zone score is used as the factor result."
+    )
+
     total_score = zoning_score + hazard_score + saturation_score + demand_score
 
     # STATIC REPORTING MODULE (Combinational Matrix)
@@ -291,10 +389,30 @@ def perform_analysis(data: AnalysisRequest):
         "radius_meters": data.radius,
         "insight": generated_insight, 
         "breakdown": {
-            "zoning": {"score": zoning_score, "status": zoning_status, "description": "Alignment with Panabo City Land Use Plan."},
-            "hazard": {"score": hazard_score, "status": hazard_status, "description": "Vulnerability to local floods and infestations."},
-            "saturation": {"score": saturation_score, "status": "Oversaturated" if competitors_found >= 1 else "Market Gap Available", "description": f"Penalty multiplier based on {sme_profile['name']} industry sensitivity."},
-            "demand": {"score": demand_score, "status": demand_status, "description": demand_desc}
+            "zoning": {
+                "score": zoning_score,
+                "status": zoning_status,
+                "description": "Alignment with Panabo City Land Use Plan.",
+                "details": zoning_details
+            },
+            "hazard": {
+                "score": hazard_score,
+                "status": hazard_status,
+                "description": hazard_description,
+                "details": hazard_details
+            },
+            "saturation": {
+                "score": saturation_score,
+                "status": "Oversaturated" if competitors_found >= 1 else "Market Gap Available",
+                "description": f"Penalty multiplier based on {sme_profile['name']} industry sensitivity.",
+                "details": saturation_details
+            },
+            "demand": {
+                "score": demand_score,
+                "status": demand_status,
+                "description": demand_desc,
+                "details": demand_details
+            }
         }
     }
 

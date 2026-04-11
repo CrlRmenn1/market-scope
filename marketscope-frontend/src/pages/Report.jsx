@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -60,11 +60,60 @@ export default function Report({ data, targetCoords, onClose }) {
   if (!data) return null;
 
   const { viability_score, competitors_found, breakdown, business_type, radius_meters, insight } = data;
+  const [expandedDetail, setExpandedDetail] = useState(null);
+
+  const toggleDetail = (key) => {
+    setExpandedDetail((prev) => (prev === key ? null : key));
+  };
 
   const getScoreColor = (score) => {
     if (score >= 20) return '#4ade80'; 
     if (score >= 10) return '#facc15'; 
     return '#f87171'; 
+  };
+
+  const getFactorDetailText = (key, factor) => {
+    const details = factor.details;
+    if (typeof details === 'string' && details.trim().length > 0) {
+      return details;
+    }
+    if (Array.isArray(details) && details.length > 0) {
+      return details.join(' ');
+    }
+    if (details && typeof details === 'object') {
+      const joined = Object.values(details).filter(Boolean).join(' ');
+      if (joined.trim().length > 0) return joined;
+    }
+
+    if (key === 'zoning') {
+      return (
+        'Zoning is calculated by testing the target coordinates against Panabo commercial and industrial polygon boundaries. ' +
+        'A full score means the point is inside a compliant zone for the chosen business type; lower scores mean it falls outside permitted land use areas.'
+      );
+    }
+
+    if (key === 'hazard') {
+      return (
+        'Hazard is scored by comparing the location to temporary Panabo flood and landslide susceptibility zones. ' +
+        'The lowest matched zone score becomes the factor result, so a moderate score indicates a mid-level risk proxy zone.'
+      );
+    }
+
+    if (key === 'saturation') {
+      return (
+        'Saturation is derived from counting nearby competitors within the analysis radius. ' +
+        'The algorithm maps competitor density to a 0-25 scale: fewer competitors produce a higher score.'
+      );
+    }
+
+    if (key === 'demand') {
+      return (
+        'Demand is estimated by summing nearby anchor power within the radius and normalizing it against a business-specific benchmark. ' +
+        'The raw anchor power is converted into a 0-25 visibility score.'
+      );
+    }
+
+    return 'This factor explanation is based on the model scoring rules used by the analysis engine.';
   };
 
   
@@ -150,16 +199,39 @@ export default function Report({ data, targetCoords, onClose }) {
         {/* METRIC BREAKDOWN PROGRESS BARS */}
         <h3 className="section-heading mt-6">Metric Breakdown</h3>
         <div className="data-card">
+          <p className="factor-desc" style={{ marginBottom: '18px' }}>Tap any factor header to expand an actionable explanation for that score.</p>
           {breakdown && Object.entries(breakdown).map(([key, factor]) => (
             <div className="progress-group" key={key}>
-              <div className="progress-labels">
-                <span className="capitalize">{key === 'demand' ? 'Infrastructure Proxies' : key}</span>
-                <span style={{ color: getScoreColor(factor.score) }}>{factor.status}</span>
-              </div>
+              <button
+                type="button"
+                className="progress-labels detail-toggle"
+                onClick={() => toggleDetail(key)}
+                aria-expanded={expandedDetail === key}
+              >
+                <span className="factor-name capitalize">{key === 'demand' ? 'Infrastructure Proxies' : key}</span>
+                <div className="factor-metrics">
+                  <span className="metric-score" style={{ color: getScoreColor(factor.score) }}>
+                    {factor.score}/25
+                  </span>
+                  <span className="metric-status" style={{ color: getScoreColor(factor.score) }}>
+                    {factor.status}
+                  </span>
+                  <span className={`detail-chevron ${expandedDetail === key ? 'open' : ''}`}>
+                    ▾
+                  </span>
+                </div>
+              </button>
               <div className="progress-track">
                 <div className="progress-fill" style={{ width: `${(factor.score / 25) * 100}%`, backgroundColor: getScoreColor(factor.score) }}></div>
               </div>
               <p className="factor-desc">{factor.description}</p>
+              {expandedDetail === key && (
+                <div className="factor-details">
+                  {getFactorDetailText(key, factor).split('. ').map((line, index) => (
+                    <p key={index}>{line.trim()}{line.trim().endsWith('.') ? '' : '.'}</p>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -13,6 +13,20 @@ export default function Home({ onMapTap, theme }) {
   const mapInstance = useRef(null);
   const markerInstance = useRef(null);
   const [selectedCoord, setSelectedCoord] = useState(null);
+  const [outOfBounds, setOutOfBounds] = useState(false);
+
+  // Panabo City boundary (from updated PBF file)
+  const PANABO_BOUNDS = {
+    south: 7.269,
+    north: 7.333,
+    west: 125.636,
+    east: 125.742
+  };
+
+  const isWithinBounds = (lat, lng) => {
+    return lat >= PANABO_BOUNDS.south && lat <= PANABO_BOUNDS.north &&
+           lng >= PANABO_BOUNDS.west && lng <= PANABO_BOUNDS.east;
+  };
 
   useEffect(() => {
     if (!mapInstance.current) {
@@ -27,6 +41,23 @@ export default function Home({ onMapTap, theme }) {
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19
+      }).addTo(mapInstance.current);
+
+      // Add Panabo City boundary polygon (using bounding box as polygon)
+      const boundaryCoords = [
+        [PANABO_BOUNDS.south, PANABO_BOUNDS.west], // SW
+        [PANABO_BOUNDS.south, PANABO_BOUNDS.east], // SE
+        [PANABO_BOUNDS.north, PANABO_BOUNDS.east], // NE
+        [PANABO_BOUNDS.north, PANABO_BOUNDS.west], // NW
+        [PANABO_BOUNDS.south, PANABO_BOUNDS.west]  // back to SW to close polygon
+      ];
+
+      const boundary = L.polygon(boundaryCoords, {
+        color: '#a855f7',
+        weight: 3,
+        opacity: 0.8,
+        fill: false, // Remove fill, just outline
+        dashArray: '5, 5'
       }).addTo(mapInstance.current);
 
       const customIcon = L.divIcon({
@@ -45,6 +76,14 @@ export default function Home({ onMapTap, theme }) {
       });
 
       mapInstance.current.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        
+        if (!isWithinBounds(lat, lng)) {
+          setOutOfBounds(true);
+          setTimeout(() => setOutOfBounds(false), 3000);
+          return;
+        }
+
         if (markerInstance.current) {
           markerInstance.current.setLatLng(e.latlng);
         } else {
@@ -69,24 +108,19 @@ export default function Home({ onMapTap, theme }) {
       {/* The map container (CSS will handle the dark mode inversion automatically) */}
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }}></div>
       
+      {/* OUT OF BOUNDS WARNING */}
+      {outOfBounds && (
+        <div className="out-of-bounds-warning">
+           Click within Panabo City boundary only
+        </div>
+      )}
+      
       {/* NATIVE OSM LEGEND */}
       <div className="map-legend">
-        <h4 className="legend-title">OSM Native Layers</h4>
+        <h4 className="legend-title">Panabo City Boundary</h4>
         <div className="legend-item">
-          <span className="legend-color" style={{ background: '#f2dad9', border: '1px solid #e2caca' }}></span>
-          <span className="legend-text">Commercial/Retail Zone</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#f6c467' }}></span>
-          <span className="legend-text">High Traffic (Main Roads)</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#d9d0c9' }}></span>
-          <span className="legend-text">Infrastructure (Buildings)</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color" style={{ background: '#aad3df' }}></span>
-          <span className="legend-text">Water Hazard Proxy</span>
+          <span className="legend-color boundary-line"></span>
+          <span className="legend-text">Scanning Area</span>
         </div>
       </div>
 
