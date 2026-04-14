@@ -7,7 +7,7 @@ import os
 import socket
 from datetime import date
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import bcrypt
@@ -16,9 +16,16 @@ import bcrypt
 # DATABASE CONFIGURATION
 # ==========================================
 def build_db_config():
-    database_url = os.environ.get("DATABASE_URL")
+    database_url = (
+        os.environ.get("DATABASE_URL")
+        or os.environ.get("DATABASE_INTERNAL_URL")
+        or os.environ.get("DATABASE_EXTERNAL_URL")
+        or os.environ.get("INTERNAL_DATABASE_URL")
+        or os.environ.get("EXTERNAL_DATABASE_URL")
+    )
     if database_url:
         parsed_url = urlparse(database_url)
+        query_params = parse_qs(parsed_url.query)
         config = {
             "dbname": parsed_url.path.lstrip("/"),
             "user": parsed_url.username,
@@ -26,7 +33,11 @@ def build_db_config():
             "host": parsed_url.hostname,
             "port": parsed_url.port or 5432,
         }
-        config["sslmode"] = os.environ.get("DB_SSLMODE", "require")
+        config["sslmode"] = (
+            os.environ.get("DB_SSLMODE")
+            or query_params.get("sslmode", [None])[0]
+            or "require"
+        )
         return config
 
     return {
