@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { apiUrl } from '../lib/api';
 
-export default function BottomSheet({ onClose, coords, onViewReport }) {
+export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
   const [step, setStep] = useState(1);
   const [businessType, setBusinessType] = useState('');
   const [apiData, setApiData] = useState(null);
@@ -15,13 +16,14 @@ export default function BottomSheet({ onClose, coords, onViewReport }) {
   const startAnalysis = async () => {
     setStep(3); 
     try {
-      const response = await fetch('http://localhost:8000/analyze', {
+      const response = await fetch(apiUrl('/analyze'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lat: coords.lat, lon: coords.lng,
           business_type: businessType, 
-          radius: 340 
+          radius: 340,
+          user_id: userId 
         }),
       });
 

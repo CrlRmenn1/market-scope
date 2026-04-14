@@ -6,7 +6,7 @@ import {
   ArrowRightOnRectangleIcon 
 } from '@heroicons/react/24/solid';
 
-export default function Header({ theme, toggleTheme, onLogout, userName }) {
+export default function Header({ theme, toggleTheme, onLogout, userName, userAvatarUrl, onGoHome }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Get first letter of name for a fallback avatar
@@ -16,19 +16,21 @@ export default function Header({ theme, toggleTheme, onLogout, userName }) {
     <header className="app-header">
       
       {/* BRANDING */}
-      <div className="brand-wrapper">
-        <div className="brand-mark mark-pulse">
-          <div className="lens-left"></div>
-          <div className="lens-center">
-            <div className="lens-reflection"></div>
+      <button type="button" className="brand-home-btn" onClick={() => onGoHome?.()}>
+        <div className="brand-wrapper">
+          <div className="brand-mark mark-pulse">
+            <div className="lens-left"></div>
+            <div className="lens-center">
+              <div className="lens-reflection"></div>
+            </div>
+            <div className="lens-right"></div>
           </div>
-          <div className="lens-right"></div>
+          
+          <h1 className="app-title">
+            Market<span className="highlight-text">Scope</span>
+          </h1>
         </div>
-        
-        <h1 className="app-title">
-          Market<span className="highlight-text">Scope</span>
-        </h1>
-      </div>
+      </button>
 
       {/* SETTINGS MENU (Unified with Name) */}
       <div className="settings-wrapper">
@@ -37,7 +39,11 @@ export default function Header({ theme, toggleTheme, onLogout, userName }) {
           className={`user-settings-btn ${isDropdownOpen ? 'active' : ''}`}
         >
           {/* Small Avatar Circle */}
-          <div className="user-avatar-tiny">{userInitial}</div>
+          {userAvatarUrl ? (
+            <img src={userAvatarUrl} alt="Profile" className="user-avatar-tiny user-avatar-image" />
+          ) : (
+            <div className="user-avatar-tiny">{userInitial}</div>
+          )}
           
           {/* The Name */}
           <span className="settings-user-name">{userName || 'Guest'}</span>

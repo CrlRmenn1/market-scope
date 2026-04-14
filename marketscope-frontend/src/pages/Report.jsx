@@ -5,6 +5,28 @@ import 'leaflet/dist/leaflet.css';
 export default function Report({ data, targetCoords, onClose }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
+  const mapFeaturesRef = useRef(null);
+
+  const fitMapToFeatures = () => {
+    if (!mapInstance.current) return;
+
+    const group = mapFeaturesRef.current;
+    if (group && group.getLayers().length > 0) {
+      const bounds = group.getBounds();
+      if (bounds && bounds.isValid()) {
+        mapInstance.current.fitBounds(bounds, {
+          padding: [32, 32],
+          maxZoom: 16,
+          animate: false
+        });
+        return;
+      }
+    }
+
+    if (targetCoords?.lat && targetCoords?.lng) {
+      mapInstance.current.setView([targetCoords.lat, targetCoords.lng], 15, { animate: false });
+    }
+  };
 
   useEffect(() => {
     if (data && targetCoords?.lat && targetCoords?.lng && mapRef.current && !mapInstance.current) {
@@ -21,6 +43,7 @@ export default function Report({ data, targetCoords, onClose }) {
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance.current);
 
       const elementsGroup = L.featureGroup().addTo(mapInstance.current);
+      mapFeaturesRef.current = elementsGroup;
 
       // Draw Dynamic Radius
       L.circle([targetCoords.lat, targetCoords.lng], {
@@ -47,15 +70,72 @@ export default function Report({ data, targetCoords, onClose }) {
           L.marker([comp.lat, comp.lon], { icon: compIcon }).addTo(elementsGroup);
         });
       }
+
+      // Keep map camera responsive to container changes and centered around features.
+      mapInstance.current.whenReady(() => {
+        mapInstance.current.invalidateSize(false);
+        fitMapToFeatures();
+      });
     }
 
     return () => {
+      mapFeaturesRef.current = null;
       if (mapInstance.current) {
         mapInstance.current.remove();
         mapInstance.current = null;
       }
     };
   }, [data, targetCoords]);
+
+  useEffect(() => {
+    if (!mapInstance.current || !targetCoords?.lat || !targetCoords?.lng) return;
+
+    const recenterForPrint = () => {
+      if (!mapInstance.current) return;
+      mapInstance.current.invalidateSize(false);
+      fitMapToFeatures();
+
+      // Some browsers apply print layout asynchronously; run one extra pass.
+      window.setTimeout(() => {
+        if (!mapInstance.current) return;
+        mapInstance.current.invalidateSize(false);
+        fitMapToFeatures();
+      }, 120);
+    };
+
+    const recoverAfterPrint = () => {
+      if (!mapInstance.current) return;
+      mapInstance.current.invalidateSize(false);
+      fitMapToFeatures();
+    };
+
+    const onResize = () => {
+      if (!mapInstance.current) return;
+      mapInstance.current.invalidateSize(false);
+      fitMapToFeatures();
+    };
+
+    let resizeObserver = null;
+    if (mapRef.current && window.ResizeObserver) {
+      resizeObserver = new window.ResizeObserver(() => {
+        onResize();
+      });
+      resizeObserver.observe(mapRef.current);
+    }
+
+    window.addEventListener('beforeprint', recenterForPrint);
+    window.addEventListener('afterprint', recoverAfterPrint);
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      window.removeEventListener('beforeprint', recenterForPrint);
+      window.removeEventListener('afterprint', recoverAfterPrint);
+      window.removeEventListener('resize', onResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
+  }, [targetCoords]);
 
   if (!data) return null;
 

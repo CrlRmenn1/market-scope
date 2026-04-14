@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import './Auth.css';
+import { apiUrl } from './lib/api';
 
 export default function AuthPages({ onLoginSuccess }) {
   const [currentView, setCurrentView] = useState('landing'); 
@@ -11,6 +12,17 @@ export default function AuthPages({ onLoginSuccess }) {
   // NEW: State to track password visibility
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registerAvatarDataUrl, setRegisterAvatarDataUrl] = useState('');
+  const [registerAvatarFileName, setRegisterAvatarFileName] = useState('');
+  const [isAvatarReading, setIsAvatarReading] = useState(false);
+  const registerAvatarInputRef = useRef(null);
+
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
 
   useEffect(() => {
     let score = 0;
@@ -43,6 +55,14 @@ export default function AuthPages({ onLoginSuccess }) {
     </svg>
   );
 
+  const UploadIcon = () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -51,7 +71,7 @@ export default function AuthPages({ onLoginSuccess }) {
     const pwd = e.target.password.value;
 
     try {
-      const response = await fetch('http://localhost:8000/login', {
+      const response = await fetch(apiUrl('/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pwd })
@@ -71,11 +91,27 @@ export default function AuthPages({ onLoginSuccess }) {
     e.preventDefault();
     setErrorMsg('');
     setIsLoading(true);
+
+    if (isAvatarReading) {
+      setErrorMsg('Please wait for the profile picture to finish loading.');
+      setIsLoading(false);
+      return;
+    }
     
     const fullName = e.target.full_name.value;
     const email = e.target.email.value;
+    const address = e.target.address.value;
+    const cellphoneNumber = e.target.cellphone_number.value;
+    const primaryBusiness = e.target.primary_business.value;
+    const birthday = e.target.birthday.value;
+    const ageInput = e.target.age.value;
     const pwd = e.target.password.value;
     const confirm = e.target.confirm.value;
+
+    const computedAge = birthday
+      ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
+      : null;
+    const parsedAge = ageInput ? Number(ageInput) : computedAge;
 
     if (pwd !== confirm) {
       setErrorMsg("Passwords do not match");
@@ -84,10 +120,20 @@ export default function AuthPages({ onLoginSuccess }) {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/register', {
+      const response = await fetch(apiUrl('/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: fullName, email, password: pwd })
+        body: JSON.stringify({
+          full_name: fullName,
+          email,
+          password: pwd,
+          address,
+          cellphone_number: cellphoneNumber,
+          avatar_url: registerAvatarDataUrl || null,
+          age: Number.isFinite(parsedAge) ? parsedAge : null,
+          birthday: birthday || null,
+          primary_business: primaryBusiness
+        })
       });
       const data = await response.json();
       
@@ -163,6 +209,81 @@ export default function AuthPages({ onLoginSuccess }) {
         </div>
 
         <div className="input-group">
+          <label>Cellphone Number</label>
+          <input type="tel" name="cellphone_number" placeholder="09XX XXX XXXX" />
+        </div>
+
+        <div className="input-group">
+          <label>Address</label>
+          <input type="text" name="address" placeholder="Barangay, City" />
+        </div>
+
+        <div className="input-group">
+          <label>Primary Business Interest</label>
+          <input type="text" name="primary_business" placeholder="e.g., Pharmacy / Food Kiosk" />
+        </div>
+
+        <div className="input-group">
+          <label>Birthday</label>
+          <input type="date" name="birthday" />
+        </div>
+
+        <div className="input-group">
+          <label>Age</label>
+          <input type="number" name="age" min="0" max="120" placeholder="Optional if birthday is set" />
+        </div>
+
+        <div className="input-group">
+          <label>Profile Picture</label>
+          <input
+            className="upload-input-hidden"
+            ref={registerAvatarInputRef}
+            type="file"
+            accept="image/*"
+            tabIndex={-1}
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) {
+                setRegisterAvatarDataUrl('');
+                setRegisterAvatarFileName('');
+                return;
+              }
+
+              if (file.size > 2 * 1024 * 1024) {
+                setErrorMsg('Profile picture must be 2MB or smaller.');
+                event.target.value = '';
+                return;
+              }
+
+              try {
+                setIsAvatarReading(true);
+                const dataUrl = await readFileAsDataUrl(file);
+                setErrorMsg('');
+                setRegisterAvatarDataUrl(dataUrl);
+                setRegisterAvatarFileName(file.name);
+              } catch (error) {
+                setErrorMsg(error.message || 'Unable to read selected image.');
+              } finally {
+                setIsAvatarReading(false);
+                event.target.blur();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="upload-trigger"
+            onClick={() => registerAvatarInputRef.current?.click()}
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <UploadIcon />
+            <span>{registerAvatarFileName ? 'Change image' : 'Upload image'}</span>
+          </button>
+          <p className="upload-file-name">
+            {registerAvatarFileName ? `Selected: ${registerAvatarFileName}` : 'No image selected'}
+          </p>
+        </div>
+
+        <div className="input-group">
           <label>Password</label>
           <div className="password-input-wrapper">
             <input 
@@ -207,7 +328,7 @@ export default function AuthPages({ onLoginSuccess }) {
           </div>
         </div>
 
-        <button type="submit" className="btn-primary w-full mt-4 mb-8" disabled={isLoading}>
+        <button type="submit" className="btn-primary w-full mt-4 mb-8" disabled={isLoading || isAvatarReading}>
           {isLoading ? 'Creating Account...' : 'Create Account'}
         </button>
 
@@ -220,6 +341,13 @@ export default function AuthPages({ onLoginSuccess }) {
 
   return (
     <div className={`auth-container ${currentView === 'landing' ? 'view-landing' : ''}`}>
+      <div className="mobile-auth-hero">
+        <div className="mobile-hero-text">
+          <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>
+          <h2>Discover<br />Panabo's<br />Hidden Markets.</h2>
+          <p>The geospatial viability engine built for local entrepreneurs and MSMEs.</p>
+        </div>
+      </div>
       
       {/* Desktop Hero Side */}
       <div className="auth-hero">

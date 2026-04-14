@@ -104,7 +104,7 @@ export default function Home({ onMapTap, theme }) {
   }, []);
 
   return (
-    <div className="home-container relative">
+    <div className="home-container relative page-enter">
       {/* The map container (CSS will handle the dark mode inversion automatically) */}
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }}></div>
       

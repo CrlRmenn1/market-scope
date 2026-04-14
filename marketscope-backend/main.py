@@ -4,22 +4,49 @@ from pydantic import BaseModel
 import geopandas as gpd
 import math
 import os
+import socket
+from datetime import date
+from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 import bcrypt
 
 # ==========================================
 # DATABASE CONFIGURATION
 # ==========================================
-DB_CONFIG = {
-    "dbname": "marketscope_db",
-    "user": "postgres", 
-    "password": "1234", # <-- PUT YOUR PASSWORD HERE
-    "host": "localhost",
-    "port": "5432"
-}
+def build_db_config():
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        parsed_url = urlparse(database_url)
+        config = {
+            "dbname": parsed_url.path.lstrip("/"),
+            "user": parsed_url.username,
+            "password": parsed_url.password,
+            "host": parsed_url.hostname,
+            "port": parsed_url.port or 5432,
+        }
+        config["sslmode"] = os.environ.get("DB_SSLMODE", "require")
+        return config
 
-app = FastAPI()
+    return {
+        "dbname": os.environ.get("DB_NAME", "marketscope_db"),
+        "user": os.environ.get("DB_USER", "postgres"),
+        "password": os.environ.get("DB_PASSWORD", "1234"),
+        "host": os.environ.get("DB_HOST", "localhost"),
+        "port": os.environ.get("DB_PORT", "5432"),
+    }
+
+
+DB_CONFIG = build_db_config()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_app_tables()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,16 +63,196 @@ class RegisterUser(BaseModel):
     full_name: str
     email: str
     password: str
+    address: str | None = None
+    cellphone_number: str | None = None
+    avatar_url: str | None = None
+    age: int | None = None
+    birthday: date | None = None
+    primary_business: str | None = None
 
 class LoginUser(BaseModel):
     email: str
     password: str
+
+
+class UpdateUserProfile(BaseModel):
+    full_name: str
+    email: str
+    address: str | None = None
+    cellphone_number: str | None = None
+    avatar_url: str | None = None
+    age: int | None = None
+    birthday: date | None = None
+    primary_business: str | None = None
 
 class AnalysisRequest(BaseModel):
     lat: float
     lon: float
     business_type: str
     radius: int = 340 
+    user_id: int | None = None
+
+
+def create_app_tables():
+    conn = psycopg2.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    user_pk_column = get_users_primary_key_column(cursor)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analysis_history (
+            history_id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(%s) ON DELETE CASCADE,
+            business_type VARCHAR(255) NOT NULL,
+            viability_score INTEGER NOT NULL,
+            target_lat DOUBLE PRECISION NOT NULL,
+            target_lon DOUBLE PRECISION NOT NULL,
+            radius_used INTEGER NOT NULL,
+            insight TEXT,
+            competitors_found INTEGER,
+            competitor_locations JSONB,
+            scan_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """ % user_pk_column
+    )
+
+    # Keep existing deployments compatible by ensuring optional columns exist.
+    ensure_history_table_columns(cursor)
+    ensure_users_profile_columns(cursor)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def ensure_history_table_columns(cursor):
+    cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS competitors_found INTEGER")
+    cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS competitor_locations JSONB")
+    cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS breakdown JSONB")
+
+
+def ensure_users_profile_columns(cursor):
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS cellphone_number VARCHAR(32)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_business VARCHAR(120)")
+
+
+def get_users_primary_key_column(cursor):
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name IN ('user_id', 'id')
+        ORDER BY CASE WHEN column_name = 'user_id' THEN 0 ELSE 1 END
+        LIMIT 1
+        """
+    )
+    result = cursor.fetchone()
+    if not result:
+        raise HTTPException(status_code=500, detail="Users table must include either user_id or id")
+    if isinstance(result, dict):
+        return result.get('column_name')
+    return result[0]
+
+
+def get_analysis_history_pk_column(cursor):
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'analysis_history'
+          AND column_name IN ('history_id', 'id')
+        ORDER BY CASE WHEN column_name = 'history_id' THEN 0 ELSE 1 END
+        LIMIT 1
+        """
+    )
+    result = cursor.fetchone()
+    if not result:
+        raise HTTPException(status_code=500, detail="analysis_history table must include either history_id or id")
+    if isinstance(result, dict):
+        return result.get('column_name')
+    return result[0]
+
+
+def saturation_score_from_competitors(competitor_count):
+    if competitor_count <= 0:
+        return 25
+    if competitor_count == 1:
+        return 20
+    if competitor_count <= 3:
+        return 15
+    if competitor_count <= 5:
+        return 10
+    return 5
+
+
+def build_legacy_breakdown(row):
+    competitors_found = row.get("competitors_found") or 0
+    total_score = row.get("viability_score") or 0
+    saturation_score = saturation_score_from_competitors(competitors_found)
+
+    remainder = max(0, total_score - saturation_score)
+    base_split = int(remainder / 3)
+    extra = remainder - (base_split * 3)
+    zoning_score = min(25, base_split + (1 if extra > 0 else 0))
+    hazard_score = min(25, base_split + (1 if extra > 1 else 0))
+    demand_score = min(25, base_split)
+
+    legacy_note = "Estimated for legacy record. Run a fresh analysis to store exact factor-level values."
+    return {
+        "zoning": {
+            "score": zoning_score,
+            "status": "Legacy Estimate",
+            "description": legacy_note,
+            "details": legacy_note,
+            "estimated": True
+        },
+        "hazard": {
+            "score": hazard_score,
+            "status": "Legacy Estimate",
+            "description": legacy_note,
+            "details": legacy_note,
+            "estimated": True
+        },
+        "saturation": {
+            "score": saturation_score,
+            "status": "Derived from competitors",
+            "description": f"{competitors_found} nearby competitor(s) detected in saved record.",
+            "details": "Saturation score is mapped from saved competitor count.",
+            "estimated": True
+        },
+        "demand": {
+            "score": demand_score,
+            "status": "Legacy Estimate",
+            "description": legacy_note,
+            "details": legacy_note,
+            "estimated": True
+        }
+    }
+
+
+def normalize_history_row(row):
+    if row.get("competitors_found") is None:
+        competitor_locations = row.get("competitor_locations")
+        if isinstance(competitor_locations, list):
+            row["competitors_found"] = len(competitor_locations)
+        else:
+            row["competitors_found"] = 0
+
+    if row.get("radius_meters") is None:
+        row["radius_meters"] = 340
+
+    breakdown = row.get("breakdown")
+    if not isinstance(breakdown, dict) or not breakdown:
+        row["breakdown"] = build_legacy_breakdown(row)
+
+    return row
+
 
 # ==========================================
 # AUTHENTICATION ROUTES
@@ -55,9 +262,11 @@ def register(user: RegisterUser):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_users_profile_columns(cursor)
         
         # Check if email already exists
-        cursor.execute("SELECT id FROM users WHERE email = %s", (user.email,))
+        cursor.execute(f"SELECT {user_pk_column} FROM users WHERE email = %s", (user.email,))
         if cursor.fetchone():
             raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -67,15 +276,51 @@ def register(user: RegisterUser):
 
         # Save to database
         cursor.execute(
-            "INSERT INTO users (full_name, email, password_hash) VALUES (%s, %s, %s) RETURNING id, full_name",
-            (user.full_name, user.email, hashed_password)
+            f"""
+            INSERT INTO users (
+                full_name, email, password_hash,
+                address, cellphone_number, avatar_url,
+                age, birthday, primary_business
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING
+                {user_pk_column}, full_name, email, created_at,
+                address, cellphone_number, avatar_url,
+                age, birthday, primary_business
+            """,
+            (
+                user.full_name,
+                user.email,
+                hashed_password,
+                user.address or None,
+                user.cellphone_number or None,
+                user.avatar_url or None,
+                user.age,
+                user.birthday,
+                user.primary_business or None
+            )
         )
         new_user = cursor.fetchone()
         conn.commit()
         cursor.close()
         conn.close()
 
-        return {"status": "success", "user": {"id": new_user[0], "name": new_user[1], "email": user.email}}
+        return {
+            "status": "success",
+            "user": {
+                "id": new_user[0],
+                "user_id": new_user[0],
+                "name": new_user[1],
+                "email": new_user[2],
+                "created_at": new_user[3],
+                "address": new_user[4],
+                "cellphone_number": new_user[5],
+                "avatar_url": new_user[6],
+                "age": new_user[7],
+                "birthday": new_user[8],
+                "primary_business": new_user[9]
+            }
+        }
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
@@ -85,8 +330,21 @@ def login(user: LoginUser):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_users_profile_columns(cursor)
         
-        cursor.execute("SELECT id, full_name, email, password_hash FROM users WHERE email = %s", (user.email,))
+        cursor.execute(
+            f"""
+            SELECT
+                {user_pk_column} AS user_id,
+                full_name, email, password_hash, created_at,
+                address, cellphone_number, avatar_url,
+                age, birthday, primary_business
+            FROM users
+            WHERE email = %s
+            """,
+            (user.email,)
+        )
         db_user = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -95,7 +353,251 @@ def login(user: LoginUser):
         if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        return {"status": "success", "user": {"id": db_user['id'], "name": db_user['full_name'], "email": db_user['email']}}
+        return {
+            "status": "success",
+            "user": {
+                "id": db_user['user_id'],
+                "user_id": db_user['user_id'],
+                "name": db_user['full_name'],
+                "email": db_user['email'],
+                "created_at": db_user['created_at'],
+                "address": db_user.get('address'),
+                "cellphone_number": db_user.get('cellphone_number'),
+                "avatar_url": db_user.get('avatar_url'),
+                "age": db_user.get('age'),
+                "birthday": db_user.get('birthday'),
+                "primary_business": db_user.get('primary_business')
+            }
+        }
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/users/{user_id}")
+def get_user_profile(user_id: int):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_users_profile_columns(cursor)
+        cursor.execute(
+            f"""
+            SELECT
+                {user_pk_column} AS user_id,
+                full_name, email, created_at,
+                address, cellphone_number, avatar_url,
+                age, birthday, primary_business
+            FROM users
+            WHERE {user_pk_column} = %s
+            """,
+            (user_id,)
+        )
+        profile = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {"status": "success", "user": profile}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/users/{user_id}")
+def update_user_profile(user_id: int, payload: UpdateUserProfile):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_users_profile_columns(cursor)
+
+        cursor.execute(
+            f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = %s",
+            (user_id,)
+        )
+        existing_user = cursor.fetchone()
+        if not existing_user:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+
+        cursor.execute(
+            f"""
+            SELECT {user_pk_column} AS user_id
+            FROM users
+            WHERE email = %s AND {user_pk_column} <> %s
+            """,
+            (payload.email, user_id)
+        )
+        duplicate_email = cursor.fetchone()
+        if duplicate_email:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        cursor.execute(
+            f"""
+            UPDATE users
+            SET
+                full_name = %s,
+                email = %s,
+                address = %s,
+                cellphone_number = %s,
+                avatar_url = %s,
+                age = %s,
+                birthday = %s,
+                primary_business = %s
+            WHERE {user_pk_column} = %s
+            RETURNING
+                {user_pk_column} AS user_id,
+                full_name, email, created_at,
+                address, cellphone_number, avatar_url,
+                age, birthday, primary_business
+            """,
+            (
+                payload.full_name,
+                payload.email,
+                payload.address or None,
+                payload.cellphone_number or None,
+                payload.avatar_url or None,
+                payload.age,
+                payload.birthday,
+                payload.primary_business or None,
+                user_id
+            )
+        )
+        updated_user = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return {"status": "success", "user": updated_user}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/users/{user_id}/history")
+def get_user_history(user_id: int):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_history_table_columns(cursor)
+        history_pk_column = get_analysis_history_pk_column(cursor)
+        cursor.execute(
+            f"""
+            SELECT
+                {history_pk_column} AS history_id,
+                business_type,
+                viability_score,
+                target_lat,
+                target_lon AS target_lng,
+                radius_used AS radius_meters,
+                insight,
+                COALESCE(
+                    competitors_found,
+                    CASE
+                        WHEN competitor_locations IS NOT NULL THEN jsonb_array_length(competitor_locations)
+                        ELSE 0
+                    END,
+                    0
+                ) AS competitors_found,
+                competitor_locations,
+                scan_date AS created_at,
+                breakdown
+            FROM analysis_history
+            WHERE user_id = %s
+            ORDER BY scan_date DESC, {history_pk_column} DESC
+            """,
+            (user_id,)
+        )
+        history = cursor.fetchall()
+
+        for row in history:
+            normalize_history_row(row)
+
+        cursor.close()
+        conn.close()
+
+        return {"status": "success", "history": history}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/users/{user_id}/history/{history_id}")
+def get_user_history_item(user_id: int, history_id: int):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_history_table_columns(cursor)
+        history_pk_column = get_analysis_history_pk_column(cursor)
+
+        cursor.execute(
+            f"""
+            SELECT
+                {history_pk_column} AS history_id,
+                business_type,
+                viability_score,
+                target_lat,
+                target_lon AS target_lng,
+                radius_used AS radius_meters,
+                insight,
+                COALESCE(
+                    competitors_found,
+                    CASE
+                        WHEN competitor_locations IS NOT NULL THEN jsonb_array_length(competitor_locations)
+                        ELSE 0
+                    END,
+                    0
+                ) AS competitors_found,
+                competitor_locations,
+                scan_date AS created_at,
+                breakdown
+            FROM analysis_history
+            WHERE user_id = %s AND {history_pk_column} = %s
+            LIMIT 1
+            """,
+            (user_id, history_id)
+        )
+
+        history_item = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not history_item:
+            raise HTTPException(status_code=404, detail="History item not found")
+
+        normalize_history_row(history_item)
+        return {"status": "success", "history": history_item}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/users/{user_id}/history/{history_id}")
+def delete_user_history_item(user_id: int, history_id: int):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        history_pk_column = get_analysis_history_pk_column(cursor)
+        cursor.execute(
+            f"DELETE FROM analysis_history WHERE user_id = %s AND {history_pk_column} = %s RETURNING {history_pk_column}",
+            (user_id, history_id)
+        )
+        deleted_row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not deleted_row:
+            return {"status": "success", "deleted_history_id": history_id, "already_missing": True}
+
+        return {"status": "success", "deleted_history_id": deleted_row[0]}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
@@ -359,6 +861,33 @@ def perform_analysis(data: AnalysisRequest):
         + "The lowest matched zone score is used as the factor result."
     )
 
+    breakdown_payload = {
+        "zoning": {
+            "score": zoning_score,
+            "status": zoning_status,
+            "description": "Alignment with Panabo City Land Use Plan.",
+            "details": zoning_details
+        },
+        "hazard": {
+            "score": hazard_score,
+            "status": hazard_status,
+            "description": hazard_description,
+            "details": hazard_details
+        },
+        "saturation": {
+            "score": saturation_score,
+            "status": "Oversaturated" if competitors_found >= 1 else "Market Gap Available",
+            "description": f"Penalty multiplier based on {sme_profile['name']} industry sensitivity.",
+            "details": saturation_details
+        },
+        "demand": {
+            "score": demand_score,
+            "status": demand_status,
+            "description": demand_desc,
+            "details": demand_details
+        }
+    }
+
     total_score = zoning_score + hazard_score + saturation_score + demand_score
 
     # STATIC REPORTING MODULE (Combinational Matrix)
@@ -379,6 +908,38 @@ def perform_analysis(data: AnalysisRequest):
     else:
         generated_insight = f"Not Recommended (Score: {int(total_score)}). Poor overall suitability. A combination of low demand, environmental hazards, or zoning issues makes this a highly unfavorable location."
 
+    if data.user_id is not None:
+        try:
+            conn = psycopg2.connect(**DB_CONFIG)
+            cursor = conn.cursor()
+            ensure_history_table_columns(cursor)
+            cursor.execute(
+                """
+                INSERT INTO analysis_history (
+                    user_id, business_type, viability_score,
+                    target_lat, target_lon, radius_used, insight,
+                    competitors_found, competitor_locations, breakdown
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    data.user_id,
+                    sme_profile["name"],
+                    int(total_score),
+                    data.lat,
+                    data.lon,
+                    data.radius,
+                    generated_insight,
+                    competitors_found,
+                    Json(competitors_list),
+                    Json(breakdown_payload)
+                )
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            print(f"History Save Error: {e}")
+
     # FINAL PAYLOAD
     return {
         "viability_score": int(total_score),
@@ -388,34 +949,20 @@ def perform_analysis(data: AnalysisRequest):
         "target_coords": {"lat": data.lat, "lng": data.lon}, 
         "radius_meters": data.radius,
         "insight": generated_insight, 
-        "breakdown": {
-            "zoning": {
-                "score": zoning_score,
-                "status": zoning_status,
-                "description": "Alignment with Panabo City Land Use Plan.",
-                "details": zoning_details
-            },
-            "hazard": {
-                "score": hazard_score,
-                "status": hazard_status,
-                "description": hazard_description,
-                "details": hazard_details
-            },
-            "saturation": {
-                "score": saturation_score,
-                "status": "Oversaturated" if competitors_found >= 1 else "Market Gap Available",
-                "description": f"Penalty multiplier based on {sme_profile['name']} industry sensitivity.",
-                "details": saturation_details
-            },
-            "demand": {
-                "score": demand_score,
-                "status": demand_status,
-                "description": demand_desc,
-                "details": demand_details
-            }
-        }
+        "breakdown": breakdown_payload
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    host = os.environ.get("MARKETSCOPE_HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", os.environ.get("MARKETSCOPE_PORT", "8000")))
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sock.connect_ex(("127.0.0.1", port)) == 0:
+            raise SystemExit(
+                f"Port {port} is already in use. Stop the existing backend process or set MARKETSCOPE_PORT to a different port."
+            )
+
+    uvicorn.run(app, host=host, port=port)
