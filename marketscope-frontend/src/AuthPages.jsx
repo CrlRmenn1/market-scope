@@ -209,6 +209,16 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
   const renderHero = () => (
     <div className="hero-container">
+      <div className="hero-logo-corner" aria-hidden="true">
+        <div className="brand-mark">
+          <div className="lens-left"></div>
+          <div className="lens-center">
+            <div className="lens-reflection"></div>
+          </div>
+          <div className="lens-right"></div>
+        </div>
+      </div>
+
       <div className="hero-header">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
           <span></span>
