@@ -212,6 +212,14 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     <div className="hero-container">
       {/* Burger Menu */}
       <div className="hero-header">
+        {currentView === 'register' && (
+          <button className="back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
+        )}
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)}>
           <span></span>
           <span></span>
@@ -230,9 +238,11 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
         <h1 className="hero-title">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
         <p className="hero-description">The geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
-        <button className="get-started-btn" onClick={() => setCurrentView('register')}>
-          Get Started
-        </button>
+        {currentView === 'hero' && (
+          <button className="get-started-btn" onClick={() => setCurrentView('register')}>
+            Get Started
+          </button>
+        )}
       </div>
     </div>
   );
@@ -294,14 +304,6 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
   const renderRegister = () => (
     <div className="fade-in">
-      {/* Back Button */}
-      <button className="back-btn" onClick={() => setCurrentView('hero')}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
-      </button>
-
       <h2 style={{ color: 'white' }}>Create Account</h2>
       <p className="auth-subtitle" style={{ color: 'white' }}>Start analyzing Panabo's markets today.</p>
 
@@ -461,21 +463,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       {/* Register & Login Views */}
       {currentView !== 'hero' && (
         <>
-          <div className="mobile-auth-hero">
-            <div className="mobile-hero-text">
-              <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>
-              <h2>Discover<br />Panabo's<br />Hidden Markets.</h2>
-              <p>The geospatial viability engine built for local entrepreneurs and MSMEs.</p>
-            </div>
-          </div>
-          
-          {/* Desktop Hero Side */}
           <div className="auth-hero">
-            <div className="hero-text">
-              <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
-              <h1>Discover<br/>Panabo's<br/>Hidden Markets.</h1>
-              <p>The ultimate geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
-            </div>
+            {renderHero()}
           </div>
 
           {/* Form Side */}
