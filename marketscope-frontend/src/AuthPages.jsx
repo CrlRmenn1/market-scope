@@ -3,7 +3,7 @@ import './Auth.css';
 import { apiUrl } from './api';
 
 export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
-  const [currentView, setCurrentView] = useState(initialView === 'login' ? 'login' : 'register');
+  const [currentView, setCurrentView] = useState(initialView === 'login' ? 'login' : 'landing');
   const [password, setPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -411,10 +411,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   );
 
   return (
-    <div className={`auth-container ${currentView === 'register' ? 'view-landing' : 'view-login'}`}>
+    <div className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`}>
       <div className="mobile-auth-hero">
         {currentView === 'register' && (
-          <button className="hero-side-back-btn" onClick={() => setCurrentView('login')} aria-label="Back to login">
+          <button className="hero-side-back-btn" onClick={() => setCurrentView('landing')} aria-label="Back to landing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -430,7 +430,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
       <div className="auth-hero">
         {currentView === 'register' && (
-          <button className="hero-side-back-btn" onClick={() => setCurrentView('login')} aria-label="Back to login">
+          <button className="hero-side-back-btn" onClick={() => setCurrentView('landing')} aria-label="Back to landing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -445,7 +445,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       </div>
 
       <div className="auth-form-wrapper">
-        {currentView === 'register' && renderRegister()}
+        {(currentView === 'register' || currentView === 'landing') && renderRegister()}
         {currentView === 'login' && renderLogin()}
       </div>
     </div>
