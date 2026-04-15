@@ -202,8 +202,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
 
   const renderLogin = () => (
     <div className="fade-in">
-      <h2>Welcome Back</h2>
-      <p className="auth-subtitle">Access your MarketScope dashboard.</p>
+      <h2 style={{ color: 'white' }}>Welcome Back</h2>
+      <p className="auth-subtitle" style={{ color: 'white' }}>Access your MarketScope dashboard.</p>
       
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
@@ -257,8 +257,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
 
   const renderLanding = () => (
     <div className="fade-in">
-      <h2>Create Account</h2>
-      <p className="auth-subtitle">Start analyzing Panabo's markets today.</p>
+      <h2 style={{ color: 'white' }}>Create Account</h2>
+      <p className="auth-subtitle" style={{ color: 'white' }}>Start analyzing Panabo's markets today.</p>
 
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
