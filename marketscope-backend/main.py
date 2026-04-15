@@ -489,7 +489,6 @@ def get_user_profile(user_id: int):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         user_pk_column = get_users_primary_key_column(cursor)
-        ensure_users_profile_columns(cursor)
         cursor.execute(
             f"""
             SELECT
@@ -521,7 +520,6 @@ def update_user_profile(user_id: int, payload: UpdateUserProfile):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         user_pk_column = get_users_primary_key_column(cursor)
-        ensure_users_profile_columns(cursor)
 
         cursor.execute(
             f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = %s",
@@ -595,7 +593,6 @@ def get_user_history(user_id: int):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        ensure_history_table_columns(cursor)
         history_pk_column = get_analysis_history_pk_column(cursor)
         cursor.execute(
             f"""
@@ -643,7 +640,6 @@ def get_user_history_item(user_id: int, history_id: int):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        ensure_history_table_columns(cursor)
         history_pk_column = get_analysis_history_pk_column(cursor)
 
         cursor.execute(
@@ -984,7 +980,6 @@ def admin_list_users(x_admin_token: str | None = Header(default=None)):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         user_pk_column = get_users_primary_key_column(cursor)
-        ensure_users_profile_columns(cursor)
         cursor.execute(
             f"""
             SELECT
@@ -1019,7 +1014,6 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         user_pk_column = get_users_primary_key_column(cursor)
-        ensure_users_profile_columns(cursor)
 
         existing = fetch_user_for_admin(cursor, user_pk_column, user_id)
         if not existing:
@@ -1397,7 +1391,6 @@ def perform_analysis(data: AnalysisRequest):
         try:
             conn = psycopg2.connect(**DB_CONFIG)
             cursor = conn.cursor()
-            ensure_history_table_columns(cursor)
             cursor.execute(
                 """
                 INSERT INTO analysis_history (
