@@ -253,7 +253,7 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
   width: 92%; max-width: 420px; background: var(--bg-glass);
   backdrop-filter: blur(20px); border-radius: 50px;
   border: 1px solid var(--border-color); padding: 8px;
-  z-index: 1000; display: flex; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  z-index: 2000; display: flex; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
 }
 
 html[data-theme="light"] .bottom-navbar {
@@ -629,6 +629,23 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   @keyframes modalScale {
     from { opacity: 0; transform: scale(0.95) translateY(20px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+}
+
+@media (max-width: 767px) {
+  .bottom-navbar {
+    position: fixed;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    width: calc(100% - 20px);
+    z-index: 4000;
+  }
+
+  .app-container {
+    height: 100dvh;
+  }
+
+  .app-content {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
   }
 }
 /* =========================================
