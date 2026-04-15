@@ -760,7 +760,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   }
 
   .map-action-bar {
-    bottom: calc(190px + env(safe-area-inset-bottom));
+    bottom: calc(210px + env(safe-area-inset-bottom));
     right: 12px;
   }
 
