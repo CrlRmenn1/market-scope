@@ -88,6 +88,31 @@
   max-width: 440px;
 }
 
+.auth-form-wrapper .fade-in > h2 {
+  color: var(--text-main);
+}
+
+.auth-form-wrapper .fade-in > p,
+.auth-subtitle {
+  color: var(--text-muted);
+}
+
+.remember-me-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -8px;
+  margin-bottom: 18px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.remember-me-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #a855f7;
+}
+
 /* =========================================
    MOBILE LANDING SPECIFICS (Add Life!)
    ========================================= */
@@ -230,6 +255,11 @@
   .auth-footer span {
     display: inline-block;
     margin-left: 4px;
+  }
+
+  .remember-me-row {
+    margin-top: -10px;
+    margin-bottom: 14px;
   }
 }
 

@@ -8,6 +8,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberedLogin, setRememberedLogin] = useState({ email: '', password: '' });
 
   // NEW: State to track password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -32,6 +34,22 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
     if (/[0-9]/.test(password)) score += 1;
     setPasswordStrength(score);
   }, [password]);
+
+  useEffect(() => {
+    try {
+      const savedLogin = localStorage.getItem('marketscope_login_remembered');
+      if (!savedLogin) return;
+
+      const parsed = JSON.parse(savedLogin);
+      setRememberMe(true);
+      setRememberedLogin({
+        email: parsed.email || '',
+        password: parsed.password || ''
+      });
+    } catch {
+      localStorage.removeItem('marketscope_login_remembered');
+    }
+  }, []);
 
   const getMeterColor = () => {
     if (passwordStrength <= 1) return '#ef4444'; 
@@ -69,6 +87,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
     setIsLoading(true);
     const email = e.target.email.value;
     const pwd = e.target.password.value;
+    const shouldRemember = e.target.rememberMe?.checked;
 
     try {
       const userResponse = await fetch(apiUrl('/login'), {
@@ -79,6 +98,11 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
 
       const userData = await userResponse.json();
       if (userResponse.ok) {
+        if (shouldRemember) {
+          localStorage.setItem('marketscope_login_remembered', JSON.stringify({ email, password: pwd }));
+        } else {
+          localStorage.removeItem('marketscope_login_remembered');
+        }
         onLoginSuccess(userData.user);
         return;
       }
@@ -93,6 +117,11 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
 
         const adminData = await adminResponse.json();
         if (adminResponse.ok) {
+          if (shouldRemember) {
+            localStorage.setItem('marketscope_login_remembered', JSON.stringify({ email, password: pwd }));
+          } else {
+            localStorage.removeItem('marketscope_login_remembered');
+          }
           onAdminLoginSuccess(adminData.admin);
           return;
         }
@@ -173,16 +202,15 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
 
   const renderLogin = () => (
     <div className="fade-in">
-      <h2 style={{ color: "white" }}>Welcome Back</h2>
-      <p className="auth-subtitle" style={{ color: "white" }}>Access your MarketScope dashboard.</p>
-      <br />
+      <h2>Welcome Back</h2>
+      <p className="auth-subtitle">Access your MarketScope dashboard.</p>
       
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
       <form onSubmit={handleLogin} className="mt-6">
         <div className="input-group">
           <label>Email Address</label>
-          <input type="email" name="email" placeholder="msme@panabo.com" required />
+          <input type="email" name="email" placeholder="msme@panabo.com" defaultValue={rememberedLogin.email} autoComplete="username" required />
         </div>
 
         <div className="input-group">
@@ -192,6 +220,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
               type={showPassword ? "text" : "password"} 
               name="password" 
               placeholder="••••••••" 
+              defaultValue={rememberedLogin.password}
+              autoComplete="current-password"
               required 
             />
             <button 
@@ -203,6 +233,16 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
             </button>
           </div>
         </div>
+
+        <label className="remember-me-row">
+          <input
+            type="checkbox"
+            name="rememberMe"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+          />
+          <span>Remember me</span>
+        </label>
 
         <button type="submit" className="btn-primary w-full mt-6 mb-8" disabled={isLoading}>
           {isLoading ? 'Authenticating...' : 'Log In'}
