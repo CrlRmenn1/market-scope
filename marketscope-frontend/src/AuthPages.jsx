@@ -2,8 +2,8 @@ import React, { useRef, useState, useEffect } from 'react';
 import './Auth.css';
 import { apiUrl } from './api';
 
-export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
-  const [currentView, setCurrentView] = useState('landing'); 
+export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
+  const [currentView, setCurrentView] = useState(initialView); 
   const [password, setPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -50,6 +50,12 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
       localStorage.removeItem('marketscope_login_remembered');
     }
   }, []);
+
+  useEffect(() => {
+    if (onAuthPagesMounted) {
+      onAuthPagesMounted();
+    }
+  }, [onAuthPagesMounted]);
 
   const getMeterColor = () => {
     if (passwordStrength <= 1) return '#ef4444'; 

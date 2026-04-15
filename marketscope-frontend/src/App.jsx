@@ -24,6 +24,7 @@ export default function App() {
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [reportData, setReportData] = useState(null);
+  const [justLoggedOut, setJustLoggedOut] = useState(false);
 
   const saveOpenReport = (data, coords) => {
     localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
@@ -126,6 +127,7 @@ export default function App() {
     localStorage.removeItem('marketscope_active_tab');
     clearOpenReport();
     setSession(null);
+    setJustLoggedOut(true);
   };
 
   const toggleTheme = () => {
@@ -154,7 +156,15 @@ export default function App() {
   };
 
   if (!session && !adminSession) {
-    return <AuthPages onLoginSuccess={handleLoginSuccess} onAdminLoginSuccess={handleAdminLoginSuccess} />;
+    const initialView = justLoggedOut ? 'login' : 'landing';
+    return (
+      <AuthPages 
+        onLoginSuccess={handleLoginSuccess} 
+        onAdminLoginSuccess={handleAdminLoginSuccess}
+        initialView={initialView}
+        onAuthPagesMounted={() => setJustLoggedOut(false)}
+      />
+    );
   }
 
   if (adminSession) {
