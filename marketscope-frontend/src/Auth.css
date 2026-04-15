@@ -605,7 +605,7 @@
 .burger-menu {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  right: 10px;
   background-color: rgba(59, 7, 100, 0.95);
   border: 1px solid rgba(168, 85, 247, 0.3);
   border-radius: 8px;
@@ -773,7 +773,7 @@
   }
 
   .burger-menu {
-    right: -10px;
+    right: 8px;
     min-width: 180px;
   }
 
