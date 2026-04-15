@@ -413,7 +413,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   return (
     <div className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`}>
       <div className="mobile-auth-hero">
-        {currentView === 'register' && (
+        {currentView !== 'login' && (
           <button className="hero-side-back-btn" onClick={() => setCurrentView('landing')} aria-label="Back to landing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -429,7 +429,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       </div>
 
       <div className="auth-hero">
-        {currentView === 'register' && (
+        {currentView !== 'login' && (
           <button className="hero-side-back-btn" onClick={() => setCurrentView('landing')} aria-label="Back to landing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
