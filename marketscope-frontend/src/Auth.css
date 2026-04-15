@@ -15,11 +15,13 @@
 
 .mobile-auth-hero {
   display: none;
+  position: relative;
 }
 
 /* Left side hero (hidden on mobile, visible on desktop) */
 .auth-hero {
   display: none;
+  position: relative;
   flex: 1.2;
   background-color: #3b0764; /* Deep purple base */
   background-image: 
@@ -317,6 +319,31 @@
   letter-spacing: -0.5px;
 }
 .auth-header p { font-size: 1rem; color: #94a3b8; }
+
+.hero-side-back-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 14px);
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.hero-side-back-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.hero-side-back-btn:hover {
+  color: #d8b4fe;
+}
 
 .back-link {
   background: none;
