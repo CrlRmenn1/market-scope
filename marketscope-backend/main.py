@@ -43,6 +43,18 @@ else:
         "options": os.environ.get("MARKETSCOPE_DB_OPTIONS", "-c statement_timeout=10000"),
     }
 
+
+def get_startup_db_config():
+    startup_config = dict(DB_CONFIG)
+    startup_options = os.environ.get("MARKETSCOPE_DB_STARTUP_OPTIONS", "-c statement_timeout=0")
+
+    if startup_options:
+        startup_config["options"] = startup_options
+    else:
+        startup_config.pop("options", None)
+
+    return startup_config
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_app_tables()
@@ -143,7 +155,7 @@ ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local
 
 
 def create_app_tables():
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(**get_startup_db_config())
     cursor = conn.cursor()
     user_pk_column = get_users_primary_key_column(cursor)
     cursor.execute(
