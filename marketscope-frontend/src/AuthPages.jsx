@@ -3,7 +3,9 @@ import './Auth.css';
 import { apiUrl } from './api';
 
 export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
-  const [currentView, setCurrentView] = useState(initialView); 
+  // Map initialView 'landing' to 'hero' view, but keep 'login' as is
+  const [currentView, setCurrentView] = useState(initialView === 'landing' ? 'hero' : initialView); 
+  const [isBurgerOpen, setIsBurgerOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -206,6 +208,35 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     }
   };
 
+  const renderHero = () => (
+    <div className="hero-container">
+      {/* Burger Menu */}
+      <div className="hero-header">
+        <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)}>
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        {isBurgerOpen && (
+          <div className="burger-menu">
+            <button className="burger-item">About Us</button>
+            <button className="burger-item">How Does This Work</button>
+          </div>
+        )}
+      </div>
+
+      {/* Centered Hero */}
+      <div className="hero-content">
+        <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
+        <h1 className="hero-title">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
+        <p className="hero-description">The geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
+        <button className="get-started-btn" onClick={() => setCurrentView('register')}>
+          Get Started
+        </button>
+      </div>
+    </div>
+  );
+
   const renderLogin = () => (
     <div className="fade-in">
       <h2 style={{ color: 'white' }}>Welcome Back</h2>
@@ -255,14 +286,22 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         <p className="auth-footer">
-          New to MarketScope? <span onClick={() => setCurrentView('landing')}>Create Account</span>
+          New to MarketScope? <span onClick={() => setCurrentView('register')}>Create Account</span>
         </p>
       </form>
     </div>
   );
 
-  const renderLanding = () => (
+  const renderRegister = () => (
     <div className="fade-in">
+      {/* Back Button */}
+      <button className="back-btn" onClick={() => setCurrentView('hero')}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </button>
+
       <h2 style={{ color: 'white' }}>Create Account</h2>
       <p className="auth-subtitle" style={{ color: 'white' }}>Start analyzing Panabo's markets today.</p>
 
@@ -411,29 +450,48 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   );
 
   return (
-    <div className={`auth-container ${currentView === 'landing' ? 'view-landing' : 'view-login'}`}>
-      <div className="mobile-auth-hero">
-        <div className="mobile-hero-text">
-          <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>
-          <h2>Discover<br />Panabo's<br />Hidden Markets.</h2>
-          <p>The geospatial viability engine built for local entrepreneurs and MSMEs.</p>
-        </div>
-      </div>
-      
-      {/* Desktop Hero Side */}
-      <div className="auth-hero">
-        <div className="hero-text">
-          <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
-          <h1>Discover<br/>Panabo's<br/>Hidden Markets.</h1>
-          <p>The ultimate geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
-        </div>
-      </div>
+    <div className={`auth-container ${currentView === 'hero' ? 'view-hero' : currentView === 'register' ? 'view-register' : 'view-login'}`}>
+      {/* Hero View */}
+      {currentView === 'hero' && (
+        <>
+          <div className="mobile-auth-hero">
+            <div className="mobile-hero-text">
+              {renderHero()}
+            </div>
+          </div>
+          <div className="auth-hero">
+            {renderHero()}
+          </div>
+        </>
+      )}
 
-      {/* Form Side */}
-      <div className="auth-form-wrapper">
-        {currentView === 'landing' && renderLanding()}
-        {currentView === 'login' && renderLogin()}
-      </div>
+      {/* Register & Login Views */}
+      {currentView !== 'hero' && (
+        <>
+          <div className="mobile-auth-hero">
+            <div className="mobile-hero-text">
+              <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>
+              <h2>Discover<br />Panabo's<br />Hidden Markets.</h2>
+              <p>The geospatial viability engine built for local entrepreneurs and MSMEs.</p>
+            </div>
+          </div>
+          
+          {/* Desktop Hero Side */}
+          <div className="auth-hero">
+            <div className="hero-text">
+              <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
+              <h1>Discover<br/>Panabo's<br/>Hidden Markets.</h1>
+              <p>The ultimate geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
+            </div>
+          </div>
+
+          {/* Form Side */}
+          <div className="auth-form-wrapper">
+            {currentView === 'register' && renderRegister()}
+            {currentView === 'login' && renderLogin()}
+          </div>
+        </>
+      )}
     </div>
   );
 }
