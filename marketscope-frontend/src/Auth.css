@@ -512,6 +512,17 @@
 
 .view-hero .auth-hero {
   display: flex;
+  flex: 1;
+  padding: 0;
+  border-right: none;
+  background-color: #22073a;
+  background-image:
+    radial-gradient(circle at top left, rgba(168, 85, 247, 0.25), transparent 42%),
+    radial-gradient(circle at top right, rgba(59, 7, 100, 0.72), transparent 42%),
+    linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: auto, auto, 24px 24px, 24px 24px;
+  background-position: center center;
 }
 
 .view-hero .auth-form-wrapper {
@@ -550,14 +561,15 @@
   justify-content: center;
   width: 100%;
   height: 100%;
+  min-height: 100dvh;
   text-align: center;
   position: relative;
 }
 
 .hero-header {
   position: absolute;
-  top: calc(env(safe-area-inset-top) + 18px);
-  right: 16px;
+  top: calc(env(safe-area-inset-top) + 10px);
+  right: 10px;
   z-index: 100;
   display: flex;
   align-items: center;
@@ -674,7 +686,7 @@
 
 .hero-description {
   font-size: 1.1rem;
-  color: #cbd5e1;
+  color: #d8b4fe;
   line-height: 1.6;
   margin: 0;
   max-width: 500px;
@@ -685,13 +697,13 @@
   padding: 14px 40px;
   font-size: 1.05rem;
   font-weight: 600;
-  background: linear-gradient(135deg, #7e22ce 0%, #a855f7 100%);
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(126, 34, 206, 0.35);
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
   margin-top: 12px;
 }
 
@@ -751,8 +763,8 @@
   }
 
   .hero-header {
-    top: calc(env(safe-area-inset-top) + 14px);
-    right: 14px;
+    top: calc(env(safe-area-inset-top) + 8px);
+    right: 8px;
   }
 
   .burger-menu-btn span {
