@@ -3,7 +3,8 @@ import './Auth.css';
 import { apiUrl } from './api';
 
 export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
-  const [currentView, setCurrentView] = useState(initialView === 'login' ? 'login' : 'landing');
+  const [currentView, setCurrentView] = useState(initialView === 'login' ? 'login' : 'hero');
+  const [isBurgerOpen, setIsBurgerOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
@@ -205,6 +206,33 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       setIsLoading(false);
     }
   };
+
+  const renderHero = () => (
+    <div className="hero-container">
+      <div className="hero-header">
+        <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        {isBurgerOpen && (
+          <div className="burger-menu">
+            <button className="burger-item">About Us</button>
+            <button className="burger-item">How Does This Work</button>
+          </div>
+        )}
+      </div>
+
+      <div className="hero-content">
+        <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
+        <h1 className="hero-title">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
+        <p className="hero-description">The geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
+        <button className="get-started-btn" onClick={() => setCurrentView('register')}>
+          Get Started
+        </button>
+      </div>
+    </div>
+  );
 
   const renderLogin = () => (
     <div className="fade-in">
@@ -410,11 +438,21 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     </div>
   );
 
+  if (currentView === 'hero') {
+    return (
+      <div className="auth-container view-hero">
+        <div className="auth-hero">
+          {renderHero()}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`}>
       <div className="mobile-auth-hero">
-        {currentView !== 'login' && (
-          <button className="hero-side-back-btn" onClick={() => setCurrentView('landing')} aria-label="Back to landing">
+        {currentView === 'register' && (
+          <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -429,8 +467,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       </div>
 
       <div className="auth-hero">
-        {currentView !== 'login' && (
-          <button className="hero-side-back-btn" onClick={() => setCurrentView('landing')} aria-label="Back to landing">
+        {currentView === 'register' && (
+          <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -445,7 +483,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       </div>
 
       <div className="auth-form-wrapper">
-        {(currentView === 'register' || currentView === 'landing') && renderRegister()}
+        {currentView === 'register' && renderRegister()}
         {currentView === 'login' && renderLogin()}
       </div>
     </div>
