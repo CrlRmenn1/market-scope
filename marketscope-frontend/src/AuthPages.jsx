@@ -209,7 +209,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
   const renderHero = () => (
     <div className="hero-container">
-      <div className="hero-logo-corner" aria-hidden="true">
+      <div className="hero-logo-corner">
         <div className="brand-mark">
           <div className="lens-left"></div>
           <div className="lens-center">
@@ -217,6 +217,9 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           </div>
           <div className="lens-right"></div>
         </div>
+        <span className="hero-logo-text">
+          Market<span className="hero-logo-highlight">Scope</span>
+        </span>
       </div>
 
       <div className="hero-header">
