@@ -64,6 +64,11 @@ def root():
         "service": "MarketScope API"
     }
 
+
+@app.head("/")
+def root_head():
+    return
+
 # ==========================================
 # PYDANTIC MODELS
 # ==========================================
