@@ -714,7 +714,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   }
 
   .map-legend {
-    top: 68px;
+    top: 82px;
     left: 8px;
     padding: 9px 10px;
     border-radius: 10px;
@@ -741,7 +741,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   }
 
   .map-mode-toggle {
-    top: 68px;
+    top: 82px;
     right: 8px;
     width: 136px;
     gap: 6px;
@@ -757,6 +757,23 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
     bottom: calc(26px + env(safe-area-inset-bottom));
     padding: 6px;
     border-radius: 36px;
+  }
+
+  .map-action-bar {
+    bottom: calc(156px + env(safe-area-inset-bottom));
+    right: 12px;
+  }
+
+  .map-analyze-btn {
+    width: 56px;
+    height: 56px;
+  }
+
+  .out-of-bounds-warning {
+    bottom: calc(156px + env(safe-area-inset-bottom));
+    min-width: 230px;
+    max-width: calc(100% - 20px);
+    font-size: 0.82rem;
   }
 
   .fluid-indicator {
