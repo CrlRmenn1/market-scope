@@ -8,7 +8,7 @@
   width: 100vw;
   background-color: #0b1120; /* Very dark slate/navy */
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
-  overflow-y: hidden;
+  overflow-y: auto;
   overflow-x: hidden;
   transition: background-color 0.3s ease;
 }
@@ -71,8 +71,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  height: 100dvh;
-  padding: 24px;
+  min-height: 100dvh;
+  padding: 24px 28px 24px 36px;
   padding-top: max(24px, env(safe-area-inset-top));
   padding-bottom: max(24px, env(safe-area-inset-bottom));
   background-color: transparent;
@@ -162,6 +162,7 @@
   .auth-form-wrapper {
     flex: 1 1 auto;
     min-height: 0;
+    height: auto;
     padding: 22px 16px 104px;
     padding-top: 24px;
     padding-bottom: max(104px, calc(env(safe-area-inset-bottom) + 104px));
@@ -237,9 +238,24 @@
   .auth-hero { display: flex; align-items: center; justify-content: center; }
   .auth-form-wrapper {
     max-width: 600px;
-    align-items: flex-start;
-    padding-top: 40px;
+    align-items: center;
+    justify-content: center;
+    padding-top: 24px;
     background-color: #0b1120;
+  }
+
+  .auth-container.view-landing .auth-form-wrapper {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding-top: 56px;
+    padding-bottom: 72px;
+    padding-left: 44px;
+    padding-right: 28px;
+  }
+
+  .auth-container.view-landing .auth-form-wrapper .fade-in {
+    margin-top: 0;
+    margin-bottom: 0;
   }
   
   /* Hide the mobile text on desktop so it doesn't duplicate the hero panel */
@@ -318,16 +334,6 @@
 /* =========================================
    4. BUTTONS
    ========================================= */
-.auth-actions-row {
-  display: flex;
-  flex-direction: column; /* Stack buttons on mobile for easier tapping */
-  gap: 12px;
-}
-
-@media (min-width: 640px) {
-  .auth-actions-row { flex-direction: row; }
-}
-
 .btn-primary {
   flex: 1;
   background: #a855f7;
@@ -343,20 +349,6 @@
 .btn-primary:hover { background-color: #9333ea; }
 .btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-
-.btn-secondary {
-  flex: 1;
-  background-color: rgba(255,255,255,0.05);
-  color: white;
-  padding: 16px;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-.btn-secondary:hover { background-color: rgba(255,255,255,0.1); }
 
 /* =========================================
    5. EXTRAS (Meters, Links, Alerts)

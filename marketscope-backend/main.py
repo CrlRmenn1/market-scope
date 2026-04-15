@@ -1,59 +1,48 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import geopandas as gpd
 import math
 import os
 import socket
+from urllib.parse import urlparse
 from datetime import date
 from contextlib import asynccontextmanager
-from urllib.parse import parse_qs, urlparse
+from threading import Lock
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import bcrypt
 
+try:
+    import geopandas as gpd
+except Exception:
+    gpd = None
+
 # ==========================================
 # DATABASE CONFIGURATION
 # ==========================================
-def build_db_config():
-    database_url = (
-        os.environ.get("DATABASE_URL")
-        or os.environ.get("DATABASE_INTERNAL_URL")
-        or os.environ.get("DATABASE_EXTERNAL_URL")
-        or os.environ.get("INTERNAL_DATABASE_URL")
-        or os.environ.get("EXTERNAL_DATABASE_URL")
-    )
-    if database_url:
-        parsed_url = urlparse(database_url)
-        query_params = parse_qs(parsed_url.query)
-        config = {
-            "dbname": parsed_url.path.lstrip("/"),
-            "user": parsed_url.username,
-            "password": parsed_url.password,
-            "host": parsed_url.hostname,
-            "port": parsed_url.port or 5432,
-        }
-        config["sslmode"] = (
-            os.environ.get("DB_SSLMODE")
-            or query_params.get("sslmode", [None])[0]
-            or "require"
-        )
-        return config
-
-    return {
-        "dbname": os.environ.get("DB_NAME", "marketscope_db"),
-        "user": os.environ.get("DB_USER", "postgres"),
-        "password": os.environ.get("DB_PASSWORD", "1234"),
-        "host": os.environ.get("DB_HOST", "localhost"),
-        "port": os.environ.get("DB_PORT", "5432"),
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if DATABASE_URL:
+    parsed_database_url = urlparse(DATABASE_URL)
+    DB_CONFIG = {
+        "dbname": parsed_database_url.path.lstrip("/") or "marketscope_db",
+        "user": parsed_database_url.username or "postgres",
+        "password": parsed_database_url.password or "",
+        "host": parsed_database_url.hostname or "localhost",
+        "port": str(parsed_database_url.port or 5432),
     }
-
-
-DB_CONFIG = build_db_config()
+else:
+    DB_CONFIG = {
+        "dbname": os.environ.get("MARKETSCOPE_DB_NAME", "marketscope_db"),
+        "user": os.environ.get("MARKETSCOPE_DB_USER", "postgres"),
+        "password": os.environ.get("MARKETSCOPE_DB_PASSWORD", "1234"),
+        "host": os.environ.get("MARKETSCOPE_DB_HOST", "localhost"),
+        "port": os.environ.get("MARKETSCOPE_DB_PORT", "5432"),
+    }
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_app_tables()
+    preload_pbf_competitor_cache()
     yield
 
 
@@ -62,7 +51,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -104,6 +93,38 @@ class AnalysisRequest(BaseModel):
     user_id: int | None = None
 
 
+class AdminLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AdminCreateMsme(BaseModel):
+    name: str
+    business_type: str
+    latitude: float
+    longitude: float
+
+
+class AdminUpdateMsme(AdminCreateMsme):
+    pass
+
+
+class AdminUpdateUser(BaseModel):
+    full_name: str
+    email: str
+    address: str | None = None
+    cellphone_number: str | None = None
+    avatar_url: str | None = None
+    age: int | None = None
+    birthday: date | None = None
+    primary_business: str | None = None
+
+
+ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
+ADMIN_PASSWORD = os.environ.get("MARKETSCOPE_ADMIN_PASSWORD", "admin123")
+ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local-token")
+
+
 def create_app_tables():
     conn = psycopg2.connect(**DB_CONFIG)
     cursor = conn.cursor()
@@ -129,6 +150,9 @@ def create_app_tables():
     # Keep existing deployments compatible by ensuring optional columns exist.
     ensure_history_table_columns(cursor)
     ensure_users_profile_columns(cursor)
+    ensure_custom_msme_table(cursor)
+    ensure_admin_users_table(cursor)
+    ensure_default_admin_user(cursor)
 
     conn.commit()
     cursor.close()
@@ -148,6 +172,53 @@ def ensure_users_profile_columns(cursor):
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_business VARCHAR(120)")
+
+
+def ensure_custom_msme_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS custom_msme (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            business_type VARCHAR(64) NOT NULL,
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    # Backfill for older local DBs where custom_msme existed before created_at was introduced.
+    cursor.execute("ALTER TABLE custom_msme ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    cursor.execute("UPDATE custom_msme SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+
+
+def ensure_admin_users_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+
+def ensure_default_admin_user(cursor):
+    cursor.execute("SELECT id FROM admin_users WHERE email = %s", (ADMIN_EMAIL,))
+    existing = cursor.fetchone()
+    if existing:
+        return
+
+    hashed_password = bcrypt.hashpw(ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    cursor.execute(
+        """
+        INSERT INTO admin_users (email, password_hash)
+        VALUES (%s, %s)
+        """,
+        (ADMIN_EMAIL, hashed_password)
+    )
 
 
 def get_users_primary_key_column(cursor):
@@ -617,6 +688,11 @@ def delete_user_history_item(user_id: int, history_id: int):
 # GEOSPATIAL ANALYSIS ROUTE
 # ==========================================
 PBF_PATH = "panabo.pbf"
+PBF_COMPETITOR_CACHE = {}
+PBF_CACHE_LOADED = False
+PBF_CACHE_LOCK = Lock()
+PBF_LAYERS = ["points", "multipolygons", "lines", "multilinestrings"]
+PBF_SEARCH_COLUMNS = ["amenity", "shop", "healthcare", "building"]
 
 ZONING_LAYERS = {
     "commercial_proper": (7.3000, 7.3150, 125.6700, 125.6900),
@@ -642,23 +718,6 @@ HAZARD_ZONES = {
             "bounds": (7.2990, 7.3150, 125.6700, 125.6860),
             "score": 18
         }
-    ],
-    "landslide": [
-        {
-            "name": "Very High Landslide Susceptibility",
-            "bounds": (7.3050, 7.3130, 125.6670, 125.6750),
-            "score": 0
-        },
-        {
-            "name": "High Landslide Susceptibility",
-            "bounds": (7.3030, 7.3150, 125.6680, 125.6800),
-            "score": 10
-        },
-        {
-            "name": "Moderate Landslide Susceptibility",
-            "bounds": (7.3000, 7.3150, 125.6690, 125.6830),
-            "score": 18
-        }
     ]
 }
 
@@ -668,13 +727,12 @@ def evaluate_hazard(lat, lon):
     hazard_status = "Low Risk / Safe"
     hazard_matches = []
 
-    for hazard_type, zones in HAZARD_ZONES.items():
-        for zone in zones:
-            if check_inside_bounds(lat, lon, zone["bounds"]):
-                hazard_matches.append(f"{zone['name']} ({hazard_type.title()})")
-                if zone["score"] < hazard_score:
-                    hazard_score = zone["score"]
-                    hazard_status = f"{zone['name']} ({hazard_type.title()})"
+    for zone in HAZARD_ZONES["flood"]:
+        if check_inside_bounds(lat, lon, zone["bounds"]):
+            hazard_matches.append(f"{zone['name']} (Flood)")
+            if zone["score"] < hazard_score:
+                hazard_score = zone["score"]
+                hazard_status = f"{zone['name']} (Flood)"
 
     if hazard_matches and hazard_status not in hazard_matches:
         hazard_matches.insert(0, hazard_status)
@@ -720,6 +778,82 @@ def check_inside_bounds(lat, lon, bounds):
     min_lat, max_lat, min_lon, max_lon = bounds
     return min_lat <= lat <= max_lat and min_lon <= lon <= max_lon
 
+
+def normalize_osm_value(value):
+    if value is None:
+        return None
+    try:
+        if isinstance(value, float) and math.isnan(value):
+            return None
+    except Exception:
+        pass
+
+    normalized = str(value).strip().lower()
+    return normalized or None
+
+
+def preload_pbf_competitor_cache():
+    global PBF_COMPETITOR_CACHE, PBF_CACHE_LOADED
+
+    if PBF_CACHE_LOADED:
+        return
+
+    if gpd is None:
+        PBF_COMPETITOR_CACHE = {}
+        PBF_CACHE_LOADED = True
+        print("PBF cache skipped: geopandas is unavailable")
+        return
+
+    with PBF_CACHE_LOCK:
+        if PBF_CACHE_LOADED:
+            return
+
+        cache = {}
+
+        if not os.path.exists(PBF_PATH):
+            PBF_COMPETITOR_CACHE = cache
+            PBF_CACHE_LOADED = True
+            print(f"PBF cache skipped: file not found at {PBF_PATH}")
+            return
+
+        for layer in PBF_LAYERS:
+            try:
+                gdf = gpd.read_file(PBF_PATH, layer=layer, engine="pyogrio")
+            except Exception:
+                continue
+
+            available_columns = [col for col in PBF_SEARCH_COLUMNS if col in gdf.columns]
+            if not available_columns or "geometry" not in gdf.columns:
+                continue
+
+            for col in available_columns:
+                matches = gdf[gdf[col].notna()]
+                for _, row in matches.iterrows():
+                    geometry = row.geometry
+                    if geometry is None:
+                        continue
+
+                    search_key = normalize_osm_value(row[col])
+                    if not search_key:
+                        continue
+
+                    centroid = geometry.centroid
+                    cache.setdefault(search_key, []).append({
+                        "lat": centroid.y,
+                        "lon": centroid.x,
+                        "name": row.get("name")
+                    })
+
+        PBF_COMPETITOR_CACHE = cache
+        PBF_CACHE_LOADED = True
+        print(f"PBF cache loaded for {len(cache)} business keys")
+
+
+def get_cached_pbf_competitors(search_value):
+    if not PBF_CACHE_LOADED:
+        preload_pbf_competitor_cache()
+    return PBF_COMPETITOR_CACHE.get(normalize_osm_value(search_value), [])
+
 def fetch_custom_msmes(business_key):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -732,6 +866,330 @@ def fetch_custom_msmes(business_key):
     except Exception as e:
         print(f"Database Error: {e}")
         return []
+
+
+def verify_admin_token(x_admin_token: str | None):
+    if not x_admin_token or x_admin_token != ADMIN_TOKEN:
+        raise HTTPException(status_code=401, detail="Unauthorized admin access")
+
+
+def fetch_user_for_admin(cursor, user_pk_column: str, user_id: int):
+    cursor.execute(
+        f"""
+        SELECT
+            {user_pk_column} AS user_id,
+            full_name,
+            email,
+            created_at,
+            address,
+            cellphone_number,
+            avatar_url,
+            age,
+            birthday,
+            primary_business
+        FROM users
+        WHERE {user_pk_column} = %s
+        """,
+        (user_id,)
+    )
+    return cursor.fetchone()
+
+
+@app.post("/admin/login")
+def admin_login(payload: AdminLoginRequest):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_admin_users_table(cursor)
+
+        cursor.execute(
+            """
+            SELECT email, password_hash
+            FROM admin_users
+            WHERE email = %s
+            LIMIT 1
+            """,
+            (payload.email,)
+        )
+        admin_row = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        if admin_row:
+            stored_hash = str(admin_row.get("password_hash") or "")
+            is_valid = False
+            try:
+                is_valid = bcrypt.checkpw(payload.password.encode("utf-8"), stored_hash.encode("utf-8"))
+            except Exception:
+                is_valid = payload.password == stored_hash
+
+            if is_valid:
+                return {
+                    "status": "success",
+                    "admin": {
+                        "email": admin_row.get("email") or payload.email,
+                        "token": ADMIN_TOKEN
+                    }
+                }
+
+        # Backward-compatible fallback to env credentials.
+        if payload.email == ADMIN_EMAIL and payload.password == ADMIN_PASSWORD:
+            return {
+                "status": "success",
+                "admin": {
+                    "email": ADMIN_EMAIL,
+                    "token": ADMIN_TOKEN
+                }
+            }
+
+        raise HTTPException(status_code=401, detail="Invalid admin credentials")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/users")
+def admin_list_users(x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_users_profile_columns(cursor)
+        cursor.execute(
+            f"""
+            SELECT
+                {user_pk_column} AS user_id,
+                full_name,
+                email,
+                created_at,
+                address,
+                cellphone_number,
+                avatar_url,
+                age,
+                birthday,
+                primary_business
+            FROM users
+            ORDER BY created_at DESC, {user_pk_column} DESC
+            """
+        )
+        users = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "users": users}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/admin/users/{user_id}")
+def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_users_profile_columns(cursor)
+
+        existing = fetch_user_for_admin(cursor, user_pk_column, user_id)
+        if not existing:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+
+        cursor.execute(
+            f"""
+            SELECT {user_pk_column} AS user_id
+            FROM users
+            WHERE email = %s AND {user_pk_column} <> %s
+            """,
+            (payload.email, user_id)
+        )
+        duplicate = cursor.fetchone()
+        if duplicate:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+        cursor.execute(
+            f"""
+            UPDATE users
+            SET
+                full_name = %s,
+                email = %s,
+                address = %s,
+                cellphone_number = %s,
+                avatar_url = %s,
+                age = %s,
+                birthday = %s,
+                primary_business = %s
+            WHERE {user_pk_column} = %s
+            RETURNING
+                {user_pk_column} AS user_id,
+                full_name,
+                email,
+                created_at,
+                address,
+                cellphone_number,
+                avatar_url,
+                age,
+                birthday,
+                primary_business
+            """,
+            (
+                payload.full_name,
+                payload.email,
+                payload.address or None,
+                payload.cellphone_number or None,
+                payload.avatar_url or None,
+                payload.age,
+                payload.birthday,
+                payload.primary_business or None,
+                user_id
+            )
+        )
+        updated = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "user": updated}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(user_id: int, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        user_pk_column = get_users_primary_key_column(cursor)
+        cursor.execute(
+            f"DELETE FROM users WHERE {user_pk_column} = %s RETURNING {user_pk_column}",
+            (user_id,)
+        )
+        deleted = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {"status": "success", "deleted_user_id": deleted[0]}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/custom-msmes")
+def admin_list_custom_msmes(x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_custom_msme_table(cursor)
+        cursor.execute(
+            """
+            SELECT id, name, business_type, latitude, longitude, created_at
+            FROM custom_msme
+            ORDER BY created_at DESC, id DESC
+            """
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "custom_msmes": rows}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/custom-msmes")
+def admin_create_custom_msme(payload: AdminCreateMsme, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_custom_msme_table(cursor)
+        cursor.execute(
+            """
+            INSERT INTO custom_msme (name, business_type, latitude, longitude)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, name, business_type, latitude, longitude, created_at
+            """,
+            (payload.name, payload.business_type, payload.latitude, payload.longitude)
+        )
+        created = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "custom_msme": created}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/admin/custom-msmes/{msme_id}")
+def admin_update_custom_msme(msme_id: int, payload: AdminUpdateMsme, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_custom_msme_table(cursor)
+        cursor.execute(
+            """
+            UPDATE custom_msme
+            SET name = %s, business_type = %s, latitude = %s, longitude = %s
+            WHERE id = %s
+            RETURNING id, name, business_type, latitude, longitude, created_at
+            """,
+            (payload.name, payload.business_type, payload.latitude, payload.longitude, msme_id)
+        )
+        updated = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not updated:
+            raise HTTPException(status_code=404, detail="Custom MSME not found")
+
+        return {"status": "success", "custom_msme": updated}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/admin/custom-msmes/{msme_id}")
+def admin_delete_custom_msme(msme_id: int, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        ensure_custom_msme_table(cursor)
+        cursor.execute("DELETE FROM custom_msme WHERE id = %s RETURNING id", (msme_id,))
+        deleted = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Custom MSME not found")
+
+        return {"status": "success", "deleted_custom_msme_id": deleted[0]}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze")
 def perform_analysis(data: AnalysisRequest):
@@ -762,32 +1220,21 @@ def perform_analysis(data: AnalysisRequest):
     # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
     competitors_list = []
 
-    if os.path.exists(PBF_PATH):
-        try:
-            for layer in ["points", "multipolygons", "lines", "multilinestrings"]:
-                try:
-                    gdf = gpd.read_file(PBF_PATH, layer=layer, engine="pyogrio")
-                except Exception:
-                    continue
+    try:
+        cached_competitors = get_cached_pbf_competitors(search_val)
+        for competitor in cached_competitors:
+            p_lat = competitor["lat"]
+            p_lon = competitor["lon"]
+            dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
 
-                for col in ["amenity", "shop", "healthcare", "building"]:
-                    if col in gdf.columns:
-                        matches = gdf[gdf[col] == search_val]
-                        for _, row in matches.iterrows():
-                            if row.geometry is None:
-                                continue
-                            p_lat = row.geometry.centroid.y
-                            p_lon = row.geometry.centroid.x
-                            dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
-
-                            if dist <= data.radius:
-                                competitors_list.append({
-                                    "lat": p_lat,
-                                    "lon": p_lon,
-                                    "name": row.get('name', f"Local {sme_profile['name']}")
-                                })
-        except Exception as e:
-            print(f"Spatial Scan Error: {e}")
+            if dist <= data.radius:
+                competitors_list.append({
+                    "lat": p_lat,
+                    "lon": p_lon,
+                    "name": competitor.get("name") or f"Local {sme_profile['name']}"
+                })
+    except Exception as e:
+        print(f"Spatial Scan Error: {e}")
 
     # Scan PostgreSQL Database
     custom_shops = fetch_custom_msmes(data.business_type)
@@ -867,8 +1314,8 @@ def perform_analysis(data: AnalysisRequest):
     )
 
     hazard_details = (
-        "The hazard score is based on temporary Panabo flood and landslide proxy zones. "
-        + ("Matched zones: " + ", ".join(hazard_matches) + ". " if hazard_matches else "No mapped hazard zones matched. ")
+        "The hazard score is based on temporary Panabo flood proxy zones. "
+        + ("Matched zones: " + ", ".join(hazard_matches) + ". " if hazard_matches else "No mapped flood zones matched. ")
         + "The lowest matched zone score is used as the factor result."
     )
 

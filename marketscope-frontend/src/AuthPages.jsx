@@ -1,8 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import './Auth.css';
-import { apiUrl } from './lib/api';
+import { apiUrl } from './api';
 
-export default function AuthPages({ onLoginSuccess }) {
+export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess }) {
   const [currentView, setCurrentView] = useState('landing'); 
   const [password, setPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -71,15 +71,40 @@ export default function AuthPages({ onLoginSuccess }) {
     const pwd = e.target.password.value;
 
     try {
-      const response = await fetch(apiUrl('/login'), {
+      const userResponse = await fetch(apiUrl('/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pwd })
       });
-      const data = await response.json();
-      
-      if (!response.ok) throw new Error(data.detail || 'Login failed');
-      onLoginSuccess(data.user);
+
+      const userData = await userResponse.json();
+      if (userResponse.ok) {
+        onLoginSuccess(userData.user);
+        return;
+      }
+
+      const shouldTryAdmin = userResponse.status === 401 || userResponse.status === 404;
+      if (shouldTryAdmin && onAdminLoginSuccess) {
+        const adminResponse = await fetch(apiUrl('/admin/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pwd })
+        });
+
+        const adminData = await adminResponse.json();
+        if (adminResponse.ok) {
+          onAdminLoginSuccess(adminData.admin);
+          return;
+        }
+
+        if (adminResponse.status === 404) {
+          throw new Error('Admin login endpoint not found. Restart backend server and try again.');
+        }
+
+        throw new Error(adminData.detail || userData.detail || 'Invalid email or password');
+      }
+
+      throw new Error(userData.detail || 'Invalid email or password');
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
@@ -340,7 +365,7 @@ export default function AuthPages({ onLoginSuccess }) {
   );
 
   return (
-    <div className={`auth-container ${currentView === 'landing' ? 'view-landing' : ''}`}>
+    <div className={`auth-container ${currentView === 'landing' ? 'view-landing' : 'view-login'}`}>
       <div className="mobile-auth-hero">
         <div className="mobile-hero-text">
           <div className="hero-badge mb-4">MCDA ENGINE V1.0</div>

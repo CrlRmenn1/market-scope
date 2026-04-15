@@ -6,6 +6,7 @@ export default function Report({ data, targetCoords, onClose }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const mapFeaturesRef = useRef(null);
+  const [expandedDetail, setExpandedDetail] = useState(null);
 
   const fitMapToFeatures = () => {
     if (!mapInstance.current) return;
@@ -35,12 +36,21 @@ export default function Report({ data, targetCoords, onClose }) {
         center: [targetCoords.lat, targetCoords.lng],
         zoom: 15, 
         zoomControl: false,
-        dragging: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false
+        dragging: true,
+        touchZoom: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true,
+        boxZoom: true,
+        keyboard: false,
+        maxBoundsViscosity: 1.0
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance.current);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        keepBuffer: 8,
+        updateWhenIdle: true,
+        // Use a dark 1x1 pixel fallback tile if a provider tile fails to load.
+        errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAACwAAAAAAQABAAACAUwAOw=='
+      }).addTo(mapInstance.current);
 
       const elementsGroup = L.featureGroup().addTo(mapInstance.current);
       mapFeaturesRef.current = elementsGroup;
@@ -66,8 +76,21 @@ export default function Report({ data, targetCoords, onClose }) {
           iconSize: [14, 14], iconAnchor: [7, 7]
         });
 
-        data.competitor_locations.forEach(comp => {
-          L.marker([comp.lat, comp.lon], { icon: compIcon }).addTo(elementsGroup);
+        data.competitor_locations.forEach((comp, index) => {
+          const competitorName =
+            (typeof comp?.name === 'string' && comp.name.trim())
+              ? comp.name.trim()
+              : `Competitor ${index + 1}`;
+
+          const marker = L.marker([comp.lat, comp.lon], { icon: compIcon }).addTo(elementsGroup);
+          marker.bindTooltip(competitorName, {
+            direction: 'top',
+            offset: [0, -8],
+            opacity: 0.92,
+            className: 'competitor-name-tooltip',
+            permanent: true,
+            interactive: false
+          });
         });
       }
 
@@ -75,6 +98,12 @@ export default function Report({ data, targetCoords, onClose }) {
       mapInstance.current.whenReady(() => {
         mapInstance.current.invalidateSize(false);
         fitMapToFeatures();
+
+        // Constrain panning near analyzed features to avoid dragging into blank tile regions.
+        const bounds = elementsGroup.getBounds();
+        if (bounds && bounds.isValid()) {
+          mapInstance.current.setMaxBounds(bounds.pad(0.45));
+        }
       });
     }
 
@@ -140,7 +169,6 @@ export default function Report({ data, targetCoords, onClose }) {
   if (!data) return null;
 
   const { viability_score, competitors_found, breakdown, business_type, radius_meters, insight } = data;
-  const [expandedDetail, setExpandedDetail] = useState(null);
 
   const toggleDetail = (key) => {
     setExpandedDetail((prev) => (prev === key ? null : key));

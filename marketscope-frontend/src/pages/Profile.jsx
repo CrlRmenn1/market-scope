@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { apiUrl } from '../lib/api';
+import { apiUrl } from '../api';
 
 const mapProfileToFormValues = (value) => ({
   full_name: value?.full_name || value?.name || '',

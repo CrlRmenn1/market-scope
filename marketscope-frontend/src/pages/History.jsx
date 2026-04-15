@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../lib/api';
+import { apiUrl } from '../api';
 
 const formatDate = (value) => {
   if (!value) return 'Unknown date';
@@ -11,6 +11,8 @@ const formatDate = (value) => {
 export default function History({ user, onOpenReport }) {
   const userId = user?.user_id || user?.id;
   const [history, setHistory] = useState([]);
+  const [historySearchTerm, setHistorySearchTerm] = useState('');
+  const [historyScoreFilter, setHistoryScoreFilter] = useState('all');
   const [loading, setLoading] = useState(Boolean(userId));
   const [expandedHistoryId, setExpandedHistoryId] = useState(null);
   const [expandedFactorKeyByHistoryId, setExpandedFactorKeyByHistoryId] = useState({});
@@ -49,7 +51,29 @@ export default function History({ user, onOpenReport }) {
     };
   }, [userId]);
 
+  const filteredHistory = useMemo(() => {
+    const term = historySearchTerm.trim().toLowerCase();
+    return history.filter((item) => {
+      const score = Number(item?.viability_score || 0);
+      const passesScoreFilter =
+        historyScoreFilter === 'all'
+          ? true
+          : historyScoreFilter === '50-up'
+            ? score >= 50
+            : score < 50;
+
+      if (!passesScoreFilter) return false;
+
+      if (!term) return true;
+
+      const businessType = String(item?.business_type || '').toLowerCase();
+      const insight = String(item?.insight || '').toLowerCase();
+      return businessType.includes(term) || insight.includes(term);
+    });
+  }, [history, historySearchTerm, historyScoreFilter]);
+
   const hasHistory = useMemo(() => history.length > 0, [history]);
+  const hasFilteredHistory = useMemo(() => filteredHistory.length > 0, [filteredHistory]);
 
   const buildReportPayload = (item) => ({
     viability_score: item.viability_score,
@@ -213,8 +237,35 @@ export default function History({ user, onOpenReport }) {
       )}
 
       {!loading && hasHistory && (
-        <div className="history-list mt-6">
-          {history.map((item) => (
+        <>
+          <div className="data-card mt-6 history-tools-card">
+            <div className="history-tools-grid">
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label>Search Business</label>
+                <input
+                  value={historySearchTerm}
+                  onChange={(e) => setHistorySearchTerm(e.target.value)}
+                  placeholder="Search by business type..."
+                  className="history-search-input"
+                />
+              </div>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label>Type</label>
+                <select
+                  value={historyScoreFilter}
+                  onChange={(e) => setHistoryScoreFilter(e.target.value)}
+                  className="app-select"
+                >
+                  <option value="all">All</option>
+                  <option value="50-up">50 points and up</option>
+                  <option value="below-50">Below 50 points</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="history-list mt-6">
+          {filteredHistory.map((item) => (
             <div className="data-card history-card" key={item.history_id}>
               <button
                 type="button"
@@ -302,7 +353,11 @@ export default function History({ user, onOpenReport }) {
               )}
             </div>
           ))}
+          {!hasFilteredHistory && (
+            <div className="data-card">No history records match your search.</div>
+          )}
         </div>
+        </>
       )}
 
       {deleteCandidate && (

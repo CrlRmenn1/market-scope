@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { apiUrl } from '../lib/api';
+import { apiUrl } from '../api';
 
 export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
   const [step, setStep] = useState(1);
   const [businessType, setBusinessType] = useState('');
+  const [selectedRadius, setSelectedRadius] = useState(340);
   const [apiData, setApiData] = useState(null);
   const [analysisModeIndex, setAnalysisModeIndex] = useState(0);
+  const radiusOptions = [340, 500, 750];
   const analysisModes = [
     'Zoning Validation',
     'Hazard Impact',
@@ -22,7 +24,7 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
         body: JSON.stringify({
           lat: coords.lat, lon: coords.lng,
           business_type: businessType, 
-          radius: 340,
+          radius: selectedRadius,
           user_id: userId 
         }),
       });
@@ -34,7 +36,7 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
 
       const data = await response.json();
       setApiData(data);
-      setTimeout(() => setStep(4), 3000);
+      setStep(4);
 
     } catch (e) {
       console.error("Backend Error:", e);
@@ -89,6 +91,23 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
   <option value="hardware">Hardware / Construction Supplies</option>
 </select>
               </div>
+
+              <div className="input-group">
+                <label className="input-label">Scan Radius</label>
+                <div className="radius-option-grid">
+                  {radiusOptions.map((radius) => (
+                    <button
+                      key={radius}
+                      type="button"
+                      className={`radius-option-btn ${selectedRadius === radius ? 'active' : ''}`}
+                      onClick={() => setSelectedRadius(radius)}
+                    >
+                      {radius}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button className="primary-btn mt-6" disabled={!businessType} onClick={() => setStep(2)}>Next Step</button>
             </div>
           )}
@@ -99,6 +118,7 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
               <p className="loc-label">📍 {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</p>
               <div className="location-card">
                 <p>Deploying Engine for: <b className="capitalize">{businessType}</b></p>
+                <p style={{ marginTop: '6px' }}>Radius: <b>{selectedRadius}m</b></p>
               </div>
               <button className="primary-btn" onClick={startAnalysis}>Run Suitability Engine</button>
               <button className="secondary-btn" onClick={() => setStep(1)}>Go Back</button>

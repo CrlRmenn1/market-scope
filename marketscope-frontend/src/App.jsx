@@ -7,11 +7,15 @@ import History from './pages/History';
 import BottomNav from './components/BottomNav';
 import BottomSheet from './components/BottomSheet';
 import Report from './pages/Report';
+import AdminPanel from './pages/AdminPanel';
 import './App.css';
 
 export default function App() {
   const validTabs = ['home', 'profile', 'history'];
+  const OPEN_REPORT_KEY = 'marketscope_open_report';
+  const ADMIN_SESSION_KEY = 'marketscope_admin_session';
   const [session, setSession] = useState(null);
+  const [adminSession, setAdminSession] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
     const savedTab = localStorage.getItem('marketscope_active_tab');
     return validTabs.includes(savedTab) ? savedTab : 'home';
@@ -21,21 +25,56 @@ export default function App() {
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [reportData, setReportData] = useState(null);
 
+  const saveOpenReport = (data, coords) => {
+    localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
+  };
+
+  const clearOpenReport = () => {
+    localStorage.removeItem(OPEN_REPORT_KEY);
+  };
+
   useEffect(() => {
     const savedUser = localStorage.getItem('marketscope_session');
     if (savedUser) {
       setSession(JSON.parse(savedUser));
     }
+
+    const savedAdmin = localStorage.getItem(ADMIN_SESSION_KEY);
+    if (savedAdmin) {
+      setAdminSession(JSON.parse(savedAdmin));
+    }
+
     const savedTheme = localStorage.getItem('marketscope_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 
   useEffect(() => {
+    if (!session || reportData) return;
+
+    const raw = localStorage.getItem(OPEN_REPORT_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.data) {
+        setReportData(parsed.data);
+        setSelectedCoords(parsed.coords || parsed.data.target_coords || null);
+      } else {
+        clearOpenReport();
+      }
+    } catch {
+      clearOpenReport();
+    }
+  }, [session, reportData]);
+
+  useEffect(() => {
     const handleOpenReport = (event) => {
       const payload = event.detail;
       if (!payload) return;
-      setSelectedCoords(payload.target_coords || null);
+      const coords = payload.target_coords || null;
+      setSelectedCoords(coords);
       setReportData(payload);
+      saveOpenReport(payload, coords);
       setShowBottomSheet(false);
       setActiveTab('history');
     };
@@ -66,9 +105,26 @@ export default function App() {
     setSession(nextSession);
   };
 
+  const handleAdminLoginSuccess = (adminData) => {
+    const nextAdminSession = {
+      email: adminData.email,
+      token: adminData.token
+    };
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(nextAdminSession));
+    localStorage.removeItem('marketscope_session');
+    setSession(null);
+    setAdminSession(nextAdminSession);
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+    setAdminSession(null);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('marketscope_session');
     localStorage.removeItem('marketscope_active_tab');
+    clearOpenReport();
     setSession(null);
   };
 
@@ -85,12 +141,30 @@ export default function App() {
   };
 
   const handleViewReport = (data) => {
+    const coords = data?.target_coords || selectedCoords || null;
+    setSelectedCoords(coords);
     setReportData(data);
+    saveOpenReport(data, coords);
     setShowBottomSheet(false);
   };
 
-  if (!session) {
-    return <AuthPages onLoginSuccess={handleLoginSuccess} />;
+  const handleCloseReport = () => {
+    setReportData(null);
+    clearOpenReport();
+  };
+
+  if (!session && !adminSession) {
+    return <AuthPages onLoginSuccess={handleLoginSuccess} onAdminLoginSuccess={handleAdminLoginSuccess} />;
+  }
+
+  if (adminSession) {
+    return (
+      <div className="app-container">
+        <main className="app-content">
+          <AdminPanel adminSession={adminSession} onAdminLogout={handleAdminLogout} />
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -101,7 +175,7 @@ export default function App() {
         onLogout={handleLogout} 
         onGoHome={() => {
           setActiveTab('home');
-          setReportData(null);
+          handleCloseReport();
           setShowBottomSheet(false);
         }}
         userName={session.full_name || session.name}
@@ -116,8 +190,10 @@ export default function App() {
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
         
         {activeTab === 'history' && <History user={session} onOpenReport={(payload) => {
-          setSelectedCoords(payload.target_coords || null);
+          const coords = payload.target_coords || null;
+          setSelectedCoords(coords);
           setReportData(payload);
+          saveOpenReport(payload, coords);
           setShowBottomSheet(false);
           setActiveTab('history');
         }} />}
@@ -135,7 +211,7 @@ export default function App() {
           <Report 
             data={reportData} 
             targetCoords={selectedCoords} 
-            onClose={() => setReportData(null)} 
+            onClose={handleCloseReport} 
           />
         )}
       </main>
