@@ -29,6 +29,8 @@ if DATABASE_URL:
         "password": parsed_database_url.password or "",
         "host": parsed_database_url.hostname or "localhost",
         "port": str(parsed_database_url.port or 5432),
+        "connect_timeout": int(os.environ.get("MARKETSCOPE_DB_CONNECT_TIMEOUT", "8")),
+        "options": os.environ.get("MARKETSCOPE_DB_OPTIONS", "-c statement_timeout=10000"),
     }
 else:
     DB_CONFIG = {
@@ -37,6 +39,8 @@ else:
         "password": os.environ.get("MARKETSCOPE_DB_PASSWORD", "1234"),
         "host": os.environ.get("MARKETSCOPE_DB_HOST", "localhost"),
         "port": os.environ.get("MARKETSCOPE_DB_PORT", "5432"),
+        "connect_timeout": int(os.environ.get("MARKETSCOPE_DB_CONNECT_TIMEOUT", "8")),
+        "options": os.environ.get("MARKETSCOPE_DB_OPTIONS", "-c statement_timeout=10000"),
     }
 
 @asynccontextmanager
@@ -358,7 +362,6 @@ def register(user: RegisterUser):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor()
         user_pk_column = get_users_primary_key_column(cursor)
-        ensure_users_profile_columns(cursor)
         
         # Check if email already exists
         cursor.execute(f"SELECT {user_pk_column} FROM users WHERE email = %s", (user.email,))
@@ -426,7 +429,6 @@ def login(user: LoginUser):
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         user_pk_column = get_users_primary_key_column(cursor)
-        ensure_users_profile_columns(cursor)
         
         cursor.execute(
             f"""
