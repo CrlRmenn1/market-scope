@@ -453,16 +453,9 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     <div className={`auth-container ${currentView === 'hero' ? 'view-hero' : currentView === 'register' ? 'view-register' : 'view-login'}`}>
       {/* Hero View */}
       {currentView === 'hero' && (
-        <>
-          <div className="mobile-auth-hero">
-            <div className="mobile-hero-text">
-              {renderHero()}
-            </div>
-          </div>
-          <div className="auth-hero">
-            {renderHero()}
-          </div>
-        </>
+        <div className="auth-hero">
+          {renderHero()}
+        </div>
       )}
 
       {/* Register & Login Views */}

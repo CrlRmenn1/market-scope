@@ -655,13 +655,13 @@
   padding: 14px 40px;
   font-size: 1.05rem;
   font-weight: 600;
-  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  background: linear-gradient(135deg, #7e22ce 0%, #a855f7 100%);
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+  box-shadow: 0 4px 15px rgba(126, 34, 206, 0.35);
   margin-top: 12px;
 }
 
