@@ -42,6 +42,14 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const viewportBaselineRef = useRef(0);
   const keyboardOpenRef = useRef(false);
 
+  const authPanelClass = 'fade-in !w-full !max-w-[520px] space-y-5 !rounded-[30px] !border !border-white/10 !bg-slate-950/80 !p-6 !shadow-[0_30px_90px_rgba(2,6,23,0.55)] !backdrop-blur-xl sm:!p-8';
+  const authSectionTitleClass = 'text-3xl font-semibold tracking-tight text-white sm:text-[2.15rem]';
+  const authSectionSubtitleClass = 'text-sm text-slate-200/90';
+  const authLabelClass = 'mb-2 block text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-slate-300';
+  const authInputClass = 'mt-0 w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20';
+  const authPrimaryButtonClass = 'btn-primary w-full rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold shadow-lg shadow-violet-500/25 transition hover:from-violet-500 hover:to-fuchsia-400';
+  const authSecondaryButtonClass = 'btn-secondary w-full rounded-xl border border-violet-300/50 bg-white/5 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/10';
+
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
@@ -376,8 +384,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   };
 
   const renderHero = () => (
-    <div className="hero-container">
-      <div className="hero-logo-corner">
+    <div className="hero-container relative isolate flex min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.28),transparent_34%),radial-gradient(circle_at_top_right,rgba(59,7,100,0.72),transparent_32%),linear-gradient(180deg,#22073a_0%,#0b1120_45%,#050816_100%)] px-5 py-4 text-center sm:px-8 lg:px-12">
+      <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/12 blur-3xl" />
+      <div className="hero-logo-corner !left-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-10 !gap-2.5 !rounded-full !border !border-white/10 !bg-black/20 !px-3 !py-2 !backdrop-blur-xl">
         <div className="brand-mark">
           <div className="lens-left"></div>
           <div className="lens-center">
@@ -390,7 +400,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </span>
       </div>
 
-      <div className="hero-header">
+      <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-10">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
           <span></span>
           <span></span>
@@ -413,12 +423,12 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         )}
       </div>
 
-      <div className="hero-content">
-        <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
-        <h1 className="hero-title">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
-        <p className="hero-description">The geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
-        <p className="hero-instruction">Quick Start: Tap Get Started, drop a pin, and scan market potential in seconds.</p>
-        <button className="get-started-btn" onClick={() => setCurrentView('register')}>
+      <div className="hero-content relative z-10 flex max-w-[680px] flex-col items-center gap-5 px-4 py-8 sm:gap-6 sm:px-6 lg:py-0">
+        <div className="hero-badge rounded-full border border-violet-300/30 bg-violet-500/15 px-4 py-2 text-[0.7rem] font-bold uppercase tracking-[0.18em] text-violet-100 shadow-[0_10px_30px_rgba(168,85,247,0.15)]">MCDA ENGINE V1.0</div>
+        <h1 className="hero-title max-w-[11ch] text-[clamp(2.7rem,7vw,4.5rem)] font-black leading-[0.96] tracking-[-0.06em] text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.35)]">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
+        <p className="hero-description max-w-[28rem] text-base leading-7 text-violet-100/90 sm:text-lg">The geospatial viability engine designed exclusively for local entrepreneurs and MSMEs.</p>
+        <p className="hero-instruction rounded-full border border-violet-200/20 bg-white/5 px-4 py-2 text-sm font-semibold leading-6 text-violet-50 shadow-[0_10px_35px_rgba(0,0,0,0.18)] backdrop-blur-md">Quick Start: Tap Get Started, drop a pin, and scan market potential in seconds.</p>
+        <button className="get-started-btn mt-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-8 py-4 text-base font-semibold text-white shadow-[0_16px_40px_rgba(168,85,247,0.35)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(168,85,247,0.45)]" onClick={() => setCurrentView('register')}>
           Get Started
         </button>
       </div>
@@ -426,22 +436,23 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   );
 
   const renderLogin = () => (
-    <div className="fade-in space-y-2">
-      <h2 className="text-3xl font-semibold tracking-tight text-white">Welcome Back</h2>
-      <p className="auth-subtitle text-sm text-slate-200">Access your MarketScope dashboard.</p>
+    <div className={authPanelClass}>
+      <h2 className={authSectionTitleClass}>Welcome Back</h2>
+      <p className={authSectionSubtitleClass}>Access your MarketScope dashboard.</p>
       
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
       <form onSubmit={handleLogin} className="mt-6 space-y-4">
         <div className="input-group">
-          <label>Email Address</label>
-          <input type="email" name="email" placeholder="msme@panabo.com" defaultValue={rememberedLogin.email} autoComplete="username" required />
+          <label className={authLabelClass}>Email Address</label>
+          <input className={authInputClass} type="email" name="email" placeholder="msme@panabo.com" defaultValue={rememberedLogin.email} autoComplete="username" required />
         </div>
 
         <div className="input-group">
-          <label>Password</label>
+          <label className={authLabelClass}>Password</label>
           <div className="password-input-wrapper">
             <input 
+              className={authInputClass}
               type={showPassword ? "text" : "password"} 
               name="password" 
               placeholder="••••••••" 
@@ -488,8 +499,9 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           <div className="forgot-password-panel rounded-xl border border-violet-400/30 bg-violet-950/20 p-3">
             <p className="forgot-password-note text-xs text-violet-100">Enter your account email and set a new password.</p>
             <div className="input-group forgot-input-group">
-              <label>Reset Email</label>
+              <label className={authLabelClass}>Reset Email</label>
               <input
+                className={authInputClass}
                 type="email"
                 name="forgotEmail"
                 placeholder="msme@panabo.com"
@@ -501,8 +513,9 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
             </div>
 
             <div className="input-group forgot-input-group">
-              <label>New Password</label>
+              <label className={authLabelClass}>New Password</label>
               <input
+                className={authInputClass}
                 type="password"
                 name="forgotNewPassword"
                 placeholder="At least 6 characters"
@@ -513,8 +526,9 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
             </div>
 
             <div className="input-group forgot-input-group">
-              <label>Confirm New Password</label>
+              <label className={authLabelClass}>Confirm New Password</label>
               <input
+                className={authInputClass}
                 type="password"
                 name="forgotConfirmPassword"
                 placeholder="Repeat new password"
@@ -526,7 +540,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
             <button
               type="button"
-              className="btn-secondary w-full rounded-lg border border-violet-300/50 px-4 py-3 text-sm font-semibold text-violet-100"
+              className={authSecondaryButtonClass}
               disabled={isResetLoading}
               onClick={handleResetPassword}
             >
@@ -538,7 +552,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           </div>
         )}
 
-        <button type="submit" className="btn-primary w-full mt-6 mb-8" disabled={isLoading}>
+        <button type="submit" className={authPrimaryButtonClass} disabled={isLoading}>
           {isLoading ? 'Authenticating...' : 'Log In'}
         </button>
 
@@ -550,51 +564,51 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   );
 
   const renderRegister = () => (
-    <div className="fade-in">
-      <h2 style={{ color: 'white' }}>Create Account</h2>
-      <p className="auth-subtitle" style={{ color: 'white' }}>Start analyzing Panabo's markets today.</p>
+    <div className={authPanelClass}>
+      <h2 className={authSectionTitleClass}>Create Account</h2>
+      <p className={authSectionSubtitleClass}>Start analyzing Panabo's markets today.</p>
 
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
-      <form onSubmit={handleRegister} className="mt-6">
+      <form onSubmit={handleRegister} className="mt-6 space-y-4">
         <div className="input-group">
-          <label>Full Name</label>
-          <input type="text" name="full_name" placeholder="Juan Dela Cruz" required />
+          <label className={authLabelClass}>Full Name</label>
+          <input className={authInputClass} type="text" name="full_name" placeholder="Juan Dela Cruz" required />
         </div>
 
         <div className="input-group">
-          <label>Email Address</label>
-          <input type="email" name="email" placeholder="juan@business.com" required />
+          <label className={authLabelClass}>Email Address</label>
+          <input className={authInputClass} type="email" name="email" placeholder="juan@business.com" required />
         </div>
 
         <div className="input-group">
-          <label>Cellphone Number</label>
-          <input type="tel" name="cellphone_number" placeholder="09XX XXX XXXX" />
+          <label className={authLabelClass}>Cellphone Number</label>
+          <input className={authInputClass} type="tel" name="cellphone_number" placeholder="09XX XXX XXXX" />
         </div>
 
         <div className="input-group">
-          <label>Address</label>
-          <input type="text" name="address" placeholder="Barangay, City" />
+          <label className={authLabelClass}>Address</label>
+          <input className={authInputClass} type="text" name="address" placeholder="Barangay, City" />
         </div>
 
         <div className="input-group">
-          <label>Primary Business Interest</label>
-          <input type="text" name="primary_business" placeholder="e.g., Pharmacy / Food Kiosk" />
+          <label className={authLabelClass}>Primary Business Interest</label>
+          <input className={authInputClass} type="text" name="primary_business" placeholder="e.g., Pharmacy / Food Kiosk" />
         </div>
 
         <div className="input-group">
-          <label>Birthday</label>
+          <label className={authLabelClass}>Birthday</label>
           <div className="field-hint" id="birthday-hint">Tap the field to open the calendar</div>
-          <input type="date" name="birthday" aria-describedby="birthday-hint" title="Tap to choose your birthday" />
+          <input className={authInputClass} type="date" name="birthday" aria-describedby="birthday-hint" title="Tap to choose your birthday" />
         </div>
 
         <div className="input-group">
-          <label>Age</label>
-          <input type="number" name="age" min="0" max="120" placeholder="Optional if birthday is set" />
+          <label className={authLabelClass}>Age</label>
+          <input className={authInputClass} type="number" name="age" min="0" max="120" placeholder="Optional if birthday is set" />
         </div>
 
         <div className="input-group">
-          <label>Profile Picture</label>
+          <label className={authLabelClass}>Profile Picture</label>
           <input
             className="upload-input-hidden"
             ref={registerAvatarInputRef}
@@ -631,7 +645,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           />
           <button
             type="button"
-            className="upload-trigger"
+            className="upload-trigger inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300/40 bg-white/5 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/10"
             onClick={() => registerAvatarInputRef.current?.click()}
             onMouseDown={(event) => event.preventDefault()}
           >
@@ -644,9 +658,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label>Password</label>
+          <label className={authLabelClass}>Password</label>
           <div className="password-input-wrapper">
             <input 
+              className={authInputClass}
               type={showPassword ? "text" : "password"} 
               name="password" 
               placeholder="••••••••" 
@@ -670,9 +685,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label>Confirm Password</label>
+          <label className={authLabelClass}>Confirm Password</label>
           <div className="password-input-wrapper">
             <input 
+              className={authInputClass}
               type={showConfirmPassword ? "text" : "password"} 
               name="confirm" 
               placeholder="••••••••" 
@@ -688,7 +704,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           </div>
         </div>
 
-        <button type="submit" className="btn-primary w-full mt-4 mb-8" disabled={isLoading || isAvatarReading}>
+        <button type="submit" className={authPrimaryButtonClass} disabled={isLoading || isAvatarReading}>
           {isLoading ? 'Creating Account...' : 'Create Account'}
         </button>
 
