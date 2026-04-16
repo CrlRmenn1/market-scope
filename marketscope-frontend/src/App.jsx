@@ -14,6 +14,9 @@ export default function App() {
   const validTabs = ['home', 'profile', 'history'];
   const OPEN_REPORT_KEY = 'marketscope_open_report';
   const ADMIN_SESSION_KEY = 'marketscope_admin_session';
+  const appShellClass = 'relative flex h-[100svh] w-full flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-300';
+  const appContentClass = 'relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto antialiased';
+  const adminContentClass = 'pt-[88px]';
   const [session, setSession] = useState(null);
   const [adminSession, setAdminSession] = useState(null);
   const [activeTab, setActiveTab] = useState(() => {
@@ -173,7 +176,7 @@ export default function App() {
       : 'Admin';
 
     return (
-      <div className="app-container">
+      <div className={appShellClass}>
         <Header
           theme={theme}
           toggleTheme={toggleTheme}
@@ -183,7 +186,7 @@ export default function App() {
           userAvatarUrl={null}
         />
 
-        <main className="app-content admin-content">
+        <main className={`${appContentClass} ${adminContentClass}`}>
           <AdminPanel adminSession={adminSession} onAdminLogout={handleAdminLogout} />
         </main>
       </div>
@@ -191,7 +194,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className={appShellClass}>
       <Header 
         theme={theme} 
         toggleTheme={toggleTheme} 
@@ -205,7 +208,7 @@ export default function App() {
         userAvatarUrl={session.avatar_url}
       />
 
-      <main className={`app-content ${reportData ? 'app-content-locked' : ''}`}>
+      <main className={`${appContentClass} ${reportData ? 'overflow-hidden' : ''}`}>
         {activeTab === 'home' && (
           <Home onMapTap={handleMapTap} theme={theme} />
         )}
