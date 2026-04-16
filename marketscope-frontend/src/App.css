@@ -5,6 +5,11 @@
   /* Default Dark Theme */
   --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-display: 'Sora', 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --motion-fast: 140ms;
+  --motion-normal: 220ms;
+  --motion-slow: 360ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphatic: cubic-bezier(0.68, -0.55, 0.26, 1.55);
   --bg-app: #050505;
   --bg-glass: rgba(10, 10, 10, 0.8);
   --bg-sheet: #111111;
@@ -39,7 +44,7 @@ html, body, #root {
   font-family: var(--font-sans);
   overflow: hidden;
   overscroll-behavior-y: none;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color var(--motion-slow) var(--ease-standard), color var(--motion-slow) var(--ease-standard);
 }
 
 h1, h2, h3, h4, h5, h6,
@@ -87,6 +92,47 @@ select {
 .app-content::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 999px;
+}
+
+button,
+a,
+[role="button"],
+.icon-btn,
+.nav-item,
+.dropdown-item,
+.brand-home-btn,
+.gear-btn,
+.user-settings-btn,
+.primary-btn,
+.secondary-btn,
+.map-mode-btn,
+.map-analyze-btn,
+.detail-toggle,
+.edit-btn,
+.history-delete-btn,
+.history-breakdown-toggle,
+.admin-tab-btn,
+.admin-action-btn,
+.radius-option-btn {
+  will-change: transform;
+}
+
+button svg,
+a svg,
+[role="button"] svg,
+.icon-btn svg,
+.nav-item svg,
+.dropdown-icon,
+.gear-icon,
+.gear-icon-small,
+.analyze-check-icon,
+.check-icon,
+.warning-icon,
+.loading-icon,
+.task-spinner,
+.pure-pin {
+  transform-origin: center;
+  transition: transform var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard);
 }
 
 /* =========================================
@@ -177,12 +223,21 @@ html[data-theme="light"] .profile-stat-card {
   margin: 0;
   cursor: pointer;
   border-radius: 12px;
-  transition: transform 0.2s ease, filter 0.2s ease;
+  transition: transform var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard);
 }
 
 .brand-home-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.06);
+}
+
+.brand-home-btn:hover .lens-center {
+  transform: scale(1.05) rotate(-4deg);
+}
+
+.brand-home-btn:hover .lens-left,
+.brand-home-btn:hover .lens-right {
+  transform: scale(1.03);
 }
 
 .brand-mark {
@@ -229,7 +284,7 @@ html[data-theme="light"] .profile-stat-card {
 .gear-btn {
   background: transparent; border: 1px solid transparent; padding: 8px;
   border-radius: 50%; cursor: pointer; display: flex;
-  align-items: center; justify-content: center; transition: all 0.3s ease;
+  align-items: center; justify-content: center; transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
   outline: none;
 }
 
@@ -243,11 +298,11 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
 
 .gear-icon {
   width: 24px; height: 24px; color: var(--text-muted);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s ease;
+  transition: transform var(--motion-slow) var(--ease-standard), color var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard);
 }
 
 .gear-btn:hover .gear-icon, .gear-btn.active .gear-icon { color: var(--text-main); }
-.gear-icon.open { transform: rotate(90deg); }
+.gear-btn:hover .gear-icon, .gear-btn.active .gear-icon, .gear-icon.open { transform: rotate(90deg) scale(1.05); }
 
 .settings-dropdown {
   position: absolute; right: 0; top: 100%; margin-top: 12px; width: 220px;
@@ -264,11 +319,12 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
   width: 100%; display: flex; align-items: center; padding: 12px 16px;
   background: transparent; border: none; color: var(--text-main);
   font-size: 0.875rem; font-family: inherit; cursor: pointer;
-  transition: background-color 0.2s, color 0.2s, transform 0.2s ease, padding-left 0.2s ease;
+  transition: background-color var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard), padding-left var(--motion-normal) var(--ease-standard);
   text-align: left;
 }
 
-.dropdown-item:hover { background-color: var(--bg-app); color: var(--accent); transform: translateX(3px); padding-left: 18px; }
+.dropdown-item:hover { background-color: var(--bg-app); color: var(--accent); transform: translateX(4px); padding-left: 18px; }
+.dropdown-item:hover .dropdown-icon { transform: translateX(2px) scale(1.05); }
 .dropdown-item:focus-visible,
 .gear-btn:focus-visible,
 .user-settings-btn:focus-visible,
@@ -289,7 +345,7 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
 .dropdown-item.logout:hover { color: #fca5a5; }
 
 .user-settings-btn {
-  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
 }
 
 .user-settings-btn:hover {
@@ -297,6 +353,10 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
   border-color: var(--accent);
   background: var(--accent-hover);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
+}
+
+.user-settings-btn:hover .gear-icon-small {
+  transform: rotate(18deg) scale(1.08);
 }
 
 /* =========================================
@@ -317,18 +377,22 @@ html[data-theme="light"] .bottom-navbar {
 .fluid-indicator {
   position: absolute; top: 8px; bottom: 8px; left: 8px;
   width: calc((100% - 16px) / 3); background-color: var(--accent-hover);
-  border-radius: 40px; z-index: 1; transition: transform 0.45s cubic-bezier(0.68, -0.55, 0.26, 1.55);
+  border-radius: 40px; z-index: 1; transition: transform 0.45s var(--ease-emphatic), background-color var(--motion-normal) var(--ease-standard);
 }
 
 .nav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   background: transparent; border: none; color: var(--text-muted);
   cursor: pointer; gap: 4px; z-index: 2; padding: 8px 0;
-  transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+  transition: transform var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard);
 }
 
 .nav-item.active { color: var(--accent); }
-.nav-item:hover { transform: translateY(-2px); color: var(--accent); }
+.nav-item:hover { transform: translateY(-3px); color: var(--accent); }
+.nav-item:hover svg,
+.nav-item.active svg {
+  transform: translateY(-1px) scale(1.08);
+}
 
 /* =========================================
    6. OPEN STREET MAPS & MAP OVERLAYS
@@ -454,10 +518,11 @@ html[data-theme="light"] .leaflet-tooltip-top.competitor-name-tooltip:before {
   display: flex; align-items: center; justify-content: center;
   width: 60px; height: 60px; border-radius: 50%; padding: 0; background: var(--accent); color: white;
   border: none; box-shadow: 0 10px 25px rgba(147, 51, 234, 0.5);
-  transition: transform 0.2s ease, background-color 0.2s ease; cursor: pointer;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard); cursor: pointer;
 }
 
 .map-analyze-btn:active { transform: scale(0.85); }
+.map-analyze-btn:hover .analyze-check-icon { transform: scale(1.1) rotate(-3deg); }
 .analyze-check-icon { width: 28px; height: 28px; }
 .analyze-btn-text { display: none; }
 
@@ -483,14 +548,14 @@ html[data-theme="light"] .leaflet-tooltip-top.competitor-name-tooltip:before {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px);
   z-index: 9999; display: flex; flex-direction: column;
-  justify-content: flex-end; transition: all 0.3s ease;
+  justify-content: flex-end; transition: opacity var(--motion-normal) var(--ease-standard), backdrop-filter var(--motion-normal) var(--ease-standard);
 }
 
 .bottom-sheet {
   background: var(--bg-sheet); padding: 35px 24px;
   border-top-left-radius: 35px; border-top-right-radius: 35px;
   border-top: 1px solid var(--border-color); width: 100%;
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); position: relative;
+  animation: slideUp 0.42s var(--ease-standard); position: relative;
 }
 
 .drag-handle { width: 40px; height: 4px; background: var(--border-color); border-radius: 10px; margin: -15px auto 25px auto; }
@@ -511,7 +576,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
 /* Forms & UI Helpers */
 .primary-btn { width: 100%; background: var(--accent); color: white; border: none; padding: 18px; border-radius: 16px; font-weight: 700; cursor: pointer; }
 .primary-btn {
-  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, background 0.2s ease;
+  transition: transform var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard), background var(--motion-normal) var(--ease-standard);
 }
 
 .primary-btn:hover {
@@ -534,7 +599,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   cursor: pointer;
   font-weight: 600;
   margin-top: 5px;
-  transition: color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+  transition: color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
 }
 
 .secondary-btn:hover {
@@ -561,7 +626,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
 }
 
 .radius-option-btn:hover {
@@ -606,6 +671,11 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   justify-content: center;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard);
+}
+
+.analysis-mode-pill:hover {
+  transform: translateY(-1px);
 }
 
 .analysis-mode-wrapper {
@@ -619,13 +689,13 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
 
 /* Animations */
 .fade-in { animation: fadeIn 0.4s ease-out; }
-.page-enter { animation: pageRise 0.42s cubic-bezier(0.16, 1, 0.3, 1); }
-@keyframes dropPopover { from { opacity: 0; transform: translateY(-8px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.page-enter { animation: pageEnter 0.24s ease-in both; }
+@keyframes dropPopover { from { opacity: 0; transform: translateY(-10px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
-@keyframes popInMobile { from { opacity: 0; transform: scale(0.5) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes popInMobile { from { opacity: 0; transform: scale(0.92) translateY(18px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes pageRise { from { opacity: 0; transform: translateY(14px) scale(0.992); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pageEnter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* =========================================
