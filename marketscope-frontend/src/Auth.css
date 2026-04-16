@@ -393,6 +393,14 @@
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
 }
 
+.field-hint {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  color: #c4b5fd;
+  line-height: 1.35;
+}
+
 .input-group input[type="date"] {
   color-scheme: dark;
 }

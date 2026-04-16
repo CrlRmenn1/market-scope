@@ -454,7 +454,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
         <div className="input-group">
           <label>Birthday</label>
-          <input type="date" name="birthday" />
+          <div className="field-hint" id="birthday-hint">Tap the field to open the calendar</div>
+          <input type="date" name="birthday" aria-describedby="birthday-hint" title="Tap to choose your birthday" />
         </div>
 
         <div className="input-group">
