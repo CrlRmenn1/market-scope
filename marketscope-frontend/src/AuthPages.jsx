@@ -31,6 +31,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const registerAvatarInputRef = useRef(null);
   const authContainerRef = useRef(null);
   const savedScrollTopRef = useRef(0);
+  const viewportBaselineRef = useRef(0);
+  const keyboardOpenRef = useRef(false);
 
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -105,6 +107,59 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     return () => {
       container.removeEventListener('focusin', handleFocusIn);
       container.removeEventListener('focusout', restoreScrollPosition);
+    };
+  }, [currentView]);
+
+  useEffect(() => {
+    const container = authContainerRef.current;
+    if (!container) return;
+
+    const viewport = window.visualViewport;
+    const getHeight = () => viewport?.height || window.innerHeight;
+
+    viewportBaselineRef.current = Math.max(viewportBaselineRef.current, getHeight());
+
+    const recoverLayout = () => {
+      window.requestAnimationFrame(() => {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+          return;
+        }
+
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+
+        const restoreTop = currentView === 'register' ? savedScrollTopRef.current : 0;
+        container.scrollTo({ top: restoreTop, behavior: 'auto' });
+      });
+    };
+
+    const handleViewportResize = () => {
+      const currentHeight = getHeight();
+      viewportBaselineRef.current = Math.max(viewportBaselineRef.current, currentHeight);
+      const keyboardNowOpen = currentHeight < (viewportBaselineRef.current - 120);
+
+      if (keyboardOpenRef.current && !keyboardNowOpen) {
+        recoverLayout();
+      }
+
+      keyboardOpenRef.current = keyboardNowOpen;
+    };
+
+    const handleWindowResize = () => {
+      viewportBaselineRef.current = Math.max(viewportBaselineRef.current, getHeight());
+      recoverLayout();
+    };
+
+    viewport?.addEventListener('resize', handleViewportResize);
+    window.addEventListener('resize', handleWindowResize);
+    window.addEventListener('orientationchange', handleWindowResize);
+
+    return () => {
+      viewport?.removeEventListener('resize', handleViewportResize);
+      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('orientationchange', handleWindowResize);
     };
   }, [currentView]);
 
