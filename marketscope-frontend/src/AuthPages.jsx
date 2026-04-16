@@ -426,13 +426,13 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   );
 
   const renderLogin = () => (
-    <div className="fade-in">
-      <h2 style={{ color: 'white' }}>Welcome Back</h2>
-      <p className="auth-subtitle" style={{ color: 'white' }}>Access your MarketScope dashboard.</p>
+    <div className="fade-in space-y-2">
+      <h2 className="text-3xl font-semibold tracking-tight text-white">Welcome Back</h2>
+      <p className="auth-subtitle text-sm text-slate-200">Access your MarketScope dashboard.</p>
       
       {errorMsg && <div className="error-alert">{errorMsg}</div>}
 
-      <form onSubmit={handleLogin} className="mt-6">
+      <form onSubmit={handleLogin} className="mt-6 space-y-4">
         <div className="input-group">
           <label>Email Address</label>
           <input type="email" name="email" placeholder="msme@panabo.com" defaultValue={rememberedLogin.email} autoComplete="username" required />
@@ -485,8 +485,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         {showForgotPassword && (
-          <div className="forgot-password-panel">
-            <p className="forgot-password-note">Enter your account email and set a new password.</p>
+          <div className="forgot-password-panel rounded-xl border border-violet-400/30 bg-violet-950/20 p-3">
+            <p className="forgot-password-note text-xs text-violet-100">Enter your account email and set a new password.</p>
             <div className="input-group forgot-input-group">
               <label>Reset Email</label>
               <input
@@ -526,7 +526,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
             <button
               type="button"
-              className="btn-secondary w-full"
+              className="btn-secondary w-full rounded-lg border border-violet-300/50 px-4 py-3 text-sm font-semibold text-violet-100"
               disabled={isResetLoading}
               onClick={handleResetPassword}
             >
