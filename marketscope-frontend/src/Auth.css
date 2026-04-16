@@ -393,16 +393,8 @@
 }
 
 .input-group input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.6);
+  filter: invert(1) brightness(1.85);
   cursor: pointer;
-}
-
-html[data-theme="light"] .input-group input[type="date"] {
-  color-scheme: light;
-}
-
-html[data-theme="light"] .input-group input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: none;
 }
 
 /* =========================================
