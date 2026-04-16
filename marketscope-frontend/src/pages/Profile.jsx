@@ -182,7 +182,7 @@ export default function Profile({ user, onProfileUpdate }) {
               {editing ? (
                 <input
                   type="text"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.full_name}
                   onChange={(e) => setFormValues((current) => ({ ...current, full_name: e.target.value }))}
                 />
@@ -198,7 +198,7 @@ export default function Profile({ user, onProfileUpdate }) {
               {editing ? (
                 <input
                   type="email"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.email}
                   onChange={(e) => setFormValues((current) => ({ ...current, email: e.target.value }))}
                 />
@@ -214,7 +214,7 @@ export default function Profile({ user, onProfileUpdate }) {
               {editing ? (
                 <input
                   type="tel"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.cellphone_number}
                   onChange={(e) => setFormValues((current) => ({ ...current, cellphone_number: e.target.value }))}
                 />
@@ -230,7 +230,7 @@ export default function Profile({ user, onProfileUpdate }) {
               {editing ? (
                 <input
                   type="text"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.address}
                   onChange={(e) => setFormValues((current) => ({ ...current, address: e.target.value }))}
                 />
@@ -246,7 +246,7 @@ export default function Profile({ user, onProfileUpdate }) {
               {editing ? (
                 <input
                   type="date"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.birthday}
                   onChange={(e) => setFormValues((current) => ({ ...current, birthday: e.target.value }))}
                 />
@@ -264,7 +264,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   type="number"
                   min="0"
                   max="120"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.age}
                   onChange={(e) => setFormValues((current) => ({ ...current, age: e.target.value }))}
                 />
@@ -280,7 +280,7 @@ export default function Profile({ user, onProfileUpdate }) {
               {editing ? (
                 <input
                   type="text"
-                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.primary_business}
                   onChange={(e) => setFormValues((current) => ({ ...current, primary_business: e.target.value }))}
                 />
