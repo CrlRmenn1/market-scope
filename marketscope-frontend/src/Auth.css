@@ -393,7 +393,8 @@
 }
 
 .input-group input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.85);
+  filter: brightness(0) invert(1) !important;
+  opacity: 1 !important;
   cursor: pointer;
 }
 
