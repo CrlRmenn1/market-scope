@@ -50,19 +50,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const updateViewportHeight = () => {
-      document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
-    };
-
-    updateViewportHeight();
-    window.addEventListener('orientationchange', updateViewportHeight);
-
-    return () => {
-      window.removeEventListener('orientationchange', updateViewportHeight);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!session || reportData) return;
 
     const raw = localStorage.getItem(OPEN_REPORT_KEY);
