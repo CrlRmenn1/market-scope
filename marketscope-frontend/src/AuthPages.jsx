@@ -43,7 +43,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const keyboardOpenRef = useRef(false);
 
   const authPanelClass = 'fade-in !w-full !max-w-[520px] space-y-5 !rounded-[30px] !border !border-white/10 !bg-slate-950/80 !p-6 !shadow-[0_30px_90px_rgba(2,6,23,0.55)] !backdrop-blur-xl sm:!p-8';
-  const authSectionTitleClass = 'text-3xl font-semibold tracking-tight text-white sm:text-[2.15rem]';
+  const authSectionTitleClass = 'text-3xl font-semibold tracking-tight !text-white sm:text-[2.15rem]';
   const authSectionSubtitleClass = 'text-sm text-slate-200/90';
   const authLabelClass = 'mb-2 block text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-slate-300';
   const authInputClass = 'mt-0 w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20';
@@ -557,7 +557,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         <p className="auth-footer">
-          New to MarketScope? <span onClick={() => setCurrentView('register')}>Create Account</span>
+          New to MarketScope? <span className="!text-white" onClick={() => setCurrentView('register')}>Create Account</span>
         </p>
       </form>
     </div>
@@ -709,7 +709,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         <p className="auth-footer">
-          Already have an account? <span onClick={() => setCurrentView('login')}>Log In</span>
+          Already have an account? <span className="!text-white" onClick={() => setCurrentView('login')}>Log In</span>
         </p>
       </form>
     </div>

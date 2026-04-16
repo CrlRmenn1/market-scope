@@ -195,17 +195,17 @@ export default function Home({ onMapTap }) {
         </div>
       </div>
 
-      <div className="map-mode-toggle flex gap-2 rounded-full border border-white/10 bg-slate-950/75 p-2 shadow-[0_18px_40px_rgba(2,6,23,0.25)] backdrop-blur-xl" role="tablist" aria-label="Map view mode">
+      <div className="map-mode-toggle" role="tablist" aria-label="Map view mode">
         <button
           type="button"
-          className={`map-mode-btn rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] transition ${mapViewMode === 'normal' ? 'active bg-violet-500 text-white shadow-[0_10px_22px_rgba(168,85,247,0.28)]' : 'text-slate-400 hover:text-slate-100'}`}
+          className={`map-mode-btn ${mapViewMode === 'normal' ? 'active' : ''}`}
           onClick={() => setMapViewMode('normal')}
         >
           Normal Map
         </button>
         <button
           type="button"
-          className={`map-mode-btn rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] transition ${mapViewMode === 'flood' ? 'active bg-violet-500 text-white shadow-[0_10px_22px_rgba(168,85,247,0.28)]' : 'text-slate-400 hover:text-slate-100'}`}
+          className={`map-mode-btn ${mapViewMode === 'flood' ? 'active' : ''}`}
           onClick={() => setMapViewMode('flood')}
         >
           Flood Zones
