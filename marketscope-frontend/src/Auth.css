@@ -10,9 +10,10 @@
   width: 100%;
   background-color: #0b1120; /* Very dark slate/navy */
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
-  overflow-y: auto;
+  overflow: hidden;
   overflow-x: hidden;
   transition: background-color 0.3s ease;
+  overscroll-behavior: none;
 }
 
 .mobile-auth-hero {

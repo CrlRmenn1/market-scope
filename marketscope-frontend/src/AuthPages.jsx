@@ -101,12 +101,20 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       }, 50);
     };
 
+    const blockManualScroll = (event) => {
+      event.preventDefault();
+    };
+
     container.addEventListener('focusin', handleFocusIn);
     container.addEventListener('focusout', restoreScrollPosition);
+    container.addEventListener('touchmove', blockManualScroll, { passive: false });
+    container.addEventListener('wheel', blockManualScroll, { passive: false });
 
     return () => {
       container.removeEventListener('focusin', handleFocusIn);
       container.removeEventListener('focusout', restoreScrollPosition);
+      container.removeEventListener('touchmove', blockManualScroll);
+      container.removeEventListener('wheel', blockManualScroll);
     };
   }, [currentView]);
 
