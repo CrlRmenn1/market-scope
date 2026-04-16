@@ -89,6 +89,54 @@ select {
   border-radius: 999px;
 }
 
+/* =========================================
+   2A. SHARED CARD SYSTEM
+   ========================================= */
+.data-card,
+.profile-card,
+.main-score-card,
+.report-map-container,
+.disclaimer-card,
+.admin-card,
+.admin-tools-card,
+.history-card,
+.profile-stat-card {
+  @apply rounded-[28px] border border-white/10 bg-slate-950/80 text-slate-100 shadow-[0_24px_70px_rgba(2,6,23,0.22)] backdrop-blur-xl;
+}
+
+html[data-theme="light"] .data-card,
+html[data-theme="light"] .profile-card,
+html[data-theme="light"] .main-score-card,
+html[data-theme="light"] .report-map-container,
+html[data-theme="light"] .disclaimer-card,
+html[data-theme="light"] .admin-card,
+html[data-theme="light"] .admin-tools-card,
+html[data-theme="light"] .history-card,
+html[data-theme="light"] .profile-stat-card {
+  @apply border-slate-200/80 bg-white/90 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.08)];
+}
+
+.data-card,
+.profile-card,
+.main-score-card,
+.report-map-container,
+.admin-card,
+.admin-tools-card,
+.history-card,
+.profile-stat-card {
+  @apply p-5 sm:p-6;
+}
+
+.disclaimer-card {
+  @apply p-5 sm:p-6;
+}
+
+.history-card-top,
+.profile-card,
+.main-score-card {
+  @apply overflow-hidden;
+}
+
 .app-content.app-content-locked {
   overflow: hidden;
 }
