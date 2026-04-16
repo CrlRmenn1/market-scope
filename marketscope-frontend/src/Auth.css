@@ -721,6 +721,14 @@
   max-width: 500px;
 }
 
+.hero-instruction {
+  margin: -6px 0 0;
+  color: rgba(237, 223, 255, 0.92);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 /* Get Started Button */
 .get-started-btn {
   padding: 14px 40px;
@@ -784,6 +792,10 @@
 
   .hero-description {
     font-size: 1rem;
+  }
+
+  .hero-instruction {
+    font-size: 0.9rem;
   }
 
   .get-started-btn {

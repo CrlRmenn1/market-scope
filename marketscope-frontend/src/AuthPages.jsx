@@ -249,6 +249,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         <div className="hero-badge mb-6">MCDA ENGINE V1.0</div>
         <h1 className="hero-title">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
         <p className="hero-description">The geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
+        <p className="hero-instruction">Tap Get Started, drop a pin, and scan market potential in seconds.</p>
         <button className="get-started-btn" onClick={() => setCurrentView('register')}>
           Get Started
         </button>
