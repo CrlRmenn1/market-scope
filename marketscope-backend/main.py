@@ -117,6 +117,11 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class DirectResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str
+
+
 class UpdateUserProfile(BaseModel):
     full_name: str
     email: str
@@ -690,6 +695,40 @@ def reset_password(payload: ResetPasswordRequest):
         cursor.execute(
             "UPDATE password_reset_codes SET used_at = CURRENT_TIMESTAMP WHERE id = %s",
             (reset_row['id'],)
+        )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return {"status": "success", "detail": "Password reset successful. You can now log in."}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reset-password-direct")
+def reset_password_direct(payload: DirectResetPasswordRequest):
+    try:
+        if len(payload.new_password.strip()) < 6:
+            raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+
+        cursor.execute(
+            f"SELECT {user_pk_column} AS user_id FROM users WHERE email = %s",
+            (payload.email,)
+        )
+        db_user = cursor.fetchone()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="Email not found")
+
+        new_hash = bcrypt.hashpw(payload.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        cursor.execute(
+            f"UPDATE users SET password_hash = %s WHERE {user_pk_column} = %s",
+            (new_hash, db_user['user_id'])
         )
 
         conn.commit()
