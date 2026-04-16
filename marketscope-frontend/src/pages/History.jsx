@@ -213,40 +213,41 @@ export default function History({ user, onOpenReport }) {
   };
 
   return (
-    <div className="profile-page page-enter">
-      <div className="profile-card fade-in" style={{ textAlign: 'left' }}>
-        <h2 className="profile-name" style={{ marginBottom: '6px' }}>Analysis History</h2>
-        <p className="profile-email">Previous site analyses for your account.</p>
-      </div>
+    <div className="profile-page page-enter min-h-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.14),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.1),transparent_28%)]">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-32 pt-4 sm:px-6 lg:px-8">
+        <div className="profile-card fade-in rounded-[32px] border border-white/10 bg-slate-950/80 p-6 text-left shadow-[0_24px_70px_rgba(2,6,23,0.28)] backdrop-blur-xl">
+          <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Analysis History</h2>
+          <p className="profile-email text-sm text-slate-300">Previous site analyses for your account.</p>
+        </div>
 
-      {loading && <div className="data-card">Loading history...</div>}
+      {loading && <div className="data-card rounded-[24px] border border-white/10 bg-slate-950/75 p-5 text-sm text-slate-300 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">Loading history...</div>}
 
       {!loading && !hasHistory && (
-        <div className="history-empty-state">
-          <div className="history-empty-icon" aria-hidden="true">
+        <div className="history-empty-state flex items-center gap-4 rounded-[28px] border border-white/10 bg-slate-950/75 p-5 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="history-empty-icon flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-200" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 11l3 3L22 4"></path>
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
             </svg>
           </div>
           <div>
-            <p className="history-empty-title">No saved analyses yet</p>
-            <p className="history-empty-subtitle">Run a site analysis from the map and your results will appear here automatically.</p>
+            <p className="history-empty-title text-lg font-semibold text-slate-50">No saved analyses yet</p>
+            <p className="history-empty-subtitle mt-1 text-sm leading-6 text-slate-300">Run a site analysis from the map and your results will appear here automatically.</p>
           </div>
         </div>
       )}
 
       {!loading && hasHistory && (
         <>
-          <div className="data-card mt-6 history-tools-card">
-            <div className="history-tools-grid">
+          <div className="data-card mt-6 rounded-[28px] border border-white/10 bg-slate-950/75 p-5 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+            <div className="history-tools-grid grid gap-4 lg:grid-cols-2">
               <div className="input-group" style={{ marginBottom: 0 }}>
                 <label>Search Business</label>
                 <input
                   value={historySearchTerm}
                   onChange={(e) => setHistorySearchTerm(e.target.value)}
                   placeholder="Search by business type..."
-                  className="history-search-input"
+                  className="history-search-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                 />
               </div>
               <div className="input-group" style={{ marginBottom: 0 }}>
@@ -254,7 +255,7 @@ export default function History({ user, onOpenReport }) {
                 <select
                   value={historyScoreFilter}
                   onChange={(e) => setHistoryScoreFilter(e.target.value)}
-                  className="app-select"
+                  className="app-select w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                 >
                   <option value="all">All</option>
                   <option value="50-up">50 points and up</option>
@@ -264,40 +265,40 @@ export default function History({ user, onOpenReport }) {
             </div>
           </div>
 
-          <div className="history-list mt-6">
+          <div className="history-list mt-6 flex flex-col gap-4">
           {filteredHistory.map((item) => (
-            <div className="data-card history-card" key={item.history_id}>
+            <div className="data-card history-card rounded-[28px] border border-white/10 bg-slate-950/75 p-5 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl" key={item.history_id}>
               <button
                 type="button"
-                className="history-card-top history-card-button"
+                className="history-card-top history-card-button flex w-full items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:-translate-y-0.5 hover:border-violet-400/30 hover:bg-violet-500/10"
                 onClick={() => openSavedReport(item)}
               >
                 <div>
-                  <h3 className="history-title">{item.business_type}</h3>
-                  <p className="history-meta">{formatDate(item.created_at)}</p>
+                  <h3 className="history-title text-lg font-semibold text-slate-50">{item.business_type}</h3>
+                  <p className="history-meta mt-1 text-sm text-slate-400">{formatDate(item.created_at)}</p>
                 </div>
-                <span className="profile-badge">Score {item.viability_score}</span>
+                <span className="profile-badge inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200">Score {item.viability_score}</span>
               </button>
 
-              <div className="history-summary">
+              <div className="history-summary mt-4 rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-sm text-slate-300">
                 <span>Radius: {item.radius_meters ?? '—'}m</span>
               </div>
 
-              <p className="factor-desc" style={{ marginTop: '10px' }}>
+              <p className="factor-desc mt-3 text-sm leading-6 text-slate-300">
                 {item.insight}
               </p>
 
-              <div className="history-actions-row">
+              <div className="history-actions-row mt-4 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
-                  className="edit-btn history-open-btn"
+                  className="edit-btn history-open-btn inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:-translate-y-0.5 hover:border-violet-400/40 hover:bg-violet-500/10"
                   onClick={() => openSavedReport(item)}
                 >
                   {openingHistoryId === item.history_id ? 'Opening...' : 'Open report'}
                 </button>
                 <button
                   type="button"
-                  className="history-delete-btn"
+                  className="history-delete-btn inline-flex items-center justify-center rounded-full border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:-translate-y-0.5 hover:border-rose-300/40 hover:bg-rose-500/20"
                   onClick={() => setDeleteCandidate(item)}
                   disabled={deletingHistoryId === item.history_id}
                 >
@@ -307,16 +308,16 @@ export default function History({ user, onOpenReport }) {
 
               <button
                 type="button"
-                className="history-breakdown-toggle"
+                className="history-breakdown-toggle mt-4 inline-flex w-full items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:-translate-y-0.5 hover:border-violet-400/40 hover:bg-violet-500/10"
                 onClick={() => setExpandedHistoryId((current) => (current === item.history_id ? null : item.history_id))}
               >
                 {expandedHistoryId === item.history_id ? 'Hide metric breakdown' : 'Show metric breakdown'}
               </button>
 
               {expandedHistoryId === item.history_id && (
-                <div className="history-breakdown">
-                  <p className="settings-label" style={{ marginBottom: '8px' }}>Metric Breakdown</p>
-                  <div className="history-breakdown-grid">
+                <div className="history-breakdown mt-4 rounded-[24px] border border-white/10 bg-black/20 p-4">
+                  <p className="settings-label mb-2 text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Metric Breakdown</p>
+                  <div className="history-breakdown-grid grid gap-3 sm:grid-cols-2">
                     {Object.entries(getBreakdownForItem(item)).map(([key, factor]) => {
                       const isOpen = expandedFactorKeyByHistoryId[item.history_id] === key;
                       const score = factor?.score || 0;
@@ -326,24 +327,24 @@ export default function History({ user, onOpenReport }) {
                       return (
                         <button
                           type="button"
-                          className={`history-breakdown-item ${isOpen ? 'is-open' : ''} history-breakdown-item-${key}`}
+                          className={`history-breakdown-item ${isOpen ? 'is-open' : ''} history-breakdown-item-${key} flex flex-col gap-3 rounded-[20px] border border-white/10 bg-white/5 p-4 text-left transition hover:-translate-y-0.5 hover:border-violet-400/30 hover:bg-violet-500/10`}
                           key={key}
                           onClick={() => toggleFactor(item.history_id, key)}
                           aria-expanded={isOpen}
                         >
-                          <div className="history-mini-header">
-                            <span className="settings-value capitalize">{getFactorLabel(key)}</span>
-                            <span className="history-mini-score" style={{ color: getFactorTone(score) }}>
+                          <div className="history-mini-header flex items-center justify-between gap-3">
+                            <span className="settings-value capitalize text-sm font-semibold text-slate-100">{getFactorLabel(key)}</span>
+                            <span className="history-mini-score text-sm font-bold" style={{ color: getFactorTone(score) }}>
                               {score}/25
                             </span>
                           </div>
-                          <div className="history-mini-track" aria-hidden="true">
-                            <div className="history-mini-fill" style={{ width: fillWidth, background: getFactorTone(score) }} />
+                          <div className="history-mini-track h-2 rounded-full bg-white/10" aria-hidden="true">
+                            <div className="history-mini-fill h-2 rounded-full" style={{ width: fillWidth, background: getFactorTone(score) }} />
                           </div>
-                          <div className="history-mini-meta">
-                            <strong>{factor?.status || 'Factor detail'}</strong>
-                            <span> {factorContext}</span>
-                            {isOpen && <span> {getFactorSummary(factor)}</span>}
+                          <div className="history-mini-meta text-xs leading-5 text-slate-300">
+                            <strong className="block text-[0.72rem] uppercase tracking-[0.16em] text-slate-400">{factor?.status || 'Factor detail'}</strong>
+                            <span className="block mt-1">{factorContext}</span>
+                            {isOpen && <span className="block mt-1">{getFactorSummary(factor)}</span>}
                           </div>
                         </button>
                       );
@@ -354,32 +355,33 @@ export default function History({ user, onOpenReport }) {
             </div>
           ))}
           {!hasFilteredHistory && (
-            <div className="data-card">No history records match your search.</div>
+            <div className="data-card rounded-[24px] border border-white/10 bg-slate-950/75 p-5 text-sm text-slate-300 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">No history records match your search.</div>
           )}
         </div>
         </>
       )}
 
       {deleteCandidate && (
-        <div className="history-confirm-overlay" role="presentation" onClick={() => setDeleteCandidate(null)}>
-          <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-delete-title" onClick={(event) => event.stopPropagation()}>
-            <p className="history-confirm-eyebrow">Confirm deletion</p>
-            <h3 id="history-delete-title" className="history-confirm-title">Delete {deleteCandidate.business_type}?</h3>
-            <p className="history-confirm-text">
+        <div className="history-confirm-overlay fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 p-4 backdrop-blur-md sm:items-center" role="presentation" onClick={() => setDeleteCandidate(null)}>
+          <div className="history-confirm-modal w-full max-w-lg rounded-[28px] border border-white/10 bg-slate-950/95 p-5 shadow-[0_24px_70px_rgba(2,6,23,0.45)] backdrop-blur-xl" role="dialog" aria-modal="true" aria-labelledby="history-delete-title" onClick={(event) => event.stopPropagation()}>
+            <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-rose-300">Confirm deletion</p>
+            <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-slate-50">Delete {deleteCandidate.business_type}?</h3>
+            <p className="history-confirm-text mt-3 text-sm leading-6 text-slate-300">
               This removes the saved analysis from your history. You can run the same site again later, but this saved copy will be gone.
             </p>
-            {deleteError && <p className="history-confirm-error">{deleteError}</p>}
-            <div className="history-confirm-actions">
-              <button type="button" className="edit-btn" onClick={() => setDeleteCandidate(null)}>
+            {deleteError && <p className="history-confirm-error mt-3 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-200">{deleteError}</p>}
+            <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
+              <button type="button" className="edit-btn inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:-translate-y-0.5 hover:border-violet-400/40 hover:bg-violet-500/10" onClick={() => setDeleteCandidate(null)}>
                 Cancel
               </button>
-              <button type="button" className="history-delete-btn history-delete-btn-solid" onClick={() => handleDeleteHistory(deleteCandidate)} disabled={deletingHistoryId === deleteCandidate.history_id}>
+              <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-full border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-200 transition hover:-translate-y-0.5 hover:border-rose-300/40 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteHistory(deleteCandidate)} disabled={deletingHistoryId === deleteCandidate.history_id}>
                 {deletingHistoryId === deleteCandidate.history_id ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
