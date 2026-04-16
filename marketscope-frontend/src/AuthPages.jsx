@@ -3,7 +3,17 @@ import './Auth.css';
 import { apiUrl } from './api';
 
 export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
-  const [currentView, setCurrentView] = useState(initialView === 'login' ? 'login' : 'hero');
+  const AUTH_VIEW_KEY = 'marketscope_auth_view';
+  const getInitialAuthView = () => {
+    if (initialView === 'login') return 'login';
+    const savedView = localStorage.getItem(AUTH_VIEW_KEY);
+    if (savedView === 'hero' || savedView === 'register' || savedView === 'login') {
+      return savedView;
+    }
+    return 'hero';
+  };
+
+  const [currentView, setCurrentView] = useState(getInitialAuthView);
   const [isBurgerOpen, setIsBurgerOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -19,6 +29,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const [registerAvatarFileName, setRegisterAvatarFileName] = useState('');
   const [isAvatarReading, setIsAvatarReading] = useState(false);
   const registerAvatarInputRef = useRef(null);
+  const authContainerRef = useRef(null);
+  const savedScrollTopRef = useRef(0);
 
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -57,6 +69,44 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       onAuthPagesMounted();
     }
   }, [onAuthPagesMounted]);
+
+  useEffect(() => {
+    localStorage.setItem(AUTH_VIEW_KEY, currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    const container = authContainerRef.current;
+    if (!container || currentView !== 'register') return;
+
+    const isTextLikeField = (element) => {
+      if (!element) return false;
+      const tagName = element.tagName;
+      return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+    };
+
+    const handleFocusIn = (event) => {
+      if (isTextLikeField(event.target)) {
+        savedScrollTopRef.current = container.scrollTop;
+      }
+    };
+
+    const restoreScrollPosition = () => {
+      window.setTimeout(() => {
+        const activeElement = document.activeElement;
+        if (!container.contains(activeElement)) {
+          container.scrollTo({ top: savedScrollTopRef.current, behavior: 'auto' });
+        }
+      }, 50);
+    };
+
+    container.addEventListener('focusin', handleFocusIn);
+    container.addEventListener('focusout', restoreScrollPosition);
+
+    return () => {
+      container.removeEventListener('focusin', handleFocusIn);
+      container.removeEventListener('focusout', restoreScrollPosition);
+    };
+  }, [currentView]);
 
   const getMeterColor = () => {
     if (passwordStrength <= 1) return '#ef4444'; 
@@ -463,7 +513,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
   if (currentView === 'hero') {
     return (
-      <div className="auth-container view-hero">
+      <div className="auth-container view-hero" ref={authContainerRef}>
         <div className="auth-hero">
           {renderHero()}
         </div>
@@ -472,7 +522,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   }
 
   return (
-    <div className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`}>
+    <div className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`} ref={authContainerRef}>
       <div className="mobile-auth-hero">
         {currentView === 'register' && (
           <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
