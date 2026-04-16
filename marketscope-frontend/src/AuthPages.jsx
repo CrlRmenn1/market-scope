@@ -21,6 +21,11 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [rememberedLogin, setRememberedLogin] = useState({ email: '', password: '' });
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMsg, setForgotMsg] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [isForgotLoading, setIsForgotLoading] = useState(false);
 
   // NEW: State to track password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -314,6 +319,44 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     }
   };
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotMsg('');
+    setForgotError('');
+    setIsForgotLoading(true);
+
+    try {
+      const response = await fetch(apiUrl('/forgot-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail })
+      });
+
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
+
+      if (response.ok) {
+        setForgotMsg(payload.detail || 'If your account exists, a reset code has been sent to your email.');
+        return;
+      }
+
+      if (response.status === 404 || response.status === 405) {
+        setForgotMsg('Password reset is not configured on this server yet. Please contact support/admin to reset your password.');
+        return;
+      }
+
+      setForgotError(payload.detail || 'Unable to send reset code right now. Please try again.');
+    } catch {
+      setForgotError('Network error while requesting password reset. Please try again.');
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
   const renderHero = () => (
     <div className="hero-container">
       <div className="hero-logo-corner">
@@ -407,6 +450,49 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           />
           <span>Remember me</span>
         </label>
+
+        <button
+          type="button"
+          className="forgot-password-link"
+          onClick={() => {
+            setShowForgotPassword((prev) => !prev);
+            setForgotError('');
+            setForgotMsg('');
+            if (!forgotEmail && rememberedLogin.email) {
+              setForgotEmail(rememberedLogin.email);
+            }
+          }}
+        >
+          {showForgotPassword ? 'Hide password reset' : 'Forgot password?'}
+        </button>
+
+        {showForgotPassword && (
+          <div className="forgot-password-panel">
+            <p className="forgot-password-note">Enter your email to request a reset code.</p>
+            <div className="input-group forgot-input-group">
+              <label>Reset Email</label>
+              <input
+                type="email"
+                name="forgotEmail"
+                placeholder="msme@panabo.com"
+                value={forgotEmail}
+                onChange={(event) => setForgotEmail(event.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-secondary w-full"
+              disabled={isForgotLoading || !forgotEmail}
+              onClick={handleForgotPassword}
+            >
+              {isForgotLoading ? 'Sending reset code...' : 'Send Reset Code'}
+            </button>
+            {forgotMsg && <div className="info-alert mt-2">{forgotMsg}</div>}
+            {forgotError && <div className="error-alert mt-2">{forgotError}</div>}
+          </div>
+        )}
 
         <button type="submit" className="btn-primary w-full mt-6 mb-8" disabled={isLoading}>
           {isLoading ? 'Authenticating...' : 'Log In'}
