@@ -23,9 +23,13 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const [rememberedLogin, setRememberedLogin] = useState({ email: '', password: '' });
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
   const [forgotMsg, setForgotMsg] = useState('');
   const [forgotError, setForgotError] = useState('');
   const [isForgotLoading, setIsForgotLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
 
   // NEW: State to track password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -340,7 +344,12 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       }
 
       if (response.ok) {
-        setForgotMsg(payload.detail || 'If your account exists, a reset code has been sent to your email.');
+        const baseMsg = payload.detail || 'If your account exists, a reset code has been sent to your email.';
+        if (payload.reset_code) {
+          setForgotMsg(`${baseMsg} Your reset code is ${payload.reset_code}.`);
+        } else {
+          setForgotMsg(baseMsg);
+        }
         return;
       }
 
@@ -354,6 +363,62 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       setForgotError('Network error while requesting password reset. Please try again.');
     } finally {
       setIsForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setForgotMsg('');
+    setForgotError('');
+
+    if (!forgotEmail || !forgotCode || !forgotNewPassword || !forgotConfirmPassword) {
+      setForgotError('Please complete all reset fields.');
+      return;
+    }
+
+    if (forgotNewPassword !== forgotConfirmPassword) {
+      setForgotError('New password and confirm password do not match.');
+      return;
+    }
+
+    if (forgotNewPassword.length < 6) {
+      setForgotError('New password must be at least 6 characters.');
+      return;
+    }
+
+    setIsResetLoading(true);
+
+    try {
+      const response = await fetch(apiUrl('/reset-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: forgotEmail,
+          code: forgotCode,
+          new_password: forgotNewPassword
+        })
+      });
+
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok) {
+        setForgotError(payload.detail || 'Unable to reset password right now.');
+        return;
+      }
+
+      setForgotMsg(payload.detail || 'Password reset successful. You can now log in.');
+      setForgotCode('');
+      setForgotNewPassword('');
+      setForgotConfirmPassword('');
+    } catch {
+      setForgotError('Network error while resetting password. Please try again.');
+    } finally {
+      setIsResetLoading(false);
     }
   };
 
@@ -468,7 +533,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
         {showForgotPassword && (
           <div className="forgot-password-panel">
-            <p className="forgot-password-note">Enter your email to request a reset code.</p>
+            <p className="forgot-password-note">Request a reset code, then set your new password below.</p>
             <div className="input-group forgot-input-group">
               <label>Reset Email</label>
               <input
@@ -481,14 +546,63 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
                 required
               />
             </div>
+
+            <div className="forgot-actions-row">
+              <button
+                type="button"
+                className="btn-secondary w-full"
+                disabled={isForgotLoading || !forgotEmail}
+                onClick={handleForgotPassword}
+              >
+                {isForgotLoading ? 'Sending code...' : 'Send Reset Code'}
+              </button>
+            </div>
+
+            <div className="input-group forgot-input-group">
+              <label>Reset Code</label>
+              <input
+                type="text"
+                name="forgotCode"
+                placeholder="6-digit code"
+                value={forgotCode}
+                onChange={(event) => setForgotCode(event.target.value.trim())}
+                autoComplete="one-time-code"
+              />
+            </div>
+
+            <div className="input-group forgot-input-group">
+              <label>New Password</label>
+              <input
+                type="password"
+                name="forgotNewPassword"
+                placeholder="At least 6 characters"
+                value={forgotNewPassword}
+                onChange={(event) => setForgotNewPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div className="input-group forgot-input-group">
+              <label>Confirm New Password</label>
+              <input
+                type="password"
+                name="forgotConfirmPassword"
+                placeholder="Repeat new password"
+                value={forgotConfirmPassword}
+                onChange={(event) => setForgotConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+
             <button
               type="button"
               className="btn-secondary w-full"
-              disabled={isForgotLoading || !forgotEmail}
-              onClick={handleForgotPassword}
+              disabled={isResetLoading}
+              onClick={handleResetPassword}
             >
-              {isForgotLoading ? 'Sending reset code...' : 'Send Reset Code'}
+              {isResetLoading ? 'Resetting password...' : 'Reset Password'}
             </button>
+
             {forgotMsg && <div className="info-alert mt-2">{forgotMsg}</div>}
             {forgotError && <div className="error-alert mt-2">{forgotError}</div>}
           </div>

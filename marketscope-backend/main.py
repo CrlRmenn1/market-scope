@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import math
 import os
+import random
 import socket
 from urllib.parse import urlparse
-from datetime import date
+from datetime import date, datetime, timedelta
 from contextlib import asynccontextmanager
 from threading import Lock
 import psycopg2
@@ -104,6 +105,16 @@ class LoginUser(BaseModel):
     password: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
 class UpdateUserProfile(BaseModel):
     full_name: str
     email: str
@@ -152,6 +163,8 @@ class AdminUpdateUser(BaseModel):
 ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
 ADMIN_PASSWORD = os.environ.get("MARKETSCOPE_ADMIN_PASSWORD", "admin123")
 ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local-token")
+RESET_CODE_TTL_MINUTES = int(os.environ.get("MARKETSCOPE_RESET_CODE_TTL_MINUTES", "10"))
+RESET_CODE_DEV_MODE = os.environ.get("MARKETSCOPE_RESET_CODE_DEV_MODE", "true").lower() == "true"
 
 
 def create_app_tables():
@@ -181,6 +194,7 @@ def create_app_tables():
     ensure_users_profile_columns(cursor)
     ensure_custom_msme_table(cursor)
     ensure_admin_users_table(cursor)
+    ensure_password_reset_codes_table(cursor, user_pk_column)
     ensure_default_admin_user(cursor)
 
     conn.commit()
@@ -232,6 +246,31 @@ def ensure_admin_users_table(cursor):
         )
         """
     )
+
+
+def ensure_password_reset_codes_table(cursor, user_pk_column):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_codes (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(%s) ON DELETE CASCADE,
+            code_hash TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """ % user_pk_column
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_password_reset_codes_user_created
+        ON password_reset_codes(user_id, created_at DESC)
+        """
+    )
+
+
+def generate_reset_code():
+    return ''.join(random.choice('0123456789') for _ in range(6))
 
 
 def ensure_default_admin_user(cursor):
@@ -478,6 +517,126 @@ def login(user: LoginUser):
                 "primary_business": db_user.get('primary_business')
             }
         }
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+
+        cursor.execute(
+            f"SELECT {user_pk_column} AS user_id, email FROM users WHERE email = %s",
+            (payload.email,)
+        )
+        db_user = cursor.fetchone()
+
+        # Always return a generic success message to avoid account enumeration.
+        if not db_user:
+            cursor.close()
+            conn.close()
+            return {
+                "status": "success",
+                "detail": "If your account exists, a reset code has been issued."
+            }
+
+        user_id = db_user['user_id']
+        reset_code = generate_reset_code()
+        reset_code_hash = bcrypt.hashpw(reset_code.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        expires_at = datetime.utcnow() + timedelta(minutes=RESET_CODE_TTL_MINUTES)
+
+        cursor.execute(
+            """
+            UPDATE password_reset_codes
+            SET used_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s AND used_at IS NULL
+            """,
+            (user_id,)
+        )
+        cursor.execute(
+            """
+            INSERT INTO password_reset_codes (user_id, code_hash, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (user_id, reset_code_hash, expires_at)
+        )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        response = {
+            "status": "success",
+            "detail": f"Reset code generated. It expires in {RESET_CODE_TTL_MINUTES} minutes."
+        }
+        if RESET_CODE_DEV_MODE:
+            response["reset_code"] = reset_code
+
+        return response
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest):
+    try:
+        if len(payload.new_password.strip()) < 6:
+            raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+
+        cursor.execute(
+            f"SELECT {user_pk_column} AS user_id FROM users WHERE email = %s",
+            (payload.email,)
+        )
+        db_user = cursor.fetchone()
+        if not db_user:
+            raise HTTPException(status_code=400, detail="Invalid reset request")
+
+        cursor.execute(
+            """
+            SELECT id, code_hash, expires_at
+            FROM password_reset_codes
+            WHERE user_id = %s AND used_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (db_user['user_id'],)
+        )
+        reset_row = cursor.fetchone()
+        if not reset_row:
+            raise HTTPException(status_code=400, detail="No active reset code found")
+
+        expires_at = reset_row['expires_at']
+        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Reset code expired. Request a new one.")
+
+        is_valid_code = bcrypt.checkpw(payload.code.encode('utf-8'), reset_row['code_hash'].encode('utf-8'))
+        if not is_valid_code:
+            raise HTTPException(status_code=400, detail="Invalid reset code")
+
+        new_hash = bcrypt.hashpw(payload.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        cursor.execute(
+            f"UPDATE users SET password_hash = %s WHERE {user_pk_column} = %s",
+            (new_hash, db_user['user_id'])
+        )
+        cursor.execute(
+            "UPDATE password_reset_codes SET used_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (reset_row['id'],)
+        )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return {"status": "success", "detail": "Password reset successful. You can now log in."}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
