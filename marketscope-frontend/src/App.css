@@ -504,9 +504,9 @@ html[data-theme="light"] .leaflet-tooltip-top.competitor-name-tooltip:before {
   border-top-color: rgba(255, 255, 255, 0.7);
 }
 .pure-css-mark { position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; }
-.pure-pulse { position: absolute; width: 48px; height: 48px; background: rgba(168, 85, 247, 0.3); border-radius: 50%; animation: ping 1.5s infinite; }
-.pure-ring { position: absolute; width: 32px; height: 32px; background: rgba(147, 51, 234, 0.2); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 50%; backdrop-filter: blur(2px); box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
-.pure-pin { width: 32px; height: 32px; color: var(--accent); z-index: 10; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
+.pure-pulse { position: absolute; width: 52px; height: 52px; background: rgba(168, 85, 247, 0.24); border-radius: 50%; animation: ping 1.5s infinite; }
+.pure-ring { position: absolute; width: 34px; height: 34px; background: rgba(147, 51, 234, 0.18); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 50%; backdrop-filter: blur(2px); box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
+.pure-pin { width: 34px; height: 34px; color: var(--accent); z-index: 10; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); transition: transform var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard); }
 
 /* Dynamic Map Action Bar (Floating Lock Button) */
 .map-action-bar {
@@ -516,14 +516,14 @@ html[data-theme="light"] .leaflet-tooltip-top.competitor-name-tooltip:before {
 
 .map-analyze-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 60px; height: 60px; border-radius: 50%; padding: 0; background: var(--accent); color: white;
+  width: 62px; height: 62px; border-radius: 50%; padding: 0; background: linear-gradient(135deg, #a855f7, #9333ea); color: white;
   border: none; box-shadow: 0 10px 25px rgba(147, 51, 234, 0.5);
-  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard); cursor: pointer;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard), border-radius var(--motion-normal) var(--ease-standard); cursor: pointer;
 }
 
-.map-analyze-btn:active { transform: scale(0.85); }
-.map-analyze-btn:hover .analyze-check-icon { transform: scale(1.1) rotate(-3deg); }
-.analyze-check-icon { width: 28px; height: 28px; }
+.map-analyze-btn:active { transform: scale(0.9); }
+.map-analyze-btn:hover .analyze-check-icon { transform: scale(1.12) rotate(-4deg); }
+.analyze-check-icon { width: 26px; height: 26px; }
 .analyze-btn-text { display: none; }
 
 /* Out of Bounds Warning */
@@ -711,14 +711,15 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   }
 
   .map-analyze-btn {
-    width: auto; height: auto; border-radius: 50px;
-    padding: 16px 32px; gap: 12px;
+    width: auto; height: auto; border-radius: 999px;
+    padding: 16px 34px; gap: 12px;
+    box-shadow: 0 16px 38px rgba(147, 51, 234, 0.34);
   }
 
-  .map-analyze-btn:hover { transform: translateY(-4px); box-shadow: 0 15px 35px rgba(147, 51, 234, 0.6); }
+  .map-analyze-btn:hover { transform: translateY(-4px) scale(1.01); box-shadow: 0 18px 38px rgba(147, 51, 234, 0.6); }
   .map-analyze-btn:active { transform: translateY(-1px); }
   .analyze-check-icon { width: 22px; height: 22px; }
-  .analyze-btn-text { display: block; font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
+  .analyze-btn-text { display: block; font-size: 1rem; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; }
 
   .out-of-bounds-warning {
     top: auto;
@@ -889,8 +890,12 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   }
 
   .map-analyze-btn {
-    width: 56px;
-    height: 56px;
+    width: 58px;
+    height: 58px;
+  }
+
+  .map-analyze-btn:hover .analyze-check-icon {
+    transform: scale(1.14) rotate(-4deg);
   }
 
   .out-of-bounds-warning {
@@ -1334,6 +1339,7 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
 @media print {
   @page {
     margin: 8mm;
+    size: auto;
   }
 
   :root,
@@ -1351,19 +1357,59 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
   .icon-btn, .bottom-navbar, .map-action-bar, .app-header { 
     display: none !important; 
   }
+
+  .report-page::-webkit-scrollbar,
+  .report-page::-webkit-scrollbar-track,
+  .report-page::-webkit-scrollbar-thumb {
+    display: none !important;
+  }
   
   /* Unroll the scrollable area so everything prints */
   body, .app-container, .app-content, .report-page { 
     height: auto !important; 
     overflow: visible !important; 
-    position: relative !important;
+    position: static !important;
     background: #ffffff !important;
     color: #111 !important;
+  }
+
+  .report-page {
+    display: block !important;
+    z-index: auto !important;
+    isolation: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .report-header {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    padding: 0 0 10px 0 !important;
+    margin-bottom: 14px !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    border-bottom: 1px solid #e5e7eb !important;
+  }
+
+  .report-title {
+    font-size: 16pt !important;
   }
   
   .report-scroll-content { 
     overflow: visible !important; 
-    padding: 0 !important; 
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  .main-score-card,
+  .insight-box,
+  .report-map-container,
+  .data-card,
+  .disclaimer-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* Force background colors to print (e.g., progress bars) */
@@ -1390,11 +1436,38 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
   }
 
   .report-map-container {
-    height: 250px !important; /* Force a strict height for paper */
+    height: 220px !important; /* Force a strict height for paper */
     display: block !important;
     position: relative !important;
     overflow: hidden !important; /* Required to clip map tiles */
     border: 2px solid #ccc !important;
+  }
+
+  .report-map-legend {
+    padding: 8px 10px !important;
+    gap: 10px !important;
+    font-size: 9pt !important;
+  }
+
+  .score-ring-large {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  }
+
+  .progress-fill {
+    transition: none !important;
+  }
+
+  .detail-toggle,
+  .history-breakdown-toggle,
+  .map-mode-toggle,
+  .map-legend {
+    display: none !important;
+  }
+
+  .factor-details {
+    border-color: #d8b4fe !important;
+    background: #faf5ff !important;
+    color: #111827 !important;
   }
 
   .leaflet-container {
@@ -1424,6 +1497,10 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
 }
 
 @media print and (orientation: landscape) {
+  @page {
+    size: landscape;
+  }
+
   .main-score-card {
     padding: 14px 0 !important;
     margin-bottom: 12px !important;
@@ -1439,8 +1516,12 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
   }
 
   .report-map-container {
-    height: 190px !important;
+    height: 175px !important;
     margin-bottom: 12px !important;
+  }
+
+  .report-scroll-content {
+    padding-bottom: 0 !important;
   }
 }
 
