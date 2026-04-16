@@ -1799,8 +1799,34 @@ html[data-theme="light"] .admin-success-alert {
   color-scheme: dark;
 }
 
+.profile-form-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+  cursor: pointer;
+}
+
 html[data-theme="light"] .profile-form-input[type="date"] {
   color-scheme: light;
+}
+
+html[data-theme="light"] .profile-form-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+.admin-page .input-group input[type="date"] {
+  color-scheme: dark;
+}
+
+.admin-page .input-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+  cursor: pointer;
+}
+
+html[data-theme="light"] .admin-page .input-group input[type="date"] {
+  color-scheme: light;
+}
+
+html[data-theme="light"] .admin-page .input-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
 }
 
 .profile-upload-trigger {

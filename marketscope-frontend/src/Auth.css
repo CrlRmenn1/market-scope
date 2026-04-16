@@ -388,6 +388,23 @@
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
 }
 
+.input-group input[type="date"] {
+  color-scheme: dark;
+}
+
+.input-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.6);
+  cursor: pointer;
+}
+
+html[data-theme="light"] .input-group input[type="date"] {
+  color-scheme: light;
+}
+
+html[data-theme="light"] .input-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
 /* =========================================
    4. BUTTONS
    ========================================= */
