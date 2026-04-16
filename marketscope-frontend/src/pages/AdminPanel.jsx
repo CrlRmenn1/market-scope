@@ -8,6 +8,22 @@ const defaultMsmeForm = {
   longitude: ''
 };
 
+const BUSINESS_TYPE_OPTIONS = [
+  { value: 'coffee', label: 'Coffee Shops / Cafes' },
+  { value: 'print', label: 'Print / Copy Centers' },
+  { value: 'laundry', label: 'Laundry Shops' },
+  { value: 'carwash', label: 'Car Washes' },
+  { value: 'kiosk', label: 'Food Kiosks / Stalls' },
+  { value: 'water', label: 'Water Refilling Stations' },
+  { value: 'bakery', label: 'Bakeries' },
+  { value: 'pharmacy', label: 'Small Pharmacies' },
+  { value: 'barber', label: 'Barbershops / Salons' },
+  { value: 'moto', label: 'Motorcycle Repair Shops' },
+  { value: 'internet', label: 'Internet Cafes' },
+  { value: 'meat', label: 'Meat Shops' },
+  { value: 'hardware', label: 'Hardware / Construction Supplies' }
+];
+
 const mapUserToForm = (user) => ({
   full_name: user?.full_name || user?.name || '',
   email: user?.email || '',
@@ -295,7 +311,19 @@ export default function AdminPanel({ adminSession, onAdminLogout }) {
               </div>
               <div className="input-group">
                 <label>Business Type Key</label>
-                <input value={msmeForm.business_type} onChange={(e) => setMsmeForm((c) => ({ ...c, business_type: e.target.value }))} placeholder="coffee, pharmacy, bakery..." />
+                <select
+                  className="app-select"
+                  value={msmeForm.business_type}
+                  onChange={(e) => setMsmeForm((c) => ({ ...c, business_type: e.target.value }))}
+                >
+                  <option value="">Choose a business type...</option>
+                  {BUSINESS_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                  {msmeForm.business_type && !BUSINESS_TYPE_OPTIONS.some((option) => option.value === msmeForm.business_type) && (
+                    <option value={msmeForm.business_type}>{msmeForm.business_type} (legacy key)</option>
+                  )}
+                </select>
               </div>
               <div className="input-group">
                 <label>Latitude</label>
