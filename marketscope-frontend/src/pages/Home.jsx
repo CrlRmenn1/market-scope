@@ -166,32 +166,32 @@ export default function Home({ onMapTap }) {
   }, [selectedCoord]);
 
   return (
-    <div className="home-container relative page-enter overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.08),transparent_26%)]">
+    <div className="home-container relative page-enter">
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }} />
 
       {outOfBounds && (
-        <div className="out-of-bounds-warning rounded-full border border-red-300/25 bg-red-500 px-5 py-3 text-center text-sm font-semibold text-white shadow-[0_12px_30px_rgba(239,68,68,0.28)]">
+        <div className="out-of-bounds-warning">
           Click within Panabo City boundary only
         </div>
       )}
 
-      <div className="map-legend rounded-2xl border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_40px_rgba(2,6,23,0.35)] backdrop-blur-xl">
-        <h4 className="legend-title mb-3 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-slate-400">Panabo City Boundary</h4>
-        <div className="legend-item flex items-center gap-3 py-1.5">
+      <div className="map-legend">
+        <h4 className="legend-title">Panabo City Boundary</h4>
+        <div className="legend-item">
           <span className="legend-color boundary-line"></span>
-          <span className="legend-text text-sm font-medium text-slate-100">Scanning Area</span>
+          <span className="legend-text">Scanning Area</span>
         </div>
-        <div className="legend-item flex items-center gap-3 py-1.5">
+        <div className="legend-item">
           <span className="legend-color flood-critical"></span>
-          <span className="legend-text text-sm font-medium text-slate-100">Very High Flood Danger</span>
+          <span className="legend-text">Very High Flood Danger</span>
         </div>
-        <div className="legend-item flex items-center gap-3 py-1.5">
+        <div className="legend-item">
           <span className="legend-color flood-high"></span>
-          <span className="legend-text text-sm font-medium text-slate-100">High Flood Danger</span>
+          <span className="legend-text">High Flood Danger</span>
         </div>
-        <div className="legend-item flex items-center gap-3 py-1.5">
+        <div className="legend-item">
           <span className="legend-color flood-moderate"></span>
-          <span className="legend-text text-sm font-medium text-slate-100">Moderate Flood Danger</span>
+          <span className="legend-text">Moderate Flood Danger</span>
         </div>
       </div>
 
@@ -213,9 +213,9 @@ export default function Home({ onMapTap }) {
       </div>
 
       {selectedCoord && (
-        <div className="map-action-bar rounded-full border border-white/10 bg-slate-950/80 p-2 shadow-[0_20px_50px_rgba(2,6,23,0.35)] backdrop-blur-xl">
+        <div className="map-action-bar">
           <button
-            className="primary-btn map-analyze-btn flex items-center gap-3 rounded-full bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-4 py-4 text-white shadow-[0_14px_34px_rgba(168,85,247,0.35)] transition hover:-translate-y-0.5"
+            className="primary-btn map-analyze-btn"
             onClick={() => onMapTap(selectedCoord)}
           >
             <svg className="analyze-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
