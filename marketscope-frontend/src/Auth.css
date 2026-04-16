@@ -83,6 +83,8 @@
   background-color: transparent;
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   transition: background-color 0.3s ease;

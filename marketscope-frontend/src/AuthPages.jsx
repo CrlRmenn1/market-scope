@@ -30,6 +30,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const [isAvatarReading, setIsAvatarReading] = useState(false);
   const registerAvatarInputRef = useRef(null);
   const authContainerRef = useRef(null);
+  const authFormWrapperRef = useRef(null);
   const savedScrollTopRef = useRef(0);
   const viewportBaselineRef = useRef(0);
   const keyboardOpenRef = useRef(false);
@@ -78,7 +79,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
   useEffect(() => {
     const container = authContainerRef.current;
-    if (!container || currentView !== 'register') return;
+    const formWrapper = authFormWrapperRef.current;
+    if (!container || !formWrapper || currentView !== 'register') return;
 
     const isTextLikeField = (element) => {
       if (!element) return false;
@@ -88,7 +90,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
     const handleFocusIn = (event) => {
       if (isTextLikeField(event.target)) {
-        savedScrollTopRef.current = container.scrollTop;
+        savedScrollTopRef.current = formWrapper.scrollTop;
       }
     };
 
@@ -96,31 +98,23 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       window.setTimeout(() => {
         const activeElement = document.activeElement;
         if (!container.contains(activeElement)) {
-          container.scrollTo({ top: savedScrollTopRef.current, behavior: 'auto' });
+          formWrapper.scrollTo({ top: savedScrollTopRef.current, behavior: 'auto' });
         }
       }, 50);
     };
 
-    const blockManualScroll = (event) => {
-      event.preventDefault();
-    };
-
     container.addEventListener('focusin', handleFocusIn);
     container.addEventListener('focusout', restoreScrollPosition);
-    container.addEventListener('touchmove', blockManualScroll, { passive: false });
-    container.addEventListener('wheel', blockManualScroll, { passive: false });
 
     return () => {
       container.removeEventListener('focusin', handleFocusIn);
       container.removeEventListener('focusout', restoreScrollPosition);
-      container.removeEventListener('touchmove', blockManualScroll);
-      container.removeEventListener('wheel', blockManualScroll);
     };
   }, [currentView]);
 
   useEffect(() => {
-    const container = authContainerRef.current;
-    if (!container) return;
+    const formWrapper = authFormWrapperRef.current;
+    if (!formWrapper) return;
 
     const viewport = window.visualViewport;
     const getHeight = () => viewport?.height || window.innerHeight;
@@ -139,7 +133,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         document.body.scrollTop = 0;
 
         const restoreTop = currentView === 'register' ? savedScrollTopRef.current : 0;
-        container.scrollTo({ top: restoreTop, behavior: 'auto' });
+        formWrapper.scrollTo({ top: restoreTop, behavior: 'auto' });
       });
     };
 
@@ -618,7 +612,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
       </div>
 
-      <div className="auth-form-wrapper">
+      <div className="auth-form-wrapper" ref={authFormWrapperRef}>
         {currentView === 'register' && renderRegister()}
         {currentView === 'login' && renderLogin()}
       </div>
