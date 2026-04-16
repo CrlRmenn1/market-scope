@@ -168,9 +168,22 @@ export default function App() {
   }
 
   if (adminSession) {
+    const adminName = adminSession.email
+      ? `Admin (${adminSession.email.split('@')[0]})`
+      : 'Admin';
+
     return (
       <div className="app-container">
-        <main className="app-content">
+        <Header
+          theme={theme}
+          toggleTheme={toggleTheme}
+          onLogout={handleAdminLogout}
+          onGoHome={() => {}}
+          userName={adminName}
+          userAvatarUrl={null}
+        />
+
+        <main className="app-content admin-content">
           <AdminPanel adminSession={adminSession} onAdminLogout={handleAdminLogout} />
         </main>
       </div>

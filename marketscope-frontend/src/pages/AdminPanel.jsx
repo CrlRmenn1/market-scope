@@ -262,7 +262,6 @@ export default function AdminPanel({ adminSession, onAdminLogout }) {
       <div className="profile-card fade-in" style={{ textAlign: 'left' }}>
         <h2 className="profile-name" style={{ marginBottom: '6px' }}>Admin Panel</h2>
         <p className="profile-email">Manage users and custom MSME records without editing backend code.</p>
-        <button className="edit-btn mt-4" onClick={onAdminLogout}>Log Out Admin</button>
       </div>
 
       {errorMessage && <div className="error-alert mt-4">{errorMessage}</div>}
