@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { apiUrl } from '../api';
 
 const mapProfileToFormValues = (value) => ({
@@ -151,32 +151,32 @@ export default function Profile({ user, onProfileUpdate }) {
           </div>
           <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Most Successful</span>
-            <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.best?.business_type || '—'}</strong>
-            <span className="history-meta text-sm text-slate-400">Score {historyStats.best?.viability_score ?? '—'}</span>
+            <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.best?.business_type || 'â€”'}</strong>
+            <span className="history-meta text-sm text-slate-400">Score {historyStats.best?.viability_score ?? 'â€”'}</span>
           </div>
           <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Most Poor</span>
-            <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.worst?.business_type || '—'}</strong>
-            <span className="history-meta text-sm text-slate-400">Score {historyStats.worst?.viability_score ?? '—'}</span>
+            <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.worst?.business_type || 'â€”'}</strong>
+            <span className="history-meta text-sm text-slate-400">Score {historyStats.worst?.viability_score ?? 'â€”'}</span>
           </div>
         </div>
 
         <div className="settings-list mt-6 grid gap-4">
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">User ID</span>
-              <span className="settings-value">{userId || '—'}</span>
+              <span className="settings-value">{userId || 'â€”'}</span>
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Joined</span>
               <span className="settings-value">{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : (loading ? 'Loading...' : 'Unavailable')}</span>
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Full Name</span>
               {editing ? (
@@ -187,12 +187,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, full_name: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.full_name || profile?.name || '—'}</span>
+                <span className="settings-value">{profile?.full_name || profile?.name || 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Account Email</span>
               {editing ? (
@@ -203,12 +203,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, email: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.email || '—'}</span>
+                <span className="settings-value">{profile?.email || 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Cellphone Number</span>
               {editing ? (
@@ -219,12 +219,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, cellphone_number: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.cellphone_number || '—'}</span>
+                <span className="settings-value">{profile?.cellphone_number || 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Address</span>
               {editing ? (
@@ -235,12 +235,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, address: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.address || '—'}</span>
+                <span className="settings-value">{profile?.address || 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Birthday</span>
               {editing ? (
@@ -251,12 +251,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, birthday: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.birthday ? new Date(profile.birthday).toLocaleDateString() : '—'}</span>
+                <span className="settings-value">{profile?.birthday ? new Date(profile.birthday).toLocaleDateString() : 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Age</span>
               {editing ? (
@@ -269,12 +269,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, age: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.age ?? '—'}</span>
+                <span className="settings-value">{profile?.age ?? 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Primary Business Interest</span>
               {editing ? (
@@ -285,12 +285,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, primary_business: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.primary_business || '—'}</span>
+                <span className="settings-value">{profile?.primary_business || 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Profile Picture</span>
               {editing ? (
@@ -332,12 +332,12 @@ export default function Profile({ user, onProfileUpdate }) {
                   </span>
                 </>
               ) : (
-                <span className="settings-value profile-url-value text-sm text-slate-300">{profile?.avatar_url ? 'Uploaded image' : '—'}</span>
+                <span className="settings-value profile-url-value text-sm text-slate-300">{profile?.avatar_url ? 'Uploaded image' : 'â€”'}</span>
               )}
             </div>
           </div>
 
-          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="settings-item rounded-2xl border border-white/10 !bg-transparent p-4 !shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Last Refresh</span>
               <span className="settings-value">{new Date().toLocaleString()}</span>
@@ -359,3 +359,4 @@ export default function Profile({ user, onProfileUpdate }) {
     </div>
   );
 }
+
