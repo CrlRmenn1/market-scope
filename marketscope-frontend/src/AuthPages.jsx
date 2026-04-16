@@ -230,6 +230,15 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
         {isBurgerOpen && (
           <div className="burger-menu">
+            <button
+              className="burger-item"
+              onClick={() => {
+                setCurrentView('login');
+                setIsBurgerOpen(false);
+              }}
+            >
+              Login
+            </button>
             <button className="burger-item">About Us</button>
             <button className="burger-item">How Does This Work</button>
           </div>
