@@ -129,32 +129,32 @@ export default function Profile({ user, onProfileUpdate }) {
   };
 
   return (
-    <div className="profile-page page-enter min-h-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.14),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.1),transparent_28%)]">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-32 pt-4 sm:px-6 lg:px-8">
-        <div className="profile-card fade-in flex flex-col items-center gap-4 rounded-[32px] border border-white/10 bg-slate-950/80 p-6 text-center shadow-[0_24px_70px_rgba(2,6,23,0.28)] backdrop-blur-xl sm:flex-row sm:items-center sm:text-left">
+    <div className="profile-page page-enter min-h-full">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
+        <div className="profile-card fade-in flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-center shadow-sm sm:flex-row sm:items-center sm:text-left">
           {avatarForDisplay ? (
-            <img src={avatarForDisplay} alt="Profile" className="profile-avatar-image h-24 w-24 rounded-3xl border border-white/10 object-cover shadow-lg sm:h-28 sm:w-28" />
+            <img src={avatarForDisplay} alt="Profile" className="profile-avatar-image h-24 w-24 rounded-2xl border border-white/10 object-cover sm:h-28 sm:w-28" />
           ) : (
-            <div className="profile-avatar-large flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-2xl font-extrabold text-white shadow-lg sm:h-28 sm:w-28">{initials}</div>
+            <div className="profile-avatar-large flex h-24 w-24 items-center justify-center rounded-2xl bg-violet-600 text-2xl font-bold text-white sm:h-28 sm:w-28">{initials}</div>
           )}
           <div className="space-y-1">
             <h2 className="profile-name text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">{profile?.full_name || profile?.name || 'MarketScope User'}</h2>
             <p className="profile-email text-sm text-slate-300">{profile?.email || 'No email available'}</p>
-            <span className="profile-badge mt-2 inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Active Analyst</span>
+            <span className="profile-badge mt-2 inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-violet-200">Active Analyst</span>
           </div>
         </div>
 
         <div className="profile-stats-grid grid gap-4 sm:grid-cols-3">
-          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-[24px] border border-white/10 bg-white/5 p-5 shadow-[0_18px_44px_rgba(2,6,23,0.18)] backdrop-blur-xl">
+          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Total Businesses Analyzed</span>
             <strong className="profile-stat-number text-3xl font-semibold text-slate-50">{historyStats.total}</strong>
           </div>
-          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-[24px] border border-white/10 bg-white/5 p-5 shadow-[0_18px_44px_rgba(2,6,23,0.18)] backdrop-blur-xl">
+          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Most Successful</span>
             <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.best?.business_type || '—'}</strong>
             <span className="history-meta text-sm text-slate-400">Score {historyStats.best?.viability_score ?? '—'}</span>
           </div>
-          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-[24px] border border-white/10 bg-white/5 p-5 shadow-[0_18px_44px_rgba(2,6,23,0.18)] backdrop-blur-xl">
+          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Most Poor</span>
             <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.worst?.business_type || '—'}</strong>
             <span className="history-meta text-sm text-slate-400">Score {historyStats.worst?.viability_score ?? '—'}</span>
@@ -162,27 +162,27 @@ export default function Profile({ user, onProfileUpdate }) {
         </div>
 
         <div className="settings-list mt-6 grid gap-4">
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">User ID</span>
               <span className="settings-value">{userId || '—'}</span>
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Joined</span>
               <span className="settings-value">{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : (loading ? 'Loading...' : 'Unavailable')}</span>
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Full Name</span>
               {editing ? (
                 <input
                   type="text"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.full_name}
                   onChange={(e) => setFormValues((current) => ({ ...current, full_name: e.target.value }))}
                 />
@@ -192,13 +192,13 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Account Email</span>
               {editing ? (
                 <input
                   type="email"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.email}
                   onChange={(e) => setFormValues((current) => ({ ...current, email: e.target.value }))}
                 />
@@ -208,13 +208,13 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Cellphone Number</span>
               {editing ? (
                 <input
                   type="tel"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.cellphone_number}
                   onChange={(e) => setFormValues((current) => ({ ...current, cellphone_number: e.target.value }))}
                 />
@@ -224,13 +224,13 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Address</span>
               {editing ? (
                 <input
                   type="text"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.address}
                   onChange={(e) => setFormValues((current) => ({ ...current, address: e.target.value }))}
                 />
@@ -240,13 +240,13 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Birthday</span>
               {editing ? (
                 <input
                   type="date"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.birthday}
                   onChange={(e) => setFormValues((current) => ({ ...current, birthday: e.target.value }))}
                 />
@@ -256,7 +256,7 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Age</span>
               {editing ? (
@@ -264,7 +264,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   type="number"
                   min="0"
                   max="120"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.age}
                   onChange={(e) => setFormValues((current) => ({ ...current, age: e.target.value }))}
                 />
@@ -274,13 +274,13 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Primary Business Interest</span>
               {editing ? (
                 <input
                   type="text"
-                  className="settings-inline-input profile-form-input w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.primary_business}
                   onChange={(e) => setFormValues((current) => ({ ...current, primary_business: e.target.value }))}
                 />
@@ -290,7 +290,7 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Profile Picture</span>
               {editing ? (
@@ -321,7 +321,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   />
                   <button
                     type="button"
-                    className="upload-trigger profile-upload-trigger inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:-translate-y-0.5 hover:border-violet-400/40 hover:bg-violet-500/10"
+                    className="upload-trigger profile-upload-trigger inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10"
                     onClick={() => profileAvatarInputRef.current?.click()}
                     onMouseDown={(event) => event.preventDefault()}
                   >
@@ -337,7 +337,7 @@ export default function Profile({ user, onProfileUpdate }) {
             </div>
           </div>
 
-          <div className="settings-item rounded-[24px] border border-white/10 bg-slate-950/75 p-4 shadow-[0_18px_44px_rgba(2,6,23,0.2)] backdrop-blur-xl">
+          <div className="settings-item rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Last Refresh</span>
               <span className="settings-value">{new Date().toLocaleString()}</span>
@@ -345,12 +345,12 @@ export default function Profile({ user, onProfileUpdate }) {
           </div>
         </div>
 
-      <div className="profile-actions mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <button className="edit-btn inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:-translate-y-0.5 hover:border-violet-400/40 hover:bg-violet-500/10" onClick={handleEditToggle}>
+      <div className="profile-actions mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <button className="edit-btn inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10" onClick={handleEditToggle}>
           {editing ? 'Cancel Edit' : 'Edit'}
         </button>
         {editing && (
-          <button className="primary-btn inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_rgba(168,85,247,0.3)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" onClick={handleSave} disabled={saving}>
+          <button className="primary-btn inline-flex w-full items-center justify-center rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save'}
           </button>
         )}
