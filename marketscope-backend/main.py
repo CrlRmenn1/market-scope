@@ -978,13 +978,14 @@ def delete_user_history_item(user_id: int, history_id: int):
 # ==========================================
 # GEOSPATIAL ANALYSIS ROUTE
 # ==========================================
-PBF_PATH = "panabo.pbf"
+BACKEND_DIR = Path(__file__).resolve().parent
+PBF_PATH = BACKEND_DIR / "panabo.pbf"
 PBF_COMPETITOR_CACHE = {}
 PBF_ALL_COMPETITORS = []
 PBF_CACHE_LOADED = False
 PBF_CACHE_LOCK = Lock()
 PBF_LAYERS = ["points", "multipolygons", "lines", "multilinestrings"]
-PBF_SEARCH_COLUMNS = ["amenity", "shop", "healthcare", "building"]
+PBF_SEARCH_COLUMNS = ["amenity", "shop", "healthcare"]
 
 ZONING_LAYERS = {
     "commercial_proper": (7.3000, 7.3150, 125.6700, 125.6900),
@@ -1060,8 +1061,10 @@ def preload_hazard_layer_cache():
 
         candidates = [
             Path(__file__).resolve().parent / "flood-data" / "panabo_hazard_5yr.geojson",
+            Path(__file__).resolve().parent / "panabo_hazard_5yr.geojson",
             Path(__file__).resolve().parent.parent / "marketscope-frontend" / "public" / "panabo_hazard_5yr.geojson",
             Path(__file__).resolve().parent / "DavaoDelNorte" / "DavaoDelNorte_Flood_5year.shp",
+            Path(__file__).resolve().parent / "Davao_del_Norte.geojson",
         ]
 
         cache = []
@@ -1078,6 +1081,7 @@ def preload_hazard_layer_cache():
 
                 var_column = next((col for col in hazard_gdf.columns if str(col).strip().lower() == "var"), None)
                 if not var_column:
+                    print(f"Hazard layer skipped (missing Var field): {hazard_path}")
                     continue
 
                 clipped = hazard_gdf.copy()
@@ -1152,6 +1156,14 @@ def preload_hazard_layer_cache():
 
 
 def evaluate_hazard(lat, lon):
+    global HAZARD_LAYER_CACHE_LOADED
+
+    # Recover from stale empty caches (for example if startup happened before files existed).
+    if HAZARD_LAYER_CACHE_LOADED and not HAZARD_LAYER_CACHE:
+        with HAZARD_LAYER_LOCK:
+            if HAZARD_LAYER_CACHE_LOADED and not HAZARD_LAYER_CACHE:
+                HAZARD_LAYER_CACHE_LOADED = False
+
     preload_hazard_layer_cache()
 
     hazard_score = 25
@@ -1223,6 +1235,11 @@ PBF_NAME_KEYWORD_FALLBACK = {
     "hardware": ["hardware", "construction", "tools"],
 }
 
+COMMERCIAL_AMENITY_VALUES = {
+    "cafe", "restaurant", "fast_food", "food_court", "pharmacy", "bank", "fuel", "marketplace",
+    "car_wash", "clinic", "hospital", "internet_cafe", "bar", "pub", "biergarten"
+}
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371000 
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -1280,7 +1297,7 @@ def preload_pbf_competitor_cache():
         cache = {}
         all_competitors = []
 
-        if not os.path.exists(PBF_PATH):
+        if not PBF_PATH.exists():
             PBF_COMPETITOR_CACHE = cache
             PBF_ALL_COMPETITORS = all_competitors
             PBF_CACHE_LOADED = True
@@ -1289,7 +1306,7 @@ def preload_pbf_competitor_cache():
 
         for layer in PBF_LAYERS:
             try:
-                gdf = gpd.read_file(PBF_PATH, layer=layer, engine="pyogrio")
+                gdf = gpd.read_file(str(PBF_PATH), layer=layer, engine="pyogrio")
             except Exception:
                 continue
 
@@ -1351,6 +1368,40 @@ def get_name_keyword_pbf_competitors(business_type):
     return matches
 
 
+def get_generic_nearby_pbf_competitors(lat, lon, radius_meters, limit=80):
+    if not PBF_CACHE_LOADED:
+        preload_pbf_competitor_cache()
+
+    nearby = []
+    for item in PBF_ALL_COMPETITORS:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+
+        tag_key = normalize_osm_value(item.get("tag_key"))
+        tag_value = normalize_osm_value(item.get("tag_value"))
+        if tag_key == "shop":
+            pass
+        elif tag_key == "healthcare":
+            pass
+        elif tag_key == "amenity" and tag_value in COMMERCIAL_AMENITY_VALUES:
+            pass
+        else:
+            continue
+
+        item_lat = to_finite_number(item.get("lat"))
+        item_lon = to_finite_number(item.get("lon"))
+        if item_lat is None or item_lon is None:
+            continue
+
+        if calculate_distance(lat, lon, item_lat, item_lon) <= radius_meters:
+            nearby.append(item)
+            if len(nearby) >= limit:
+                break
+
+    return nearby
+
+
 def _append_competitor_if_within_radius(competitors_list, dedupe_keys, source_item, origin_lat, origin_lon, radius_meters, default_name):
     p_lat = to_finite_number(source_item.get("lat")) if isinstance(source_item, dict) else None
     p_lon = to_finite_number(source_item.get("lon")) if isinstance(source_item, dict) else None
@@ -1366,7 +1417,7 @@ def _append_competitor_if_within_radius(competitors_list, dedupe_keys, source_it
     if isinstance(source_item, dict):
         competitor_name = source_item.get("name")
 
-    normalized_name = (competitor_name or default_name or "").strip()
+    normalized_name = str(competitor_name or default_name or "").strip()
     dedupe_key = (round(p_lat, 6), round(p_lon, 6), normalized_name.lower())
     if dedupe_key in dedupe_keys:
         return
@@ -1747,6 +1798,7 @@ def perform_analysis(data: AnalysisRequest):
     # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
     competitors_list = []
     competitor_dedupe = set()
+    used_generic_competitor_fallback = False
 
     try:
         cached_competitors = []
@@ -1766,6 +1818,19 @@ def perform_analysis(data: AnalysisRequest):
     except Exception as e:
         print(f"Spatial Scan Error: {e}")
 
+    # Scan PostgreSQL Database and include them as direct competitors.
+    custom_shops = fetch_custom_msmes(data.business_type)
+    for shop in custom_shops:
+        _append_competitor_if_within_radius(
+            competitors_list,
+            competitor_dedupe,
+            {"lat": shop.get('latitude'), "lon": shop.get('longitude'), "name": shop.get('name')},
+            data.lat,
+            data.lon,
+            data.radius,
+            f"Local {sme_profile['name']}"
+        )
+
     # Local-only fallback: match Panabo OSM features by business name keywords.
     if not competitors_list:
         for competitor in get_name_keyword_pbf_competitors(data.business_type):
@@ -1779,20 +1844,24 @@ def perform_analysis(data: AnalysisRequest):
                 f"Nearby {sme_profile['name']}"
             )
 
-    # Scan PostgreSQL Database
-    custom_shops = fetch_custom_msmes(data.business_type)
-    for shop in custom_shops:
-        _append_competitor_if_within_radius(
-            competitors_list,
-            competitor_dedupe,
-            {"lat": shop.get('latitude'), "lon": shop.get('longitude'), "name": shop.get('name')},
-            data.lat,
-            data.lon,
-            data.radius,
-            f"Local {sme_profile['name']}"
-        )
+    # Strict competitors are the only ones used for saturation scoring.
+    strict_competitors_found = len(competitors_list)
 
-    competitors_found = len(competitors_list)
+    # Final local fallback: show nearby named commercial OSM entities as map context only.
+    if strict_competitors_found == 0:
+        used_generic_competitor_fallback = True
+        for competitor in get_generic_nearby_pbf_competitors(data.lat, data.lon, data.radius, limit=30):
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                data.lat,
+                data.lon,
+                data.radius,
+                "Nearby Business"
+            )
+
+    competitors_found = strict_competitors_found
 
     # Normalize saturation score to 0-25 scale
     # Lower competitors = higher score (less saturated = better)
@@ -1847,8 +1916,10 @@ def perform_analysis(data: AnalysisRequest):
 
     saturation_details = (
         f"The algorithm scanned local Panabo OSM data from panabo.pbf plus local MSME entries for matching businesses within {data.radius} meters. "
-        + f"It counted competitors and then mapped that count to a 0-25 score: 0 competitors => 25, 1 competitor => 20, 2-3 => 15, 4-5 => 10, 6+ => 5."
+        + f"It counted direct competitors and then mapped that count to a 0-25 score: 0 competitors => 25, 1 competitor => 20, 2-3 => 15, 4-5 => 10, 6+ => 5."
     )
+    if used_generic_competitor_fallback:
+        saturation_details += " No direct category matches were found, so nearby commercial businesses are shown on the map as context only."
 
     zoning_details = (
         "The zoning score is derived by checking whether the target coordinates fall inside Panabo commercial or industrial polygon bounds. "
