@@ -4,9 +4,11 @@ import 'leaflet/dist/leaflet.css';
 
 export default function Report({ data, targetCoords, onClose }) {
   const mapRef = useRef(null);
+  const reportExportRef = useRef(null);
   const mapInstance = useRef(null);
   const mapFeaturesRef = useRef(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const fitMapToFeatures = () => {
     if (!mapInstance.current) return;
@@ -48,6 +50,7 @@ export default function Report({ data, targetCoords, onClose }) {
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         keepBuffer: 8,
         updateWhenIdle: true,
+        crossOrigin: true,
         // Use a dark 1x1 pixel fallback tile if a provider tile fails to load.
         errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAACwAAAAAAQABAAACAUwAOw=='
       }).addTo(mapInstance.current);
@@ -119,25 +122,6 @@ export default function Report({ data, targetCoords, onClose }) {
   useEffect(() => {
     if (!mapInstance.current || !targetCoords?.lat || !targetCoords?.lng) return;
 
-    const recenterForPrint = () => {
-      if (!mapInstance.current) return;
-      mapInstance.current.invalidateSize(false);
-      fitMapToFeatures();
-
-      // Some browsers apply print layout asynchronously; run one extra pass.
-      window.setTimeout(() => {
-        if (!mapInstance.current) return;
-        mapInstance.current.invalidateSize(false);
-        fitMapToFeatures();
-      }, 120);
-    };
-
-    const recoverAfterPrint = () => {
-      if (!mapInstance.current) return;
-      mapInstance.current.invalidateSize(false);
-      fitMapToFeatures();
-    };
-
     const onResize = () => {
       if (!mapInstance.current) return;
       mapInstance.current.invalidateSize(false);
@@ -152,13 +136,9 @@ export default function Report({ data, targetCoords, onClose }) {
       resizeObserver.observe(mapRef.current);
     }
 
-    window.addEventListener('beforeprint', recenterForPrint);
-    window.addEventListener('afterprint', recoverAfterPrint);
     window.addEventListener('resize', onResize);
 
     return () => {
-      window.removeEventListener('beforeprint', recenterForPrint);
-      window.removeEventListener('afterprint', recoverAfterPrint);
       window.removeEventListener('resize', onResize);
       if (resizeObserver) {
         resizeObserver.disconnect();
@@ -225,33 +205,97 @@ export default function Report({ data, targetCoords, onClose }) {
   };
 
   
-  // Trigger the browser's native print/PDF dialog with a custom filename
-  const handlePrint = () => {
-    // 1. Save the original tab title so we can restore it later
-    const originalTitle = document.title;
+  const handlePrint = async () => {
+    if (!reportExportRef.current || isExportingPdf) return;
 
-    // 2. Clean up the business name for a file format (e.g., "Coffee Shops" -> "Coffee_Shops")
-    const safeName = business_type.replace(/\s+/g, '_');
+    setIsExportingPdf(true);
 
-    // 3. Temporarily change the document title. 
-    // The browser automatically uses this exact string as the default PDF file name!
-    document.title = `MarketScope_${safeName}_Dossier`;
+    const safeName = (business_type || 'Report').replace(/\s+/g, '_');
 
-    // 4. Trigger the Print/Save As dialog
-    window.print();
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default;
 
-    // 5. Instantly change the title back so the user's browser tab goes back to normal
-    document.title = originalTitle;
+      await html2pdf()
+        .set({
+          margin: [8, 8, 8, 8],
+          filename: `MarketScope_${safeName}_Dossier.pdf`,
+          image: { type: 'jpeg', quality: 0.96 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            scrollX: 0,
+            scrollY: 0,
+            onclone: (doc) => {
+              const style = doc.createElement('style');
+              style.textContent = `
+                .pdf-hide { display: none !important; }
+                .report-page {
+                  position: static !important;
+                  inset: auto !important;
+                  height: auto !important;
+                  overflow: visible !important;
+                  background: #ffffff !important;
+                  color: #111827 !important;
+                  display: block !important;
+                }
+                .report-header {
+                  position: static !important;
+                  top: auto !important;
+                  z-index: auto !important;
+                  padding: 0 0 12px !important;
+                  margin-bottom: 14px !important;
+                  background: transparent !important;
+                  border-bottom: 1px solid #e5e7eb !important;
+                  backdrop-filter: none !important;
+                }
+                .report-scroll-content {
+                  padding: 0 !important;
+                  max-width: none !important;
+                  width: 100% !important;
+                }
+                .main-score-card,
+                .insight-box,
+                .report-map-container,
+                .data-card,
+                .disclaimer-card {
+                  break-inside: avoid;
+                  page-break-inside: avoid;
+                }
+                .progress-fill { transition: none !important; }
+              `;
+              doc.head.appendChild(style);
+            }
+          },
+          jsPDF: {
+            unit: 'mm',
+            format: 'a4',
+            orientation: 'portrait'
+          },
+          pagebreak: {
+            mode: ['css', 'legacy'],
+            avoid: ['.main-score-card', '.insight-box', '.report-map-container', '.data-card', '.disclaimer-card']
+          }
+        })
+        .from(reportExportRef.current)
+        .save();
+    } catch (error) {
+      console.error('PDF export failed:', error);
+      window.alert('Unable to generate PDF right now. Please try again.');
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   return (
-    <div className="report-page slide-up bg-[var(--bg-app)]">
+    <div ref={reportExportRef} className="report-page slide-up bg-[var(--bg-app)]">
       <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-4 py-4 backdrop-blur-md sm:px-5">
         <h2 className="report-title text-lg font-semibold text-[var(--text-main)]">Analysis Dossier</h2>
 
-        <div className="flex items-center gap-2">
+        <div className="pdf-hide flex items-center gap-2">
           
-          <button className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={handlePrint} title="Save as PDF">
+          <button className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={handlePrint} title={isExportingPdf ? 'Generating PDF...' : 'Save as PDF'} disabled={isExportingPdf}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 6 2 18 2 18 9"></polyline>
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
