@@ -1019,6 +1019,7 @@ PANABO_BOUNDS = (7.269, 7.333, 125.636, 125.742)
 HAZARD_LAYER_CACHE = []
 HAZARD_LAYER_CACHE_LOADED = False
 HAZARD_LAYER_LOCK = Lock()
+HAZARD_LAYER_SOURCE = None
 
 HAZARD_LAYER_LABELS = {
     1: {"name": "Very High Flood Hazard (5-Year Return Period)", "score": 5},
@@ -1041,13 +1042,14 @@ def _resolve_hazard_var(row, column_name):
 
 
 def preload_hazard_layer_cache():
-    global HAZARD_LAYER_CACHE, HAZARD_LAYER_CACHE_LOADED
+    global HAZARD_LAYER_CACHE, HAZARD_LAYER_CACHE_LOADED, HAZARD_LAYER_SOURCE
 
     if HAZARD_LAYER_CACHE_LOADED:
         return
 
     if gpd is None or Point is None or box is None or unary_union is None:
         HAZARD_LAYER_CACHE = []
+        HAZARD_LAYER_SOURCE = None
         HAZARD_LAYER_CACHE_LOADED = True
         print("Hazard layer cache skipped: geopandas/shapely is unavailable")
         return
@@ -1135,6 +1137,7 @@ def preload_hazard_layer_cache():
                     )
 
                 if cache:
+                    HAZARD_LAYER_SOURCE = str(hazard_path)
                     break
             except Exception as e:
                 print(f"Hazard layer load warning for {hazard_path}: {e}")
@@ -1142,7 +1145,10 @@ def preload_hazard_layer_cache():
         cache.sort(key=lambda item: item["score"])
         HAZARD_LAYER_CACHE = cache
         HAZARD_LAYER_CACHE_LOADED = True
-        print(f"Hazard layer cache loaded: {len(HAZARD_LAYER_CACHE)} polygon features")
+        if HAZARD_LAYER_CACHE:
+            print(f"Hazard layer cache loaded: {len(HAZARD_LAYER_CACHE)} polygon features from {HAZARD_LAYER_SOURCE}")
+        else:
+            print("Hazard layer cache loaded with 0 polygon features")
 
 
 def evaluate_hazard(lat, lon):
@@ -1171,17 +1177,7 @@ def evaluate_hazard(lat, lon):
 
         return hazard_score, hazard_status, hazard_matches
 
-    # Fallback mode if GIS polygon layer could not be loaded.
-    for zone in HAZARD_ZONES["flood"]:
-        if check_inside_bounds(lat, lon, zone["bounds"]):
-            hazard_matches.append(f"{zone['name']} (Flood)")
-            if zone["score"] < hazard_score:
-                hazard_score = zone["score"]
-                hazard_status = f"{zone['name']} (Flood)"
-
-    if hazard_matches and hazard_status not in hazard_matches:
-        hazard_matches.insert(0, hazard_status)
-
+    # Do not fallback to temporary rectangular proxies; avoid false positives.
     return hazard_score, hazard_status, hazard_matches
 
 PANABO_ANCHORS = [
@@ -1740,10 +1736,13 @@ def perform_analysis(data: AnalysisRequest):
 
     # FACTOR 2: HAZARD
     hazard_score, hazard_status, hazard_matches = evaluate_hazard(data.lat, data.lon)
-    hazard_description = (
-        "Hazard evaluation uses official Panabo-clipped flood polygons from the Davao del Norte 5-year return period layer. "
-        + ("Matched zone: " + hazard_matches[0] + "." if hazard_matches else "No mapped hazard zone matched.")
-    )
+    if HAZARD_LAYER_CACHE:
+        hazard_description = (
+            "Hazard evaluation uses official Panabo-clipped flood polygons from the Davao del Norte 5-year return period layer. "
+            + ("Matched zone: " + hazard_matches[0] + "." if hazard_matches else "No mapped hazard zone matched.")
+        )
+    else:
+        hazard_description = "Hazard layer is unavailable, so no hazard class was applied to this scan."
 
     # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
     competitors_list = []
@@ -1856,11 +1855,19 @@ def perform_analysis(data: AnalysisRequest):
         + "If the site is inside the commercial polygon, it receives 25. If it is in the industrial support polygon and the business fits that category, it also receives 25; otherwise it is penalized."
     )
 
-    hazard_details = (
-        "The hazard score is based on official Panabo-clipped flood polygons from the Davao del Norte 5-year return period dataset. "
-        + ("Matched zone: " + hazard_matches[0] + ". " if hazard_matches else "No mapped flood zone matched. ")
-        + "Hazard classes are made mutually exclusive by priority (Very High > High > Moderate), so each point can map to at most one zone."
-    )
+    if HAZARD_LAYER_CACHE:
+        source_label = HAZARD_LAYER_SOURCE or "unknown source"
+        hazard_details = (
+            "The hazard score is based on official Panabo-clipped flood polygons from the Davao del Norte 5-year return period dataset. "
+            + f"Loaded source: {source_label}. "
+            + ("Matched zone: " + hazard_matches[0] + ". " if hazard_matches else "No mapped flood zone matched. ")
+            + "Hazard classes are made mutually exclusive by priority (Very High > High > Moderate), so each point can map to at most one zone."
+        )
+    else:
+        hazard_details = (
+            "No valid hazard polygon layer with a Var flood-class field was loaded, so the engine returned Low Risk / Safe "
+            "instead of using temporary placeholder bounds."
+        )
 
     breakdown_payload = {
         "zoning": {
