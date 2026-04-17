@@ -15,6 +15,42 @@ const normalizeCoords = (coords) => {
   return { lat, lng };
 };
 
+const hazardNameByVar = {
+  1: 'Very High Flood Hazard (5-Year)',
+  2: 'High Flood Hazard (5-Year)',
+  3: 'Moderate Flood Hazard (5-Year)'
+};
+
+const getHazardStyle = (hazardVar) => {
+  if (hazardVar === 1) {
+    return {
+      color: '#dc2626',
+      weight: 2.5,
+      fillColor: '#ef4444',
+      fillOpacity: 0.28,
+      opacity: 0.95
+    };
+  }
+  if (hazardVar === 2) {
+    return {
+      color: '#f97316',
+      weight: 1.7,
+      fillColor: '#fb7185',
+      fillOpacity: 0.2,
+      opacity: 0.85,
+      dashArray: '6 6'
+    };
+  }
+  return {
+    color: '#f59e0b',
+    weight: 1.5,
+    fillColor: '#fbbf24',
+    fillOpacity: 0.14,
+    opacity: 0.8,
+    dashArray: '6 6'
+  };
+};
+
 export default function Report({ data, targetCoords, onClose }) {
   const mapRef = useRef(null);
   const reportExportRef = useRef(null);
@@ -129,34 +165,36 @@ export default function Report({ data, targetCoords, onClose }) {
         });
       }
 
-      // Draw Hazard Zone Rectangles
-      // Actual hazard zones from Davao del Norte NOAH shapefile (5-year return period)
-      const HAZARD_ZONES = [
-        { name: 'Very High Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.742], score: 5 },
-        { name: 'High Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.73958735603416], score: 12 },
-        { name: 'Moderate Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.7389400572897], score: 18 }
-      ];
-
-      HAZARD_ZONES.forEach((zone) => {
-        const [south, west, north, east] = zone.bounds;
-        const rectangle = L.rectangle(
-          [[south, west], [north, east]],
-          {
-            color: zone.score <= 5 ? '#dc2626' : zone.score <= 12 ? '#f97316' : '#f59e0b',
-            weight: zone.score <= 5 ? 2.5 : 1.5,
-            fillColor: zone.score <= 5 ? '#ef4444' : zone.score <= 12 ? '#fb7185' : '#fbbf24',
-            fillOpacity: zone.score <= 5 ? 0.26 : zone.score <= 12 ? 0.18 : 0.12,
-            opacity: zone.score <= 5 ? 0.95 : 0.82,
-            dashArray: zone.score <= 5 ? null : '6 6'
+      fetch('/panabo_hazard_5yr.geojson')
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Unable to load hazard zone layer');
           }
-        );
-        rectangle.bindTooltip(zone.name, {
-          direction: 'center',
-          permanent: false,
-          className: 'hazard-zone-tooltip'
+          return response.json();
+        })
+        .then((geojson) => {
+          if (!mapInstance.current || !mapFeaturesRef.current) return;
+
+          const hazardLayer = L.geoJSON(geojson, {
+            style: (feature) => {
+              const hazardVar = Number(feature?.properties?.Var);
+              return getHazardStyle(hazardVar);
+            },
+            onEachFeature: (feature, layerInstance) => {
+              const hazardVar = Number(feature?.properties?.Var);
+              const zoneName = hazardNameByVar[hazardVar] || 'Flood Hazard Zone';
+              layerInstance.bindTooltip(zoneName, {
+                className: 'hazard-zone-tooltip'
+              });
+            }
+          });
+
+          hazardLayer.addTo(mapFeaturesRef.current);
+          fitMapToFeatures();
+        })
+        .catch((error) => {
+          console.error(error);
         });
-        rectangle.addTo(elementsGroup);
-      });
 
       // Keep map camera responsive to container changes and centered around features.
       mapInstance.current.whenReady(() => {
