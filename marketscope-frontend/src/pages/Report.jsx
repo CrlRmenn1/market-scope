@@ -129,6 +129,35 @@ export default function Report({ data, targetCoords, onClose }) {
         });
       }
 
+      // Draw Hazard Zone Rectangles
+      // Actual hazard zones from Davao del Norte NOAH shapefile (5-year return period)
+      const HAZARD_ZONES = [
+        { name: 'Very High Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.742], score: 5 },
+        { name: 'High Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.73958735603416], score: 12 },
+        { name: 'Moderate Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.7389400572897], score: 18 }
+      ];
+
+      HAZARD_ZONES.forEach((zone) => {
+        const [south, west, north, east] = zone.bounds;
+        const rectangle = L.rectangle(
+          [[south, west], [north, east]],
+          {
+            color: zone.score <= 5 ? '#dc2626' : zone.score <= 12 ? '#f97316' : '#f59e0b',
+            weight: zone.score <= 5 ? 2.5 : 1.5,
+            fillColor: zone.score <= 5 ? '#ef4444' : zone.score <= 12 ? '#fb7185' : '#fbbf24',
+            fillOpacity: zone.score <= 5 ? 0.26 : zone.score <= 12 ? 0.18 : 0.12,
+            opacity: zone.score <= 5 ? 0.95 : 0.82,
+            dashArray: zone.score <= 5 ? null : '6 6'
+          }
+        );
+        rectangle.bindTooltip(zone.name, {
+          direction: 'center',
+          permanent: false,
+          className: 'hazard-zone-tooltip'
+        });
+        rectangle.addTo(elementsGroup);
+      });
+
       // Keep map camera responsive to container changes and centered around features.
       mapInstance.current.whenReady(() => {
         mapInstance.current.invalidateSize(false);
@@ -214,8 +243,8 @@ export default function Report({ data, targetCoords, onClose }) {
 
     if (key === 'hazard') {
       return (
-        'Hazard is scored by comparing the location to temporary Panabo flood and landslide susceptibility zones. ' +
-        'The lowest matched zone score becomes the factor result, so a moderate score indicates a mid-level risk proxy zone.'
+        'Hazard is scored by comparing the location to official Davao del Norte 5-year flood return period zones from the NOAH hazard assessment layer. ' +
+        'The lowest matched zone score becomes the factor result: Very High (score 5), High (score 12), or Moderate (score 18).'
       );
     }
 

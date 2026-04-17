@@ -17,10 +17,11 @@ const PANABO_BOUNDS = {
   east: 125.742
 };
 
+// Actual hazard zones from Davao del Norte NOAH 5-year flood return period shapefile
 const FLOOD_ZONES = [
-  { name: 'Very High Flood Susceptibility', bounds: [7.3080, 125.6750, 7.3120, 125.6800], score: 0 },
-  { name: 'High Flood Susceptibility', bounds: [7.3050, 125.6720, 7.3140, 125.6850], score: 10 },
-  { name: 'Moderate Flood Susceptibility', bounds: [7.2990, 125.6700, 7.3150, 125.6860], score: 18 }
+  { name: 'Very High Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.742], score: 5 },
+  { name: 'High Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.73958735603416], score: 12 },
+  { name: 'Moderate Flood Hazard (5-Year)', bounds: [7.269, 125.636, 7.333, 125.7389400572897], score: 18 }
 ];
 
 export default function Home({ onMapTap }) {
