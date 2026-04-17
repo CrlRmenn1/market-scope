@@ -1,6 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useRef, useState } from 'react';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -15,11 +13,36 @@ const normalizeCoords = (coords) => {
   return { lat, lng };
 };
 
+const toRadians = (value) => (value * Math.PI) / 180;
+
+const distanceMeters = (a, b) => {
+  if (!a || !b) return null;
+  const earthRadius = 6371000;
+  const dLat = toRadians(b.lat - a.lat);
+  const dLng = toRadians(b.lng - a.lng);
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+
+  const haversine =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+  return 2 * earthRadius * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
+
+const formatMeters = (value) => {
+  if (!Number.isFinite(value)) return 'n/a';
+  if (value >= 1000) return `${(value / 1000).toFixed(2)} km`;
+  return `${Math.round(value)} m`;
+};
+
+const formatCoord = (value) => {
+  if (!Number.isFinite(value)) return 'n/a';
+  return value.toFixed(5);
+};
+
 export default function Report({ data, targetCoords, onClose }) {
-  const mapRef = useRef(null);
   const reportExportRef = useRef(null);
-  const mapInstance = useRef(null);
-  const mapFeaturesRef = useRef(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isPdfSettingsOpen, setIsPdfSettingsOpen] = useState(false);
@@ -32,155 +55,54 @@ export default function Report({ data, targetCoords, onClose }) {
   });
   const resolvedTargetCoords = normalizeCoords(targetCoords) || normalizeCoords(data?.target_coords);
 
-  const fitMapToFeatures = () => {
-    if (!mapInstance.current) return;
-
-    const group = mapFeaturesRef.current;
-    if (group && group.getLayers().length > 0) {
-      const bounds = group.getBounds();
-      if (bounds && bounds.isValid()) {
-        mapInstance.current.fitBounds(bounds, {
-          padding: [32, 32],
-          maxZoom: 16,
-          animate: false
-        });
-        return;
-      }
-    }
-
-    if (resolvedTargetCoords) {
-      mapInstance.current.setView([resolvedTargetCoords.lat, resolvedTargetCoords.lng], 15, { animate: false });
-    }
-  };
-
-  useEffect(() => {
-    if (data && resolvedTargetCoords && mapRef.current && !mapInstance.current) {
-      
-      mapInstance.current = L.map(mapRef.current, {
-        center: [resolvedTargetCoords.lat, resolvedTargetCoords.lng],
-        zoom: 15, 
-        zoomControl: false,
-        dragging: true,
-        touchZoom: true,
-        scrollWheelZoom: true,
-        doubleClickZoom: true,
-        boxZoom: true,
-        keyboard: false,
-        maxBoundsViscosity: 1.0
-      });
-
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        keepBuffer: 8,
-        updateWhenIdle: true,
-        crossOrigin: true,
-        // Use a dark 1x1 pixel fallback tile if a provider tile fails to load.
-        errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAACwAAAAAAQABAAACAUwAOw=='
-      }).addTo(mapInstance.current);
-
-      const elementsGroup = L.featureGroup().addTo(mapInstance.current);
-      mapFeaturesRef.current = elementsGroup;
-
-      // Draw Dynamic Radius
-      L.circle([resolvedTargetCoords.lat, resolvedTargetCoords.lng], {
-        color: '#a855f7', fillColor: '#a855f7', fillOpacity: 0.15, radius: data.radius_meters || 340
-      }).addTo(elementsGroup);
-
-      // Draw Target Pin
-      const targetIcon = L.divIcon({
-        className: 'custom-pin-wrapper',
-        html: `
-          <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
-            <circle cx="17" cy="17" r="15" fill="rgba(168,85,247,0.18)" stroke="rgba(168,85,247,0.65)" stroke-width="2" />
-            <circle cx="17" cy="17" r="6" fill="var(--accent)" stroke="white" stroke-width="2" />
-            <circle cx="17" cy="17" r="1.5" fill="white" />
-          </svg>
-        `,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17]
-      });
-      L.marker([resolvedTargetCoords.lat, resolvedTargetCoords.lng], { icon: targetIcon }).addTo(elementsGroup);
-
-      // Draw Competitor Pins
-      if (data.competitor_locations && data.competitor_locations.length > 0) {
-        const compIcon = L.divIcon({
-          className: 'competitor-pin',
-          html: `<div style="width:14px; height:14px; background:#ef4444; border:2px solid white; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
-          iconSize: [14, 14], iconAnchor: [7, 7]
-        });
-
-        data.competitor_locations.forEach((comp, index) => {
-          const compCoords = normalizeCoords(comp);
-          if (!compCoords) return;
-
-          const competitorName =
-            (typeof comp?.name === 'string' && comp.name.trim())
-              ? comp.name.trim()
-              : `Competitor ${index + 1}`;
-
-          const marker = L.marker([compCoords.lat, compCoords.lng], { icon: compIcon }).addTo(elementsGroup);
-          marker.bindTooltip(competitorName, {
-            direction: 'top',
-            offset: [0, -8],
-            opacity: 0.92,
-            className: 'competitor-name-tooltip',
-            permanent: true,
-            interactive: false
-          });
-        });
-      }
-
-      // Keep map camera responsive to container changes and centered around features.
-      mapInstance.current.whenReady(() => {
-        mapInstance.current.invalidateSize(false);
-        fitMapToFeatures();
-
-        // Constrain panning near analyzed features to avoid dragging into blank tile regions.
-        const bounds = elementsGroup.getBounds();
-        if (bounds && bounds.isValid()) {
-          mapInstance.current.setMaxBounds(bounds.pad(0.45));
-        }
-      });
-    }
-
-    return () => {
-      mapFeaturesRef.current = null;
-      if (mapInstance.current) {
-        mapInstance.current.remove();
-        mapInstance.current = null;
-      }
-    };
-  }, [data, resolvedTargetCoords]);
-
-  useEffect(() => {
-    if (!mapInstance.current || !resolvedTargetCoords) return;
-
-    const onResize = () => {
-      if (!mapInstance.current) return;
-      mapInstance.current.invalidateSize(false);
-      fitMapToFeatures();
-    };
-
-    let resizeObserver = null;
-    if (mapRef.current && window.ResizeObserver) {
-      resizeObserver = new window.ResizeObserver(() => {
-        onResize();
-      });
-      resizeObserver.observe(mapRef.current);
-    }
-
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      window.removeEventListener('resize', onResize);
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-    };
-  }, [resolvedTargetCoords]);
-
   if (!data) return null;
 
   const { viability_score, competitors_found, breakdown, business_type, radius_meters, insight } = data;
+  const normalizedCompetitors = Array.isArray(data.competitor_locations)
+    ? data.competitor_locations
+      .map((entry, index) => {
+        const coords = normalizeCoords(entry);
+        if (!coords) return null;
+        const name = typeof entry?.name === 'string' && entry.name.trim().length > 0
+          ? entry.name.trim()
+          : `Competitor ${index + 1}`;
+        return { ...coords, name };
+      })
+      .filter(Boolean)
+    : [];
+
+  const activeRadiusMeters = Number.isFinite(Number(radius_meters)) ? Number(radius_meters) : 340;
+  const nearestCompetitorMeters = resolvedTargetCoords && normalizedCompetitors.length > 0
+    ? Math.min(...normalizedCompetitors.map((comp) => distanceMeters(resolvedTargetCoords, comp)).filter(Number.isFinite))
+    : null;
+  const innerRingCount = resolvedTargetCoords
+    ? normalizedCompetitors.filter((comp) => {
+      const d = distanceMeters(resolvedTargetCoords, comp);
+      return Number.isFinite(d) && d <= activeRadiusMeters * 0.33;
+    }).length
+    : 0;
+  const middleRingCount = resolvedTargetCoords
+    ? normalizedCompetitors.filter((comp) => {
+      const d = distanceMeters(resolvedTargetCoords, comp);
+      return Number.isFinite(d) && d > activeRadiusMeters * 0.33 && d <= activeRadiusMeters * 0.66;
+    }).length
+    : 0;
+  const outerRingCount = resolvedTargetCoords
+    ? normalizedCompetitors.filter((comp) => {
+      const d = distanceMeters(resolvedTargetCoords, comp);
+      return Number.isFinite(d) && d > activeRadiusMeters * 0.66 && d <= activeRadiusMeters;
+    }).length
+    : 0;
+
+  const computedCompetitorCount = normalizedCompetitors.length > 0
+    ? normalizedCompetitors.length
+    : (Number.isFinite(Number(competitors_found)) ? Number(competitors_found) : 0);
+
+  const competitorPressureLabel =
+    computedCompetitorCount >= 10 ? 'Very High' :
+      computedCompetitorCount >= 6 ? 'High' :
+        computedCompetitorCount >= 3 ? 'Moderate' :
+          computedCompetitorCount >= 1 ? 'Low' : 'Minimal';
 
   const toggleDetail = (key) => {
     setExpandedDetail((prev) => (prev === key ? null : key));
@@ -247,6 +169,7 @@ export default function Report({ data, targetCoords, onClose }) {
     try {
       const html2pdfModule = await import('html2pdf.js');
       const html2pdf = html2pdfModule.default;
+      await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 
       await html2pdf()
         .set({
@@ -301,19 +224,12 @@ export default function Report({ data, targetCoords, onClose }) {
                 }
                 .main-score-card,
                 .insight-box,
-                .report-map-container,
+                .spatial-context-card,
                 .data-card,
                 .disclaimer-card {
                   break-inside: avoid;
                   page-break-inside: avoid;
                 }
-                .report-map-legend {
-                  background: #ffffff !important;
-                  border-top: 1px solid #e5e7eb !important;
-                  color: #374151 !important;
-                }
-                .legend-dot.target { border-color: #ffffff !important; }
-                .legend-dot.competitor { border-color: #ffffff !important; }
                 .progress-fill { transition: none !important; }
               `;
               doc.head.appendChild(style);
@@ -326,7 +242,7 @@ export default function Report({ data, targetCoords, onClose }) {
           },
           pagebreak: {
             mode: ['css', 'legacy'],
-            avoid: ['.main-score-card', '.insight-box', '.report-map-container', '.data-card', '.disclaimer-card']
+            avoid: ['.main-score-card', '.insight-box', '.spatial-context-card', '.data-card', '.disclaimer-card']
           }
         })
         .from(reportExportRef.current)
@@ -485,14 +401,47 @@ export default function Report({ data, targetCoords, onClose }) {
           </p>
         </div>
 
-        {/* SPATIAL CONTEXT MAP */}
-        <h3 className="section-heading mt-6 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Spatial Context ({radius_meters}m)</h3>
-        <div className="report-map-container mt-3 overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] shadow-sm">
-          <div ref={mapRef} style={{ width: '100%', height: '220px' }}></div>
-          
-          <div className="report-map-legend flex flex-wrap items-center gap-4 border-t border-[var(--border-color)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium text-[var(--text-muted)]">
-            <span className="inline-flex items-center gap-2"><span className="legend-dot target"></span> Proposed Site</span>
-            <span className="inline-flex items-center gap-2"><span className="legend-dot competitor"></span> Competitors ({competitors_found || 0})</span>
+        {/* SPATIAL CONTEXT SUMMARY */}
+        <h3 className="section-heading mt-6 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Spatial Context ({Math.round(activeRadiusMeters)}m)</h3>
+        <div className="spatial-context-card mt-3 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">Target Coordinates</p>
+              <p className="mt-1 text-sm font-medium text-[var(--text-main)]">
+                {formatCoord(resolvedTargetCoords?.lat)}, {formatCoord(resolvedTargetCoords?.lng)}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">Scan Radius</p>
+              <p className="mt-1 text-sm font-medium text-[var(--text-main)]">{formatMeters(activeRadiusMeters)}</p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">Competitor Pressure</p>
+              <p className="mt-1 text-sm font-medium text-[var(--text-main)]">{competitorPressureLabel} ({computedCompetitorCount})</p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">Nearest Competitor</p>
+              <p className="mt-1 text-sm font-medium text-[var(--text-main)]">{formatMeters(nearestCompetitorMeters)}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">Competitor Distribution Within Radius</p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <p className="text-sm text-[var(--text-main)]">Inner Ring (0-33%): <strong>{innerRingCount}</strong></p>
+              <p className="text-sm text-[var(--text-main)]">Middle Ring (34-66%): <strong>{middleRingCount}</strong></p>
+              <p className="text-sm text-[var(--text-main)]">Outer Ring (67-100%): <strong>{outerRingCount}</strong></p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+            <p className="text-sm leading-6 text-[var(--text-main)]">
+              This report uses geospatial sampling within the configured radius and translates the observed spatial pattern into saturation and demand-related factors.
+              Closer and denser competitor clusters generally increase market pressure, while wider spacing can indicate better positioning headroom.
+            </p>
           </div>
         </div>
 
@@ -506,7 +455,7 @@ export default function Report({ data, targetCoords, onClose }) {
                 type="button"
                 className="progress-labels detail-toggle flex w-full items-center justify-between gap-3 rounded-lg bg-transparent px-0 py-2 text-left transition hover:bg-[var(--accent-hover)]"
                 onClick={() => toggleDetail(key)}
-                aria-expanded={expandedDetail === key}
+                aria-expanded={expandedDetail === key || isExportingPdf}
               >
                 <span className="factor-name capitalize text-sm font-semibold text-[var(--text-main)]">{key === 'demand' ? 'Infrastructure Proxies' : key}</span>
                 <div className="factor-metrics flex items-center gap-3">
@@ -516,7 +465,7 @@ export default function Report({ data, targetCoords, onClose }) {
                   <span className="metric-status text-xs font-medium" style={{ color: getScoreColor(factor.score) }}>
                     {factor.status}
                   </span>
-                  <span className={`detail-chevron ${expandedDetail === key ? 'open' : ''}`}>
+                  <span className={`detail-chevron ${expandedDetail === key || isExportingPdf ? 'open' : ''}`}>
                     ▾
                   </span>
                 </div>
@@ -525,7 +474,7 @@ export default function Report({ data, targetCoords, onClose }) {
                 <div className="progress-fill" style={{ width: `${(factor.score / 25) * 100}%`, backgroundColor: getScoreColor(factor.score) }}></div>
               </div>
               <p className="factor-desc mt-2 text-sm text-[var(--text-muted)]">{factor.description}</p>
-              {expandedDetail === key && (
+              {(expandedDetail === key || isExportingPdf) && (
                 <div className="factor-details mt-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 text-sm leading-6 text-[var(--text-main)]">
                   {getFactorDetailText(key, factor).split('. ').map((line, index) => (
                     <p key={index}>{line.trim()}{line.trim().endsWith('.') ? '' : '.'}</p>
