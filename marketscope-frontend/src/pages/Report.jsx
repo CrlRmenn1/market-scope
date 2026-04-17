@@ -9,6 +9,14 @@ export default function Report({ data, targetCoords, onClose }) {
   const mapFeaturesRef = useRef(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isPdfSettingsOpen, setIsPdfSettingsOpen] = useState(false);
+  const [pdfOptions, setPdfOptions] = useState({
+    format: 'a4',
+    orientation: 'portrait',
+    marginMm: 8,
+    quality: 0.96,
+    scale: 2
+  });
 
   const fitMapToFeatures = () => {
     if (!mapInstance.current) return;
@@ -66,8 +74,15 @@ export default function Report({ data, targetCoords, onClose }) {
       // Draw Target Pin
       const targetIcon = L.divIcon({
         className: 'custom-pin-wrapper',
-        html: `<svg width="32" height="32" viewBox="0 0 24 24" fill="var(--accent)" stroke="white" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="white"></circle></svg>`,
-        iconSize: [32, 32], iconAnchor: [16, 32]
+        html: `
+          <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+            <circle cx="17" cy="17" r="15" fill="rgba(168,85,247,0.18)" stroke="rgba(168,85,247,0.65)" stroke-width="2" />
+            <circle cx="17" cy="17" r="6" fill="var(--accent)" stroke="white" stroke-width="2" />
+            <circle cx="17" cy="17" r="1.5" fill="white" />
+          </svg>
+        `,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
       });
       L.marker([targetCoords.lat, targetCoords.lng], { icon: targetIcon }).addTo(elementsGroup);
 
@@ -218,11 +233,11 @@ export default function Report({ data, targetCoords, onClose }) {
 
       await html2pdf()
         .set({
-          margin: [8, 8, 8, 8],
+          margin: [pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm],
           filename: `MarketScope_${safeName}_Dossier.pdf`,
-          image: { type: 'jpeg', quality: 0.96 },
+          image: { type: 'jpeg', quality: pdfOptions.quality },
           html2canvas: {
-            scale: 2,
+            scale: pdfOptions.scale,
             useCORS: true,
             backgroundColor: '#ffffff',
             scrollX: 0,
@@ -231,6 +246,18 @@ export default function Report({ data, targetCoords, onClose }) {
               const style = doc.createElement('style');
               style.textContent = `
                 .pdf-hide { display: none !important; }
+                :root,
+                html,
+                body {
+                  --bg-app: #ffffff !important;
+                  --bg-sheet: #ffffff !important;
+                  --bg-glass: #ffffff !important;
+                  --text-main: #111827 !important;
+                  --text-muted: #4b5563 !important;
+                  --border-color: #e5e7eb !important;
+                  background: #ffffff !important;
+                  color: #111827 !important;
+                }
                 .report-page {
                   position: static !important;
                   inset: auto !important;
@@ -263,6 +290,13 @@ export default function Report({ data, targetCoords, onClose }) {
                   break-inside: avoid;
                   page-break-inside: avoid;
                 }
+                .report-map-legend {
+                  background: #ffffff !important;
+                  border-top: 1px solid #e5e7eb !important;
+                  color: #374151 !important;
+                }
+                .legend-dot.target { border-color: #ffffff !important; }
+                .legend-dot.competitor { border-color: #ffffff !important; }
                 .progress-fill { transition: none !important; }
               `;
               doc.head.appendChild(style);
@@ -270,8 +304,8 @@ export default function Report({ data, targetCoords, onClose }) {
           },
           jsPDF: {
             unit: 'mm',
-            format: 'a4',
-            orientation: 'portrait'
+            format: pdfOptions.format,
+            orientation: pdfOptions.orientation
           },
           pagebreak: {
             mode: ['css', 'legacy'],
@@ -285,6 +319,7 @@ export default function Report({ data, targetCoords, onClose }) {
       window.alert('Unable to generate PDF right now. Please try again.');
     } finally {
       setIsExportingPdf(false);
+      setIsPdfSettingsOpen(false);
     }
   };
 
@@ -295,7 +330,12 @@ export default function Report({ data, targetCoords, onClose }) {
 
         <div className="pdf-hide flex items-center gap-2">
           
-          <button className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={handlePrint} title={isExportingPdf ? 'Generating PDF...' : 'Save as PDF'} disabled={isExportingPdf}>
+          <button
+            className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={() => setIsPdfSettingsOpen(true)}
+            title={isExportingPdf ? 'Generating PDF...' : 'Save as PDF'}
+            disabled={isExportingPdf}
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 6 2 18 2 18 9"></polyline>
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
@@ -312,6 +352,100 @@ export default function Report({ data, targetCoords, onClose }) {
 
         </div>
       </div>
+
+      {isPdfSettingsOpen && (
+        <div className="pdf-hide fixed inset-0 z-[8000] flex items-center justify-center bg-black/70 px-4" role="dialog" aria-modal="true" aria-label="PDF export settings">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-2xl">
+            <h3 className="text-base font-semibold text-[var(--text-main)]">Export PDF Settings</h3>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">The exported file always uses a white report theme.</p>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-[var(--text-muted)]">
+                Paper
+                <select
+                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
+                  value={pdfOptions.format}
+                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, format: e.target.value }))}
+                >
+                  <option value="a4">A4</option>
+                  <option value="letter">Letter</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-[var(--text-muted)]">
+                Orientation
+                <select
+                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
+                  value={pdfOptions.orientation}
+                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, orientation: e.target.value }))}
+                >
+                  <option value="portrait">Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-[var(--text-muted)]">
+                Margin (mm)
+                <select
+                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
+                  value={pdfOptions.marginMm}
+                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, marginMm: Number(e.target.value) }))}
+                >
+                  <option value={6}>6</option>
+                  <option value={8}>8</option>
+                  <option value={10}>10</option>
+                  <option value={12}>12</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-[var(--text-muted)]">
+                Scale
+                <select
+                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
+                  value={pdfOptions.scale}
+                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, scale: Number(e.target.value) }))}
+                >
+                  <option value={1.5}>1.5</option>
+                  <option value={2}>2.0</option>
+                  <option value={2.5}>2.5</option>
+                </select>
+              </label>
+
+              <label className="col-span-2 text-xs font-medium text-[var(--text-muted)]">
+                Image Quality
+                <select
+                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
+                  value={pdfOptions.quality}
+                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, quality: Number(e.target.value) }))}
+                >
+                  <option value={0.9}>Standard (0.90)</option>
+                  <option value={0.96}>High (0.96)</option>
+                  <option value={0.99}>Max (0.99)</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--border-color)] px-3 py-2 text-sm font-medium text-[var(--text-muted)]"
+                onClick={() => setIsPdfSettingsOpen(false)}
+                disabled={isExportingPdf}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white"
+                onClick={handlePrint}
+                disabled={isExportingPdf}
+              >
+                {isExportingPdf ? 'Generating...' : 'Generate PDF'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="report-scroll-content mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6">
         
