@@ -6,6 +6,7 @@ import os
 import random
 import socket
 import smtplib
+from pathlib import Path
 from urllib.parse import urlparse
 from datetime import date, datetime, timedelta
 from contextlib import asynccontextmanager
@@ -19,6 +20,12 @@ try:
     import geopandas as gpd
 except Exception:
     gpd = None
+
+try:
+    from shapely.geometry import Point, box
+except Exception:
+    Point = None
+    box = None
 
 # ==========================================
 # DATABASE CONFIGURATION
@@ -61,6 +68,7 @@ def get_startup_db_config():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_app_tables()
+    preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
     yield
 
@@ -1004,12 +1012,131 @@ HAZARD_ZONES = {
     ]
 }
 
+PANABO_BOUNDS = (7.269, 7.333, 125.636, 125.742)
+HAZARD_LAYER_CACHE = []
+HAZARD_LAYER_CACHE_LOADED = False
+HAZARD_LAYER_LOCK = Lock()
+
+HAZARD_LAYER_LABELS = {
+    1: {"name": "Very High Flood Hazard (5-Year Return Period)", "score": 5},
+    2: {"name": "High Flood Hazard (5-Year Return Period)", "score": 12},
+    3: {"name": "Moderate Flood Hazard (5-Year Return Period)", "score": 18},
+}
+
+
+def _resolve_hazard_var(row, column_name):
+    if not column_name:
+        return None
+
+    try:
+        raw = row[column_name]
+        if raw is None:
+            return None
+        return int(float(raw))
+    except Exception:
+        return None
+
+
+def preload_hazard_layer_cache():
+    global HAZARD_LAYER_CACHE, HAZARD_LAYER_CACHE_LOADED
+
+    if HAZARD_LAYER_CACHE_LOADED:
+        return
+
+    if gpd is None or Point is None or box is None:
+        HAZARD_LAYER_CACHE = []
+        HAZARD_LAYER_CACHE_LOADED = True
+        print("Hazard layer cache skipped: geopandas/shapely is unavailable")
+        return
+
+    with HAZARD_LAYER_LOCK:
+        if HAZARD_LAYER_CACHE_LOADED:
+            return
+
+        candidates = [
+            Path(__file__).resolve().parent / "DavaoDelNorte" / "DavaoDelNorte_Flood_5year.shp",
+            Path(__file__).resolve().parent / "flood-data" / "panabo_hazard_5yr.geojson",
+        ]
+
+        cache = []
+        panabo_clip = box(PANABO_BOUNDS[2], PANABO_BOUNDS[0], PANABO_BOUNDS[3], PANABO_BOUNDS[1])
+
+        for hazard_path in candidates:
+            if not hazard_path.exists():
+                continue
+
+            try:
+                hazard_gdf = gpd.read_file(hazard_path)
+                if hazard_gdf.empty:
+                    continue
+
+                var_column = next((col for col in hazard_gdf.columns if str(col).strip().lower() == "var"), None)
+                if not var_column:
+                    continue
+
+                clipped = hazard_gdf.copy()
+                clipped["geometry"] = clipped.geometry.intersection(panabo_clip)
+                clipped = clipped[~clipped.geometry.is_empty]
+
+                for _, row in clipped.iterrows():
+                    geometry = row.geometry
+                    if geometry is None or geometry.is_empty:
+                        continue
+
+                    hazard_var = _resolve_hazard_var(row, var_column)
+                    if hazard_var is None:
+                        continue
+
+                    label = HAZARD_LAYER_LABELS.get(hazard_var)
+                    if label is None:
+                        continue
+
+                    cache.append({
+                        "var": hazard_var,
+                        "name": label["name"],
+                        "score": label["score"],
+                        "geometry": geometry,
+                    })
+
+                if cache:
+                    break
+            except Exception as e:
+                print(f"Hazard layer load warning for {hazard_path}: {e}")
+
+        cache.sort(key=lambda item: item["score"])
+        HAZARD_LAYER_CACHE = cache
+        HAZARD_LAYER_CACHE_LOADED = True
+        print(f"Hazard layer cache loaded: {len(HAZARD_LAYER_CACHE)} polygon features")
+
 
 def evaluate_hazard(lat, lon):
+    preload_hazard_layer_cache()
+
     hazard_score = 25
     hazard_status = "Low Risk / Safe"
     hazard_matches = []
 
+    if HAZARD_LAYER_CACHE and Point is not None:
+        location_point = Point(lon, lat)
+
+        for feature in HAZARD_LAYER_CACHE:
+            try:
+                if feature["geometry"].intersects(location_point):
+                    match_name = f"{feature['name']} (Flood)"
+                    hazard_matches.append(match_name)
+
+                    if feature["score"] < hazard_score:
+                        hazard_score = feature["score"]
+                        hazard_status = match_name
+            except Exception:
+                continue
+
+        if hazard_matches and hazard_status not in hazard_matches:
+            hazard_matches.insert(0, hazard_status)
+
+        return hazard_score, hazard_status, hazard_matches
+
+    # Fallback mode if GIS polygon layer could not be loaded.
     for zone in HAZARD_ZONES["flood"]:
         if check_inside_bounds(lat, lon, zone["bounds"]):
             hazard_matches.append(f"{zone['name']} (Flood)")
