@@ -23,9 +23,11 @@ except Exception:
 
 try:
     from shapely.geometry import Point, box
+    from shapely.ops import unary_union
 except Exception:
     Point = None
     box = None
+    unary_union = None
 
 # ==========================================
 # DATABASE CONFIGURATION
@@ -978,6 +980,7 @@ def delete_user_history_item(user_id: int, history_id: int):
 # ==========================================
 PBF_PATH = "panabo.pbf"
 PBF_COMPETITOR_CACHE = {}
+PBF_ALL_COMPETITORS = []
 PBF_CACHE_LOADED = False
 PBF_CACHE_LOCK = Lock()
 PBF_LAYERS = ["points", "multipolygons", "lines", "multilinestrings"]
@@ -1043,7 +1046,7 @@ def preload_hazard_layer_cache():
     if HAZARD_LAYER_CACHE_LOADED:
         return
 
-    if gpd is None or Point is None or box is None:
+    if gpd is None or Point is None or box is None or unary_union is None:
         HAZARD_LAYER_CACHE = []
         HAZARD_LAYER_CACHE_LOADED = True
         print("Hazard layer cache skipped: geopandas/shapely is unavailable")
@@ -1054,8 +1057,9 @@ def preload_hazard_layer_cache():
             return
 
         candidates = [
-            Path(__file__).resolve().parent / "DavaoDelNorte" / "DavaoDelNorte_Flood_5year.shp",
             Path(__file__).resolve().parent / "flood-data" / "panabo_hazard_5yr.geojson",
+            Path(__file__).resolve().parent.parent / "marketscope-frontend" / "public" / "panabo_hazard_5yr.geojson",
+            Path(__file__).resolve().parent / "DavaoDelNorte" / "DavaoDelNorte_Flood_5year.shp",
         ]
 
         cache = []
@@ -1078,6 +1082,8 @@ def preload_hazard_layer_cache():
                 clipped["geometry"] = clipped.geometry.intersection(panabo_clip)
                 clipped = clipped[~clipped.geometry.is_empty]
 
+                raw_geometries_by_var = {}
+
                 for _, row in clipped.iterrows():
                     geometry = row.geometry
                     if geometry is None or geometry.is_empty:
@@ -1091,12 +1097,42 @@ def preload_hazard_layer_cache():
                     if label is None:
                         continue
 
+                    raw_geometries_by_var.setdefault(hazard_var, []).append(geometry)
+
+                # Remove overlaps by hazard priority so each point belongs to at most one flood class.
+                covered_geometry = None
+                for hazard_var, label in sorted(HAZARD_LAYER_LABELS.items(), key=lambda item: item[1]["score"]):
+                    var_geometries = raw_geometries_by_var.get(hazard_var, [])
+                    if not var_geometries:
+                        continue
+
+                    try:
+                        merged_geometry = unary_union(var_geometries)
+                    except Exception:
+                        continue
+
+                    if merged_geometry is None or merged_geometry.is_empty:
+                        continue
+
+                    exclusive_geometry = merged_geometry
+                    if covered_geometry is not None and not covered_geometry.is_empty:
+                        exclusive_geometry = merged_geometry.difference(covered_geometry)
+
+                    if exclusive_geometry is None or exclusive_geometry.is_empty:
+                        continue
+
                     cache.append({
                         "var": hazard_var,
                         "name": label["name"],
                         "score": label["score"],
-                        "geometry": geometry,
+                        "geometry": exclusive_geometry,
                     })
+
+                    covered_geometry = (
+                        exclusive_geometry
+                        if covered_geometry is None
+                        else covered_geometry.union(exclusive_geometry)
+                    )
 
                 if cache:
                     break
@@ -1124,10 +1160,9 @@ def evaluate_hazard(lat, lon):
                 if feature["geometry"].intersects(location_point):
                     match_name = f"{feature['name']} (Flood)"
                     hazard_matches.append(match_name)
-
-                    if feature["score"] < hazard_score:
-                        hazard_score = feature["score"]
-                        hazard_status = match_name
+                    hazard_score = feature["score"]
+                    hazard_status = match_name
+                    break
             except Exception:
                 continue
 
@@ -1161,19 +1196,35 @@ PANABO_ANCHORS = [
 ]
 
 SME_DATABASE = {
-    "coffee": {"key": "amenity", "val": "cafe", "fear": 6, "need": 9, "name": "Coffee Shops"},
-    "print": {"key": "shop", "val": "copyshop", "fear": 7, "need": 6, "name": "Print/Copy Centers"},
-    "laundry": {"key": "shop", "val": "laundry", "fear": 9, "need": 7, "name": "Laundry Shops"},
-    "carwash": {"key": "amenity", "val": "car_wash", "fear": 8, "need": 9, "name": "Car Washes"},
-    "kiosk": {"key": "amenity", "val": "fast_food", "fear": 6, "need": 9, "name": "Food Kiosks/Stalls"},
-    "water": {"key": "shop", "val": "water", "fear": 4, "need": 7, "name": "Water Refilling Stations"},
-    "bakery": {"key": "shop", "val": "bakery", "fear": 8, "need": 9, "name": "Bakeries"},
-    "pharmacy": {"key": "amenity", "val": "pharmacy", "fear": 7, "need": 9, "name": "Small Pharmacies"},
-    "barber": {"key": "shop", "val": "hairdresser", "fear": 7, "need": 9, "name": "Barbershops/Salons"},
-    "moto": {"key": "shop", "val": "motorcycle_repair", "fear": 5, "need": 8, "name": "Motorcycle Repair Shops"},
-    "internet": {"key": "amenity", "val": "internet_cafe", "fear": 6, "need": 6, "name": "Internet Cafes"},
-    "meat": {"key": "shop", "val": "butcher", "fear": 9, "need": 9, "name": "Meat Shops"},
-    "hardware": {"key": "shop", "val": "hardware", "fear": 7, "need": 8, "name": "Hardware/Construction Supplies"}
+    "coffee": {"key": "amenity", "val": "cafe", "fear": 6, "need": 9, "name": "Coffee Shops", "osm_tags": [("amenity", "cafe"), ("shop", "coffee")]},
+    "print": {"key": "shop", "val": "copyshop", "fear": 7, "need": 6, "name": "Print/Copy Centers", "osm_tags": [("shop", "copyshop"), ("shop", "stationery"), ("shop", "books")]},
+    "laundry": {"key": "shop", "val": "laundry", "fear": 9, "need": 7, "name": "Laundry Shops", "osm_tags": [("shop", "laundry"), ("shop", "dry_cleaning")]},
+    "carwash": {"key": "amenity", "val": "car_wash", "fear": 8, "need": 9, "name": "Car Washes", "osm_tags": [("amenity", "car_wash"), ("shop", "car_repair")]},
+    "kiosk": {"key": "amenity", "val": "fast_food", "fear": 6, "need": 9, "name": "Food Kiosks/Stalls", "osm_tags": [("amenity", "fast_food"), ("amenity", "food_court"), ("shop", "kiosk")]},
+    "water": {"key": "shop", "val": "water", "fear": 4, "need": 7, "name": "Water Refilling Stations", "osm_tags": [("shop", "water"), ("amenity", "drinking_water"), ("amenity", "water_point")]},
+    "bakery": {"key": "shop", "val": "bakery", "fear": 8, "need": 9, "name": "Bakeries", "osm_tags": [("shop", "bakery"), ("shop", "pastry")]},
+    "pharmacy": {"key": "amenity", "val": "pharmacy", "fear": 7, "need": 9, "name": "Small Pharmacies", "osm_tags": [("amenity", "pharmacy"), ("shop", "chemist")]},
+    "barber": {"key": "shop", "val": "hairdresser", "fear": 7, "need": 9, "name": "Barbershops/Salons", "osm_tags": [("shop", "hairdresser"), ("shop", "beauty")]},
+    "moto": {"key": "shop", "val": "motorcycle_repair", "fear": 5, "need": 8, "name": "Motorcycle Repair Shops", "osm_tags": [("shop", "motorcycle"), ("shop", "motorcycle_repair"), ("shop", "car_repair")]},
+    "internet": {"key": "amenity", "val": "internet_cafe", "fear": 6, "need": 6, "name": "Internet Cafes", "osm_tags": [("amenity", "internet_cafe"), ("amenity", "cafe")]},
+    "meat": {"key": "shop", "val": "butcher", "fear": 9, "need": 9, "name": "Meat Shops", "osm_tags": [("shop", "butcher"), ("shop", "deli")]},
+    "hardware": {"key": "shop", "val": "hardware", "fear": 7, "need": 8, "name": "Hardware/Construction Supplies", "osm_tags": [("shop", "hardware"), ("shop", "doityourself"), ("shop", "trade")]}
+}
+
+PBF_NAME_KEYWORD_FALLBACK = {
+    "coffee": ["coffee", "cafe"],
+    "print": ["print", "copy", "xerox"],
+    "laundry": ["laundry", "wash", "dry clean"],
+    "carwash": ["car wash", "autowash", "auto spa"],
+    "kiosk": ["kiosk", "snack", "food"],
+    "water": ["water refilling", "water station", "purified water"],
+    "bakery": ["bakery", "bakeshop", "bread"],
+    "pharmacy": ["pharmacy", "drugstore", "mercury"],
+    "barber": ["barber", "salon", "hair"],
+    "moto": ["motor", "motorcycle", "moto", "repair"],
+    "internet": ["internet", "computer", "cyber"],
+    "meat": ["meat", "butcher"],
+    "hardware": ["hardware", "construction", "tools"],
 }
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -1202,14 +1253,26 @@ def normalize_osm_value(value):
     return normalized or None
 
 
+def to_finite_number(value):
+    try:
+        parsed = float(value)
+    except Exception:
+        return None
+
+    if math.isfinite(parsed):
+        return parsed
+    return None
+
+
 def preload_pbf_competitor_cache():
-    global PBF_COMPETITOR_CACHE, PBF_CACHE_LOADED
+    global PBF_COMPETITOR_CACHE, PBF_ALL_COMPETITORS, PBF_CACHE_LOADED
 
     if PBF_CACHE_LOADED:
         return
 
     if gpd is None:
         PBF_COMPETITOR_CACHE = {}
+        PBF_ALL_COMPETITORS = []
         PBF_CACHE_LOADED = True
         print("PBF cache skipped: geopandas is unavailable")
         return
@@ -1219,9 +1282,11 @@ def preload_pbf_competitor_cache():
             return
 
         cache = {}
+        all_competitors = []
 
         if not os.path.exists(PBF_PATH):
             PBF_COMPETITOR_CACHE = cache
+            PBF_ALL_COMPETITORS = all_competitors
             PBF_CACHE_LOADED = True
             print(f"PBF cache skipped: file not found at {PBF_PATH}")
             return
@@ -1248,21 +1313,75 @@ def preload_pbf_competitor_cache():
                         continue
 
                     centroid = geometry.centroid
-                    cache.setdefault(search_key, []).append({
+                    competitor_entry = {
                         "lat": centroid.y,
                         "lon": centroid.x,
-                        "name": row.get("name")
-                    })
+                        "name": row.get("name"),
+                        "tag_key": col,
+                        "tag_value": search_key,
+                    }
+
+                    cache.setdefault(search_key, []).append(competitor_entry)
+                    all_competitors.append(competitor_entry)
 
         PBF_COMPETITOR_CACHE = cache
+        PBF_ALL_COMPETITORS = all_competitors
         PBF_CACHE_LOADED = True
-        print(f"PBF cache loaded for {len(cache)} business keys")
+        print(f"PBF cache loaded for {len(cache)} business values and {len(all_competitors)} features")
 
 
 def get_cached_pbf_competitors(search_value):
     if not PBF_CACHE_LOADED:
         preload_pbf_competitor_cache()
     return PBF_COMPETITOR_CACHE.get(normalize_osm_value(search_value), [])
+
+
+def get_name_keyword_pbf_competitors(business_type):
+    if not PBF_CACHE_LOADED:
+        preload_pbf_competitor_cache()
+
+    keywords = PBF_NAME_KEYWORD_FALLBACK.get(normalize_osm_value(business_type), [])
+    if not keywords:
+        return []
+
+    matches = []
+    for item in PBF_ALL_COMPETITORS:
+        name = str(item.get("name") or "").strip().lower()
+        if not name:
+            continue
+        if any(keyword in name for keyword in keywords):
+            matches.append(item)
+
+    return matches
+
+
+def _append_competitor_if_within_radius(competitors_list, dedupe_keys, source_item, origin_lat, origin_lon, radius_meters, default_name):
+    p_lat = to_finite_number(source_item.get("lat")) if isinstance(source_item, dict) else None
+    p_lon = to_finite_number(source_item.get("lon")) if isinstance(source_item, dict) else None
+
+    if p_lat is None or p_lon is None:
+        return
+
+    distance_m = calculate_distance(origin_lat, origin_lon, p_lat, p_lon)
+    if distance_m > radius_meters:
+        return
+
+    competitor_name = None
+    if isinstance(source_item, dict):
+        competitor_name = source_item.get("name")
+
+    normalized_name = (competitor_name or default_name or "").strip()
+    dedupe_key = (round(p_lat, 6), round(p_lon, 6), normalized_name.lower())
+    if dedupe_key in dedupe_keys:
+        return
+
+    dedupe_keys.add(dedupe_key)
+    competitors_list.append({
+        "lat": p_lat,
+        "lon": p_lon,
+        "name": normalized_name or default_name
+    })
+
 
 def fetch_custom_msmes(business_key):
     try:
@@ -1603,6 +1722,7 @@ def admin_delete_custom_msme(msme_id: int, x_admin_token: str | None = Header(de
 def perform_analysis(data: AnalysisRequest):
     sme_profile = SME_DATABASE.get(data.business_type, {"key": "shop", "val": "convenience", "fear": 5, "need": 5, "name": "MSME"})
     search_val = sme_profile["val"]
+    osm_tags = sme_profile.get("osm_tags") or [(sme_profile.get("key", "shop"), search_val)]
     
     # FACTOR 1: ZONING - Normalized to 0-25 scale
     zoning_score = 0
@@ -1621,42 +1741,57 @@ def perform_analysis(data: AnalysisRequest):
     # FACTOR 2: HAZARD
     hazard_score, hazard_status, hazard_matches = evaluate_hazard(data.lat, data.lon)
     hazard_description = (
-        "Temporary Panabo flood and landslide susceptibility mapping used as a proxy for hazard evaluation. "
-        + ("Matched zones: " + ", ".join(hazard_matches) + "." if hazard_matches else "No mapped hazard zones matched.")
+        "Hazard evaluation uses official Panabo-clipped flood polygons from the Davao del Norte 5-year return period layer. "
+        + ("Matched zone: " + hazard_matches[0] + "." if hazard_matches else "No mapped hazard zone matched.")
     )
 
     # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
     competitors_list = []
+    competitor_dedupe = set()
 
     try:
-        cached_competitors = get_cached_pbf_competitors(search_val)
-        for competitor in cached_competitors:
-            p_lat = competitor["lat"]
-            p_lon = competitor["lon"]
-            dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
+        cached_competitors = []
+        for _, tag_value in osm_tags:
+            cached_competitors.extend(get_cached_pbf_competitors(tag_value))
 
-            if dist <= data.radius:
-                competitors_list.append({
-                    "lat": p_lat,
-                    "lon": p_lon,
-                    "name": competitor.get("name") or f"Local {sme_profile['name']}"
-                })
+        for competitor in cached_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                data.lat,
+                data.lon,
+                data.radius,
+                f"Local {sme_profile['name']}"
+            )
     except Exception as e:
         print(f"Spatial Scan Error: {e}")
+
+    # Local-only fallback: match Panabo OSM features by business name keywords.
+    if not competitors_list:
+        for competitor in get_name_keyword_pbf_competitors(data.business_type):
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                data.lat,
+                data.lon,
+                data.radius,
+                f"Nearby {sme_profile['name']}"
+            )
 
     # Scan PostgreSQL Database
     custom_shops = fetch_custom_msmes(data.business_type)
     for shop in custom_shops:
-        p_lat = shop['latitude']
-        p_lon = shop['longitude']
-        dist = calculate_distance(data.lat, data.lon, p_lat, p_lon)
-
-        if dist <= data.radius:
-            competitors_list.append({
-                "lat": p_lat,
-                "lon": p_lon,
-                "name": shop['name']
-            })
+        _append_competitor_if_within_radius(
+            competitors_list,
+            competitor_dedupe,
+            {"lat": shop.get('latitude'), "lon": shop.get('longitude'), "name": shop.get('name')},
+            data.lat,
+            data.lon,
+            data.radius,
+            f"Local {sme_profile['name']}"
+        )
 
     competitors_found = len(competitors_list)
 
@@ -1712,7 +1847,7 @@ def perform_analysis(data: AnalysisRequest):
     )
 
     saturation_details = (
-        f"The algorithm scanned Panabo PBF layers and local MSME records for matching businesses within {data.radius} meters. "
+        f"The algorithm scanned local Panabo OSM data from panabo.pbf plus local MSME entries for matching businesses within {data.radius} meters. "
         + f"It counted competitors and then mapped that count to a 0-25 score: 0 competitors => 25, 1 competitor => 20, 2-3 => 15, 4-5 => 10, 6+ => 5."
     )
 
@@ -1722,9 +1857,9 @@ def perform_analysis(data: AnalysisRequest):
     )
 
     hazard_details = (
-        "The hazard score is based on temporary Panabo flood proxy zones. "
-        + ("Matched zones: " + ", ".join(hazard_matches) + ". " if hazard_matches else "No mapped flood zones matched. ")
-        + "The lowest matched zone score is used as the factor result."
+        "The hazard score is based on official Panabo-clipped flood polygons from the Davao del Norte 5-year return period dataset. "
+        + ("Matched zone: " + hazard_matches[0] + ". " if hazard_matches else "No mapped flood zone matched. ")
+        + "Hazard classes are made mutually exclusive by priority (Very High > High > Moderate), so each point can map to at most one zone."
     )
 
     breakdown_payload = {
