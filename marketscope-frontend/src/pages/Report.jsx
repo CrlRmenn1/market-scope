@@ -2,6 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeCoords = (coords) => {
+  if (!coords || typeof coords !== 'object') return null;
+  const lat = toFiniteNumber(coords.lat ?? coords.latitude);
+  const lng = toFiniteNumber(coords.lng ?? coords.lon ?? coords.longitude);
+  if (lat === null || lng === null) return null;
+  return { lat, lng };
+};
+
 export default function Report({ data, targetCoords, onClose }) {
   const mapRef = useRef(null);
   const reportExportRef = useRef(null);
@@ -17,6 +30,7 @@ export default function Report({ data, targetCoords, onClose }) {
     quality: 0.96,
     scale: 2
   });
+  const resolvedTargetCoords = normalizeCoords(targetCoords) || normalizeCoords(data?.target_coords);
 
   const fitMapToFeatures = () => {
     if (!mapInstance.current) return;
@@ -34,16 +48,16 @@ export default function Report({ data, targetCoords, onClose }) {
       }
     }
 
-    if (targetCoords?.lat && targetCoords?.lng) {
-      mapInstance.current.setView([targetCoords.lat, targetCoords.lng], 15, { animate: false });
+    if (resolvedTargetCoords) {
+      mapInstance.current.setView([resolvedTargetCoords.lat, resolvedTargetCoords.lng], 15, { animate: false });
     }
   };
 
   useEffect(() => {
-    if (data && targetCoords?.lat && targetCoords?.lng && mapRef.current && !mapInstance.current) {
+    if (data && resolvedTargetCoords && mapRef.current && !mapInstance.current) {
       
       mapInstance.current = L.map(mapRef.current, {
-        center: [targetCoords.lat, targetCoords.lng],
+        center: [resolvedTargetCoords.lat, resolvedTargetCoords.lng],
         zoom: 15, 
         zoomControl: false,
         dragging: true,
@@ -67,7 +81,7 @@ export default function Report({ data, targetCoords, onClose }) {
       mapFeaturesRef.current = elementsGroup;
 
       // Draw Dynamic Radius
-      L.circle([targetCoords.lat, targetCoords.lng], {
+      L.circle([resolvedTargetCoords.lat, resolvedTargetCoords.lng], {
         color: '#a855f7', fillColor: '#a855f7', fillOpacity: 0.15, radius: data.radius_meters || 340
       }).addTo(elementsGroup);
 
@@ -84,7 +98,7 @@ export default function Report({ data, targetCoords, onClose }) {
         iconSize: [34, 34],
         iconAnchor: [17, 17]
       });
-      L.marker([targetCoords.lat, targetCoords.lng], { icon: targetIcon }).addTo(elementsGroup);
+      L.marker([resolvedTargetCoords.lat, resolvedTargetCoords.lng], { icon: targetIcon }).addTo(elementsGroup);
 
       // Draw Competitor Pins
       if (data.competitor_locations && data.competitor_locations.length > 0) {
@@ -95,12 +109,15 @@ export default function Report({ data, targetCoords, onClose }) {
         });
 
         data.competitor_locations.forEach((comp, index) => {
+          const compCoords = normalizeCoords(comp);
+          if (!compCoords) return;
+
           const competitorName =
             (typeof comp?.name === 'string' && comp.name.trim())
               ? comp.name.trim()
               : `Competitor ${index + 1}`;
 
-          const marker = L.marker([comp.lat, comp.lon], { icon: compIcon }).addTo(elementsGroup);
+          const marker = L.marker([compCoords.lat, compCoords.lng], { icon: compIcon }).addTo(elementsGroup);
           marker.bindTooltip(competitorName, {
             direction: 'top',
             offset: [0, -8],
@@ -132,10 +149,10 @@ export default function Report({ data, targetCoords, onClose }) {
         mapInstance.current = null;
       }
     };
-  }, [data, targetCoords]);
+  }, [data, resolvedTargetCoords]);
 
   useEffect(() => {
-    if (!mapInstance.current || !targetCoords?.lat || !targetCoords?.lng) return;
+    if (!mapInstance.current || !resolvedTargetCoords) return;
 
     const onResize = () => {
       if (!mapInstance.current) return;
@@ -159,7 +176,7 @@ export default function Report({ data, targetCoords, onClose }) {
         resizeObserver.disconnect();
       }
     };
-  }, [targetCoords]);
+  }, [resolvedTargetCoords]);
 
   if (!data) return null;
 
