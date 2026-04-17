@@ -980,23 +980,25 @@ ZONING_LAYERS = {
     "industrial_anflo": (7.2800, 7.2950, 125.6500, 125.6700)
 }
 
-# Temporary hazard proxy zones based on the attached Panabo DENR/MGB susceptibility map
-# These are used until official GIS hazard polygons are available.
+# Davao del Norte 5-year flood return period hazard zones
+# Extracted from official NOAH/DENR flood hazard shapefile (DavaoDelNorte_Flood_5year.shp)
+# Intersection with Panabo City bounds (7.269-7.333 lat, 125.636-125.742 lon)
+# Severity levels: Var 1=Very High, Var 2=High, Var 3=Moderate
 HAZARD_ZONES = {
     "flood": [
         {
-            "name": "Very High Flood Susceptibility",
-            "bounds": (7.3080, 7.3120, 125.6750, 125.6800),
-            "score": 0
+            "name": "Very High Flood Hazard (5-Year Return Period)",
+            "bounds": (7.269, 7.333, 125.636, 125.742),
+            "score": 5
         },
         {
-            "name": "High Flood Susceptibility",
-            "bounds": (7.3050, 7.3140, 125.6720, 125.6850),
-            "score": 10
+            "name": "High Flood Hazard (5-Year Return Period)",
+            "bounds": (7.269, 7.333, 125.636, 125.73958735603416),
+            "score": 12
         },
         {
-            "name": "Moderate Flood Susceptibility",
-            "bounds": (7.2990, 7.3150, 125.6700, 125.6860),
+            "name": "Moderate Flood Hazard (5-Year Return Period)",
+            "bounds": (7.269, 7.333, 125.636, 125.7389400572897),
             "score": 18
         }
     ]
