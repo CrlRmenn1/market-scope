@@ -26,9 +26,15 @@ export default function BottomNav({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-[calc(22px+env(safe-area-inset-bottom))] left-1/2 z-[2000] flex w-[min(92vw,420px)] -translate-x-1/2 rounded-full border border-white/10 bg-slate-950/70 p-2 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+    <nav
+      className="bottom-navbar"
+      style={{
+        bottom: 'calc(22px + env(safe-area-inset-bottom))',
+        transform: 'translateX(-50%)'
+      }}
+    >
       <div
-        className="fluid-indicator pointer-events-none absolute inset-y-2 left-2 w-[calc((100%-16px)/3)] rounded-full bg-violet-500/15 transition-transform duration-500 ease-[cubic-bezier(0.68,-0.55,0.26,1.55)]"
+        className="fluid-indicator pointer-events-none"
         style={{ transform: `translateX(${tabs.findIndex((tab) => tab.id === activeTab) * 100}%)` }}
       />
 
@@ -37,7 +43,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
         return (
           <button
             key={tab.id}
-            className={`nav-item relative z-10 flex-1 rounded-full px-0 py-2 text-center transition duration-200 ${isActive ? 'active text-violet-400' : 'text-slate-400 hover:-translate-y-0.5 hover:text-violet-300'}`}
+            className={`nav-item ${isActive ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
             <span className="mx-auto mb-1 flex h-6 w-6 items-center justify-center">

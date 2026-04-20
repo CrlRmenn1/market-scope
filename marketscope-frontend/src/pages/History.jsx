@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiUrl } from '../api';
 
 const formatDate = (value) => {
@@ -212,6 +213,27 @@ export default function History({ user, onOpenReport }) {
     return factor?.description || 'Score derived from the report algorithm.';
   };
 
+  const deleteConfirmDialog = deleteCandidate ? (
+    <div className="history-confirm-overlay" role="presentation" onClick={() => setDeleteCandidate(null)}>
+      <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-delete-title" onClick={(event) => event.stopPropagation()}>
+        <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-rose-300">Confirm deletion</p>
+        <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-slate-50">Delete {deleteCandidate.business_type}?</h3>
+        <p className="history-confirm-text mt-3 text-sm leading-6 text-slate-300">
+          This removes the saved analysis from your history. You can run the same site again later, but this saved copy will be gone.
+        </p>
+        {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-200">{deleteError}</p>}
+        <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
+          <button type="button" className="edit-btn inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10" onClick={() => setDeleteCandidate(null)}>
+            Cancel
+          </button>
+          <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-lg border border-rose-400/20 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-300/40 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteHistory(deleteCandidate)} disabled={deletingHistoryId === deleteCandidate.history_id}>
+            {deletingHistoryId === deleteCandidate.history_id ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="profile-page page-enter min-h-full">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
@@ -361,26 +383,7 @@ export default function History({ user, onOpenReport }) {
         </>
       )}
 
-      {deleteCandidate && (
-        <div className="history-confirm-overlay fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 p-4 sm:items-center" role="presentation" onClick={() => setDeleteCandidate(null)}>
-          <div className="history-confirm-modal w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-lg" role="dialog" aria-modal="true" aria-labelledby="history-delete-title" onClick={(event) => event.stopPropagation()}>
-            <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-rose-300">Confirm deletion</p>
-            <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-slate-50">Delete {deleteCandidate.business_type}?</h3>
-            <p className="history-confirm-text mt-3 text-sm leading-6 text-slate-300">
-              This removes the saved analysis from your history. You can run the same site again later, but this saved copy will be gone.
-            </p>
-            {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-200">{deleteError}</p>}
-            <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
-              <button type="button" className="edit-btn inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10" onClick={() => setDeleteCandidate(null)}>
-                Cancel
-              </button>
-              <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-lg border border-rose-400/20 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-300/40 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteHistory(deleteCandidate)} disabled={deletingHistoryId === deleteCandidate.history_id}>
-                {deletingHistoryId === deleteCandidate.history_id ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {typeof document !== 'undefined' && deleteConfirmDialog && createPortal(deleteConfirmDialog, document.body)}
       </div>
     </div>
   );
