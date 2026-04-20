@@ -32,18 +32,20 @@ export default function BottomNav({ activeTab, setActiveTab }) {
     },
   ];
 
+  const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === activeTab));
+
   return (
     <nav
       className="bottom-navbar"
       style={{
         '--nav-count': tabs.length,
+        '--nav-index': activeIndex,
         bottom: 'calc(22px + env(safe-area-inset-bottom))',
         transform: 'translateX(-50%)'
       }}
     >
       <div
         className="fluid-indicator pointer-events-none"
-        style={{ transform: `translateX(${tabs.findIndex((tab) => tab.id === activeTab) * 100}%)` }}
       />
 
       {tabs.map((tab) => {

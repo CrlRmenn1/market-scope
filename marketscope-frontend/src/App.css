@@ -374,6 +374,7 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
   backdrop-filter: blur(20px); border-radius: 50px;
   border: 1px solid var(--border-color); padding: 8px;
   z-index: 2000; display: flex; box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  overflow: hidden;
 }
 
 html[data-theme="light"] .bottom-navbar {
@@ -384,6 +385,7 @@ html[data-theme="light"] .bottom-navbar {
   position: absolute; top: 8px; bottom: 8px; left: 8px;
   width: calc((100% - 16px) / var(--nav-count, 3)); background-color: var(--accent-hover);
   border-radius: 40px; z-index: 1; transition: transform 0.45s var(--ease-emphatic), background-color var(--motion-normal) var(--ease-standard);
+  transform: translateX(calc(var(--nav-index, 0) * 100%));
 }
 
 .nav-item {
@@ -936,6 +938,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
     bottom: 6px;
     left: 6px;
     width: calc((100% - 12px) / var(--nav-count, 3));
+    transform: translateX(calc(var(--nav-index, 0) * 100%));
   }
 
   .nav-item {
@@ -2139,6 +2142,84 @@ html[data-theme="light"] .history-empty-state {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(250, 250, 252, 0.86));
   border-color: rgba(17, 24, 39, 0.1);
   opacity: 0.88;
+}
+
+html[data-theme="light"] .profile-page .text-slate-50,
+html[data-theme="light"] .history-page .text-slate-50,
+html[data-theme="light"] .trends-card .text-slate-50,
+html[data-theme="light"] .history-confirm-modal .text-slate-50,
+html[data-theme="light"] .profile-page .text-white,
+html[data-theme="light"] .history-page .text-white,
+html[data-theme="light"] .trends-card .text-white {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="light"] .profile-page .text-slate-300,
+html[data-theme="light"] .history-page .text-slate-300,
+html[data-theme="light"] .trends-card .text-slate-300,
+html[data-theme="light"] .profile-page .text-slate-400,
+html[data-theme="light"] .history-page .text-slate-400,
+html[data-theme="light"] .trends-card .text-slate-400,
+html[data-theme="light"] .history-confirm-modal .text-slate-300,
+html[data-theme="light"] .history-confirm-modal .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="light"] .profile-page .text-slate-500,
+html[data-theme="light"] .history-page .text-slate-500,
+html[data-theme="light"] .trends-card .text-slate-500 {
+  color: #9ca3af !important;
+}
+
+html[data-theme="light"] .profile-page .bg-slate-900\/60,
+html[data-theme="light"] .profile-page .bg-slate-900\/70,
+html[data-theme="light"] .history-page .bg-slate-900\/60,
+html[data-theme="light"] .history-page .bg-slate-900\/70,
+html[data-theme="light"] .trends-card .bg-slate-900\/60,
+html[data-theme="light"] .trends-card .bg-slate-900\/70,
+html[data-theme="light"] .history-confirm-modal {
+  color: var(--text-main);
+}
+
+html[data-theme="light"] .profile-page .settings-label,
+html[data-theme="light"] .history-page .settings-label,
+html[data-theme="light"] .trends-card .settings-label,
+html[data-theme="light"] .profile-page .history-meta,
+html[data-theme="light"] .history-page .history-meta,
+html[data-theme="light"] .trends-card .history-meta,
+html[data-theme="light"] .profile-page .history-empty-subtitle,
+html[data-theme="light"] .history-page .history-empty-subtitle,
+html[data-theme="light"] .trends-card .history-empty-subtitle {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="light"] .profile-page .profile-name,
+html[data-theme="light"] .history-page .profile-name,
+html[data-theme="light"] .trends-card .profile-name,
+html[data-theme="light"] .profile-page .history-title,
+html[data-theme="light"] .history-page .history-title,
+html[data-theme="light"] .trends-card .history-title,
+html[data-theme="light"] .profile-page .profile-stat-number,
+html[data-theme="light"] .history-page .profile-stat-number,
+html[data-theme="light"] .trends-card .profile-stat-number {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="light"] .profile-page .profile-card,
+html[data-theme="light"] .history-page .profile-card,
+html[data-theme="light"] .trends-card .profile-card,
+html[data-theme="light"] .history-page .history-card,
+html[data-theme="light"] .trends-card .trends-card,
+html[data-theme="light"] .profile-page .data-card,
+html[data-theme="light"] .history-page .data-card,
+html[data-theme="light"] .trends-card .data-card {
+  color: var(--text-main);
+}
+
+html[data-theme="light"] .profile-page .text-violet-200,
+html[data-theme="light"] .history-page .text-violet-200,
+html[data-theme="light"] .trends-card .text-violet-200 {
+  color: #7c3aed !important;
 }
 
 .history-empty-icon {
