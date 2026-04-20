@@ -661,7 +661,7 @@
   position: absolute;
   top: calc(env(safe-area-inset-top) + 10px);
   right: 10px;
-  z-index: 100;
+  z-index: 120;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -726,12 +726,14 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 10px;
-  background-color: rgba(59, 7, 100, 0.95);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  border-radius: 8px;
+  z-index: 140;
+  background-color: #1b0a2e;
+  border: 1px solid rgba(168, 85, 247, 0.38);
+  border-radius: 12px;
   overflow: hidden;
   min-width: 200px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
   animation: slideDownMenu 0.3s ease-out;
 }
 

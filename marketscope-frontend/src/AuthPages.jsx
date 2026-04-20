@@ -400,7 +400,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </span>
       </div>
 
-      <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-10">
+      <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-40">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
           <span></span>
           <span></span>
