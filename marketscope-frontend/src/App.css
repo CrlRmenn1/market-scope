@@ -382,11 +382,7 @@ html[data-theme="light"] .bottom-navbar {
 }
 
 .fluid-indicator {
-  position: absolute; top: 8px; bottom: 8px; left: 8px;
-  width: calc((100% - 16px) / var(--nav-count, 3)); background-color: var(--accent-hover);
-  border-radius: 40px; z-index: 1; transition: transform 0.45s var(--ease-emphatic), background-color var(--motion-normal) var(--ease-standard);
-  left: calc(8px + (var(--nav-index, 0) * ((100% - 16px) / var(--nav-count, 3))));
-  transform: none;
+  display: none;
 }
 
 .nav-item {
@@ -936,11 +932,7 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   }
 
   .fluid-indicator {
-    top: 6px;
-    bottom: 6px;
-    width: calc((100% - 12px) / var(--nav-count, 3));
-    left: calc(6px + (var(--nav-index, 0) * ((100% - 12px) / var(--nav-count, 3))));
-    transform: none;
+    display: none;
   }
 
   .nav-item {
