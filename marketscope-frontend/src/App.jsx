@@ -8,12 +8,14 @@ import BottomNav from './components/BottomNav';
 import BottomSheet from './components/BottomSheet';
 import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
+import OnboardingModal from './components/OnboardingModal';
 import './App.css';
 
 export default function App() {
   const validTabs = ['home', 'profile', 'history'];
   const OPEN_REPORT_KEY = 'marketscope_open_report';
   const ADMIN_SESSION_KEY = 'marketscope_admin_session';
+  const ONBOARDING_SUPPRESS_KEY = 'marketscope_onboarding_suppress';
   const appShellClass = 'relative flex h-[100svh] w-full flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-300';
   const appContentClass = 'relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto antialiased';
   const adminContentClass = 'pt-[88px]';
@@ -28,6 +30,7 @@ export default function App() {
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const saveOpenReport = (data, coords) => {
     localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
@@ -70,6 +73,23 @@ export default function App() {
       clearOpenReport();
     }
   }, [session, reportData]);
+
+  useEffect(() => {
+    if (!session) {
+      setShowOnboarding(false);
+      return;
+    }
+
+    const suppressOnboarding = localStorage.getItem(ONBOARDING_SUPPRESS_KEY) === '1';
+    setShowOnboarding(!suppressOnboarding);
+  }, [session]);
+
+  const handleCloseOnboarding = (doNotShowAgain = false) => {
+    if (doNotShowAgain) {
+      localStorage.setItem(ONBOARDING_SUPPRESS_KEY, '1');
+    }
+    setShowOnboarding(false);
+  };
 
   useEffect(() => {
     const handleOpenReport = (event) => {
@@ -130,6 +150,7 @@ export default function App() {
     localStorage.removeItem('marketscope_active_tab');
     clearOpenReport();
     setSession(null);
+    setShowOnboarding(false);
     setJustLoggedOut(true);
   };
 
@@ -245,6 +266,8 @@ export default function App() {
       {!showBottomSheet && !reportData && (
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       )}
+
+      <OnboardingModal isOpen={showOnboarding} onClose={handleCloseOnboarding} />
     </div>
   );
 }

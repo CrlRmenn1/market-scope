@@ -6,7 +6,7 @@ import {
   ArrowRightOnRectangleIcon 
 } from '@heroicons/react/24/solid';
 
-export default function Header({ theme, toggleTheme, onLogout, userName, userAvatarUrl, onGoHome }) {
+export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Get first letter of name for a fallback avatar
@@ -14,23 +14,20 @@ export default function Header({ theme, toggleTheme, onLogout, userName, userAva
 
   return (
     <header className="app-header">
-      
-      {/* BRANDING */}
-      <button type="button" className="brand-home-btn" onClick={() => onGoHome?.()}>
-        <div className="brand-wrapper">
-          <div className="brand-mark mark-pulse">
-            <div className="lens-left"></div>
+      <div className="brand-wrapper">
+        <button className="brand-home-btn" onClick={onGoHome} aria-label="Go to Home screen">
+          <div className="brand-mark" aria-hidden="true">
+            <div className="lens-left" />
             <div className="lens-center">
-              <div className="lens-reflection"></div>
+              <div className="lens-reflection" />
             </div>
-            <div className="lens-right"></div>
+            <div className="lens-right" />
           </div>
-          
-          <h1 className="app-title">
-            Market<span className="highlight-text">Scope</span>
-          </h1>
-        </div>
-      </button>
+        </button>
+        <h1 className="app-title">
+          Market<span className="highlight-text">Scope</span>
+        </h1>
+      </div>
 
       {/* SETTINGS MENU (Unified with Name) */}
       <div className="settings-wrapper">

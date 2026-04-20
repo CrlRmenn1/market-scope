@@ -402,18 +402,6 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     <div className="hero-container relative isolate flex min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.28),transparent_34%),radial-gradient(circle_at_top_right,rgba(59,7,100,0.72),transparent_32%),linear-gradient(180deg,#22073a_0%,#0b1120_45%,#050816_100%)] px-5 py-4 text-center sm:px-8 lg:px-12">
       <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/12 blur-3xl" />
-      <div className="hero-logo-corner !left-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-10 !gap-2.5 !rounded-full !border !border-white/10 !bg-black/20 !px-3 !py-2 !backdrop-blur-xl">
-        <div className="brand-mark">
-          <div className="lens-left"></div>
-          <div className="lens-center">
-            <div className="lens-reflection"></div>
-          </div>
-          <div className="lens-right"></div>
-        </div>
-        <span className="hero-logo-text">
-          Market<span className="hero-logo-highlight">Scope</span>
-        </span>
-      </div>
 
       <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-40">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
@@ -439,7 +427,6 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       </div>
 
       <div className="hero-content relative z-10 flex max-w-[680px] flex-col items-center gap-5 px-4 py-8 sm:gap-6 sm:px-6 lg:py-0">
-        {renderMarketScopeBadge('rounded-full border border-violet-300/30 bg-violet-500/15 px-4 py-2 shadow-[0_10px_30px_rgba(168,85,247,0.15)]')}
         <h1 className="hero-title max-w-[11ch] text-[clamp(2.7rem,7vw,4.5rem)] font-black leading-[0.96] tracking-[-0.06em] text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.35)]">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
         <p className="hero-description max-w-[28rem] text-base leading-7 text-violet-100/90 sm:text-lg">The geospatial viability engine designed exclusively for local entrepreneurs and MSMEs.</p>
         <p className="hero-instruction rounded-full border border-violet-200/20 bg-white/5 px-4 py-2 text-sm font-semibold leading-6 text-violet-50 shadow-[0_10px_35px_rgba(0,0,0,0.18)] backdrop-blur-md">Quick Start: Tap Get Started, drop a pin, and scan market potential in seconds.</p>

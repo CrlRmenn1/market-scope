@@ -71,6 +71,7 @@
 .hero-badge-logo-text {
   line-height: 1;
   color: #ffffff;
+  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
 }
 
 .hero-text h1 {
@@ -706,6 +707,7 @@
   color: #ffffff;
   font-size: 1.08rem;
   font-weight: 800;
+  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
   letter-spacing: -0.01em;
   line-height: 1;
 }
