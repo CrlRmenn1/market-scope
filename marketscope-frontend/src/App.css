@@ -385,13 +385,15 @@ html[data-theme="light"] .bottom-navbar {
   position: absolute; top: 8px; bottom: 8px; left: 8px;
   width: calc((100% - 16px) / var(--nav-count, 3)); background-color: var(--accent-hover);
   border-radius: 40px; z-index: 1; transition: transform 0.45s var(--ease-emphatic), background-color var(--motion-normal) var(--ease-standard);
-  transform: translateX(calc(var(--nav-index, 0) * 100%));
+  left: calc(8px + (var(--nav-index, 0) * ((100% - 16px) / var(--nav-count, 3))));
+  transform: none;
 }
 
 .nav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   background: transparent; border: none; color: var(--text-muted);
   cursor: pointer; gap: 4px; z-index: 2; padding: 8px 0;
+  position: relative;
   transition: transform var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard);
 }
 
@@ -936,9 +938,9 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   .fluid-indicator {
     top: 6px;
     bottom: 6px;
-    left: 6px;
     width: calc((100% - 12px) / var(--nav-count, 3));
-    transform: translateX(calc(var(--nav-index, 0) * 100%));
+    left: calc(6px + (var(--nav-index, 0) * ((100% - 12px) / var(--nav-count, 3))));
+    transform: none;
   }
 
   .nav-item {
@@ -2148,6 +2150,9 @@ html[data-theme="light"] .profile-page .text-slate-50,
 html[data-theme="light"] .history-page .text-slate-50,
 html[data-theme="light"] .trends-card .text-slate-50,
 html[data-theme="light"] .history-confirm-modal .text-slate-50,
+html[data-theme="light"] .profile-page .text-slate-100,
+html[data-theme="light"] .history-page .text-slate-100,
+html[data-theme="light"] .trends-card .text-slate-100,
 html[data-theme="light"] .profile-page .text-white,
 html[data-theme="light"] .history-page .text-white,
 html[data-theme="light"] .trends-card .text-white {
@@ -2157,6 +2162,9 @@ html[data-theme="light"] .trends-card .text-white {
 html[data-theme="light"] .profile-page .text-slate-300,
 html[data-theme="light"] .history-page .text-slate-300,
 html[data-theme="light"] .trends-card .text-slate-300,
+html[data-theme="light"] .profile-page .text-slate-200,
+html[data-theme="light"] .history-page .text-slate-200,
+html[data-theme="light"] .trends-card .text-slate-200,
 html[data-theme="light"] .profile-page .text-slate-400,
 html[data-theme="light"] .history-page .text-slate-400,
 html[data-theme="light"] .trends-card .text-slate-400,
@@ -2190,6 +2198,30 @@ html[data-theme="light"] .trends-card .history-meta,
 html[data-theme="light"] .profile-page .history-empty-subtitle,
 html[data-theme="light"] .history-page .history-empty-subtitle,
 html[data-theme="light"] .trends-card .history-empty-subtitle {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="light"] .profile-page .history-search-input,
+html[data-theme="light"] .history-page .history-search-input,
+html[data-theme="light"] .profile-page .app-select,
+html[data-theme="light"] .history-page .app-select,
+html[data-theme="light"] .profile-page .history-open-btn,
+html[data-theme="light"] .history-page .history-open-btn,
+html[data-theme="light"] .profile-page .history-breakdown-toggle,
+html[data-theme="light"] .history-page .history-breakdown-toggle,
+html[data-theme="light"] .profile-page .edit-btn,
+html[data-theme="light"] .history-page .edit-btn,
+html[data-theme="light"] .profile-page .history-delete-btn,
+html[data-theme="light"] .history-page .history-delete-btn {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="light"] .profile-page .history-summary,
+html[data-theme="light"] .history-page .history-summary,
+html[data-theme="light"] .profile-page .factor-desc,
+html[data-theme="light"] .history-page .factor-desc,
+html[data-theme="light"] .profile-page .history-mini-meta,
+html[data-theme="light"] .history-page .history-mini-meta {
   color: var(--text-muted) !important;
 }
 
