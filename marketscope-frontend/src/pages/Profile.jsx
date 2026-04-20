@@ -24,6 +24,22 @@ const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
+const PRIMARY_BUSINESS_OPTIONS = [
+  { value: 'coffee', label: 'Coffee Shops / Cafes' },
+  { value: 'print', label: 'Print / Copy Centers' },
+  { value: 'laundry', label: 'Laundry Shops' },
+  { value: 'carwash', label: 'Car Washes' },
+  { value: 'kiosk', label: 'Food Kiosks / Stalls' },
+  { value: 'water', label: 'Water Refilling Stations' },
+  { value: 'bakery', label: 'Bakeries' },
+  { value: 'pharmacy', label: 'Small Pharmacies' },
+  { value: 'barber', label: 'Barbershops / Salons' },
+  { value: 'moto', label: 'Motorcycle Repair Shops' },
+  { value: 'internet', label: 'Internet Cafes' },
+  { value: 'meat', label: 'Meat Shops' },
+  { value: 'hardware', label: 'Hardware / Construction Supplies' }
+];
+
 export default function Profile({ user, onProfileUpdate }) {
   const userId = user?.user_id || user?.id;
   const [profile, setProfile] = useState(user || null);
@@ -94,6 +110,13 @@ export default function Profile({ user, onProfileUpdate }) {
   }, [profile]);
 
   const avatarForDisplay = editing ? formValues.avatar_url : profile?.avatar_url;
+
+  const selectedPrimaryBusinessLabel = useMemo(() => {
+    const current = String(profile?.primary_business || '').trim();
+    if (!current) return '-';
+    const matched = PRIMARY_BUSINESS_OPTIONS.find((option) => option.value === current);
+    return matched?.label || current;
+  }, [profile?.primary_business]);
 
   const handleSave = async () => {
     if (!userId) return;
@@ -285,14 +308,18 @@ export default function Profile({ user, onProfileUpdate }) {
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">Primary Business Interest</span>
               {editing ? (
-                <input
-                  type="text"
+                <select
                   className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
                   value={formValues.primary_business}
                   onChange={(e) => setFormValues((current) => ({ ...current, primary_business: e.target.value }))}
-                />
+                >
+                  <option value="">Not set</option>
+                  {PRIMARY_BUSINESS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               ) : (
-                <span className="settings-value">{profile?.primary_business || 'â€”'}</span>
+                <span className="settings-value">{selectedPrimaryBusinessLabel}</span>
               )}
             </div>
           </div>
