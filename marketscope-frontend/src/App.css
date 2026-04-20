@@ -2217,6 +2217,41 @@ html[data-theme="light"] .history-page .history-mini-meta {
   color: var(--text-muted) !important;
 }
 
+html[data-theme="light"] .history-page .input-group label {
+  color: #64748b;
+  font-weight: 700;
+}
+
+html[data-theme="light"] .history-page .history-search-input::placeholder {
+  color: #64748b;
+}
+
+html[data-theme="light"] .history-page .history-card-button,
+html[data-theme="light"] .history-page .history-open-btn,
+html[data-theme="light"] .history-page .history-breakdown-toggle,
+html[data-theme="light"] .history-page .history-breakdown-item {
+  background: rgba(15, 23, 42, 0.03) !important;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+}
+
+html[data-theme="light"] .history-page .history-open-btn,
+html[data-theme="light"] .history-page .history-breakdown-toggle {
+  color: #111827 !important;
+}
+
+html[data-theme="light"] .history-page .history-delete-btn,
+html[data-theme="light"] .history-confirm-modal .history-delete-btn {
+  color: #b91c1c !important;
+  background: rgba(254, 226, 226, 0.8) !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+}
+
+html[data-theme="light"] .history-page .history-delete-btn:hover:not(:disabled),
+html[data-theme="light"] .history-confirm-modal .history-delete-btn:hover:not(:disabled) {
+  background: rgba(254, 202, 202, 0.95) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+}
+
 html[data-theme="light"] .profile-page .profile-name,
 html[data-theme="light"] .history-page .profile-name,
 html[data-theme="light"] .trends-card .profile-name,
