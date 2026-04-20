@@ -45,6 +45,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 6px 12px;
   background-color: rgba(168, 85, 247, 0.15);
   border: 1px solid rgba(168, 85, 247, 0.3);
@@ -53,6 +54,23 @@
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 1px;
+}
+
+.hero-badge-brand {
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.hero-badge-mark {
+  width: 34px;
+  height: 22px;
+}
+
+.hero-badge-logo-text {
+  line-height: 1;
+  color: #ffffff;
 }
 
 .hero-text h1 {
