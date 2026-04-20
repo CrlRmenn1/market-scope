@@ -7,6 +7,11 @@ const mapProfileToFormValues = (value) => ({
   cellphone_number: value?.cellphone_number || '',
   address: value?.address || '',
   primary_business: value?.primary_business || '',
+  startup_capital: value?.startup_capital ?? '',
+  risk_tolerance: value?.risk_tolerance || '',
+  preferred_setup: value?.preferred_setup || '',
+  time_commitment: value?.time_commitment || '',
+  target_payback_months: value?.target_payback_months ?? '',
   birthday: value?.birthday ? String(value.birthday).slice(0, 10) : '',
   age: value?.age ?? '',
   avatar_url: value?.avatar_url || ''
@@ -100,6 +105,8 @@ export default function Profile({ user, onProfileUpdate }) {
         body: JSON.stringify({
           ...formValues,
           age: formValues.age === '' ? null : Number(formValues.age),
+          startup_capital: formValues.startup_capital === '' ? null : Number(formValues.startup_capital),
+          target_payback_months: formValues.target_payback_months === '' ? null : Number(formValues.target_payback_months),
           birthday: formValues.birthday || null
         })
       });
@@ -286,6 +293,103 @@ export default function Profile({ user, onProfileUpdate }) {
                 />
               ) : (
                 <span className="settings-value">{profile?.primary_business || 'â€”'}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
+            <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="settings-label">Startup Capital (PHP)</span>
+              {editing ? (
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  value={formValues.startup_capital}
+                  onChange={(e) => setFormValues((current) => ({ ...current, startup_capital: e.target.value }))}
+                />
+              ) : (
+                <span className="settings-value">{profile?.startup_capital ? `PHP ${Number(profile.startup_capital).toLocaleString()}` : 'â€”'}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
+            <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="settings-label">Risk Tolerance</span>
+              {editing ? (
+                <select
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  value={formValues.risk_tolerance}
+                  onChange={(e) => setFormValues((current) => ({ ...current, risk_tolerance: e.target.value }))}
+                >
+                  <option value="">Not set</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              ) : (
+                <span className="settings-value">{profile?.risk_tolerance || 'â€”'}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
+            <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="settings-label">Preferred Setup</span>
+              {editing ? (
+                <select
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  value={formValues.preferred_setup}
+                  onChange={(e) => setFormValues((current) => ({ ...current, preferred_setup: e.target.value }))}
+                >
+                  <option value="">Not set</option>
+                  <option value="kiosk">Kiosk</option>
+                  <option value="storefront">Storefront</option>
+                  <option value="roadside">Roadside</option>
+                  <option value="market-stall">Market Stall</option>
+                  <option value="warehouse">Warehouse</option>
+                </select>
+              ) : (
+                <span className="settings-value">{profile?.preferred_setup || 'â€”'}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
+            <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="settings-label">Time Commitment</span>
+              {editing ? (
+                <select
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  value={formValues.time_commitment}
+                  onChange={(e) => setFormValues((current) => ({ ...current, time_commitment: e.target.value }))}
+                >
+                  <option value="">Not set</option>
+                  <option value="part-time">Part-time</option>
+                  <option value="full-time">Full-time</option>
+                </select>
+              ) : (
+                <span className="settings-value">{profile?.time_commitment || 'â€”'}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
+            <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="settings-label">Target Payback (Months)</span>
+              {editing ? (
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  className="settings-inline-input profile-form-input w-full rounded-lg border border-white/10 bg-transparent px-3 py-2.5 text-sm text-[var(--text-main)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                  value={formValues.target_payback_months}
+                  onChange={(e) => setFormValues((current) => ({ ...current, target_payback_months: e.target.value }))}
+                />
+              ) : (
+                <span className="settings-value">{profile?.target_payback_months ? `${profile.target_payback_months} months` : 'â€”'}</span>
               )}
             </div>
           </div>

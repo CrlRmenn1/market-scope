@@ -10,6 +10,13 @@ export default function BottomNav({ activeTab, setActiveTab }) {
       ),
     },
     {
+      id: 'trends',
+      label: 'Trends',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 17l6-6 4 4 8-8"></path><path d="M14 7h7v7"></path></svg>
+      ),
+    },
+    {
       id: 'profile',
       label: 'Profile',
       icon: (
@@ -29,6 +36,7 @@ export default function BottomNav({ activeTab, setActiveTab }) {
     <nav
       className="bottom-navbar"
       style={{
+        '--nav-count': tabs.length,
         bottom: 'calc(22px + env(safe-area-inset-bottom))',
         transform: 'translateX(-50%)'
       }}

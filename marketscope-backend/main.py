@@ -111,6 +111,11 @@ class RegisterUser(BaseModel):
     age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
+    startup_capital: int | None = None
+    risk_tolerance: str | None = None
+    preferred_setup: str | None = None
+    time_commitment: str | None = None
+    target_payback_months: int | None = None
 
 class LoginUser(BaseModel):
     email: str
@@ -141,6 +146,11 @@ class UpdateUserProfile(BaseModel):
     age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
+    startup_capital: int | None = None
+    risk_tolerance: str | None = None
+    preferred_setup: str | None = None
+    time_commitment: str | None = None
+    target_payback_months: int | None = None
 
 class AnalysisRequest(BaseModel):
     lat: float
@@ -175,6 +185,11 @@ class AdminUpdateUser(BaseModel):
     age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
+    startup_capital: int | None = None
+    risk_tolerance: str | None = None
+    preferred_setup: str | None = None
+    time_commitment: str | None = None
+    target_payback_months: int | None = None
 
 
 ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
@@ -241,6 +256,11 @@ def ensure_users_profile_columns(cursor):
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_business VARCHAR(120)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS startup_capital INTEGER")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_tolerance VARCHAR(20)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_setup VARCHAR(40)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS time_commitment VARCHAR(20)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS target_payback_months INTEGER")
 
 
 def ensure_custom_msme_table(cursor):
@@ -497,13 +517,17 @@ def register(user: RegisterUser):
             INSERT INTO users (
                 full_name, email, password_hash,
                 address, cellphone_number, avatar_url,
-                age, birthday, primary_business
+                age, birthday, primary_business,
+                startup_capital, risk_tolerance, preferred_setup,
+                time_commitment, target_payback_months
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING
                 {user_pk_column}, full_name, email, created_at,
                 address, cellphone_number, avatar_url,
-                age, birthday, primary_business
+                age, birthday, primary_business,
+                startup_capital, risk_tolerance, preferred_setup,
+                time_commitment, target_payback_months
             """,
             (
                 user.full_name,
@@ -514,7 +538,12 @@ def register(user: RegisterUser):
                 user.avatar_url or None,
                 user.age,
                 user.birthday,
-                user.primary_business or None
+                user.primary_business or None,
+                user.startup_capital,
+                user.risk_tolerance or None,
+                user.preferred_setup or None,
+                user.time_commitment or None,
+                user.target_payback_months,
             )
         )
         new_user = cursor.fetchone()
@@ -535,7 +564,12 @@ def register(user: RegisterUser):
                 "avatar_url": new_user[6],
                 "age": new_user[7],
                 "birthday": new_user[8],
-                "primary_business": new_user[9]
+                "primary_business": new_user[9],
+                "startup_capital": new_user[10],
+                "risk_tolerance": new_user[11],
+                "preferred_setup": new_user[12],
+                "time_commitment": new_user[13],
+                "target_payback_months": new_user[14],
             }
         }
     except Exception as e:
@@ -555,7 +589,9 @@ def login(user: LoginUser):
                 {user_pk_column} AS user_id,
                 full_name, email, password_hash, created_at,
                 address, cellphone_number, avatar_url,
-                age, birthday, primary_business
+                age, birthday, primary_business,
+                startup_capital, risk_tolerance, preferred_setup,
+                time_commitment, target_payback_months
             FROM users
             WHERE email = %s
             """,
@@ -582,7 +618,12 @@ def login(user: LoginUser):
                 "avatar_url": db_user.get('avatar_url'),
                 "age": db_user.get('age'),
                 "birthday": db_user.get('birthday'),
-                "primary_business": db_user.get('primary_business')
+                "primary_business": db_user.get('primary_business'),
+                "startup_capital": db_user.get('startup_capital'),
+                "risk_tolerance": db_user.get('risk_tolerance'),
+                "preferred_setup": db_user.get('preferred_setup'),
+                "time_commitment": db_user.get('time_commitment'),
+                "target_payback_months": db_user.get('target_payback_months'),
             }
         }
     except Exception as e:
@@ -763,7 +804,9 @@ def get_user_profile(user_id: int):
                 {user_pk_column} AS user_id,
                 full_name, email, created_at,
                 address, cellphone_number, avatar_url,
-                age, birthday, primary_business
+                age, birthday, primary_business,
+                startup_capital, risk_tolerance, preferred_setup,
+                time_commitment, target_payback_months
             FROM users
             WHERE {user_pk_column} = %s
             """,
@@ -824,13 +867,20 @@ def update_user_profile(user_id: int, payload: UpdateUserProfile):
                 avatar_url = %s,
                 age = %s,
                 birthday = %s,
-                primary_business = %s
+                primary_business = %s,
+                startup_capital = %s,
+                risk_tolerance = %s,
+                preferred_setup = %s,
+                time_commitment = %s,
+                target_payback_months = %s
             WHERE {user_pk_column} = %s
             RETURNING
                 {user_pk_column} AS user_id,
                 full_name, email, created_at,
                 address, cellphone_number, avatar_url,
-                age, birthday, primary_business
+                age, birthday, primary_business,
+                startup_capital, risk_tolerance, preferred_setup,
+                time_commitment, target_payback_months
             """,
             (
                 payload.full_name,
@@ -841,6 +891,11 @@ def update_user_profile(user_id: int, payload: UpdateUserProfile):
                 payload.age,
                 payload.birthday,
                 payload.primary_business or None,
+                payload.startup_capital,
+                payload.risk_tolerance or None,
+                payload.preferred_setup or None,
+                payload.time_commitment or None,
+                payload.target_payback_months,
                 user_id
             )
         )
@@ -973,6 +1028,67 @@ def delete_user_history_item(user_id: int, history_id: int):
         return {"status": "success", "deleted_history_id": deleted_row[0]}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/users/{user_id}/trend-recommendations")
+def get_user_trend_recommendations(user_id: int, limit: int = 5):
+    try:
+        safe_limit = max(1, min(10, int(limit)))
+        preload_pbf_competitor_cache()
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+
+        user_profile = fetch_user_profile_by_id(cursor, user_pk_column, user_id)
+        if not user_profile:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+
+        global_trend_snapshot = fetch_history_trend_snapshot(cursor)
+        user_trend_snapshot = fetch_user_business_history_snapshot(cursor, user_id)
+
+        cursor.close()
+        conn.close()
+
+        recommendations = []
+        for profile_key, profile_data in SME_DATABASE.items():
+            business_name = str(profile_data.get("name") or profile_key).strip().lower()
+            global_trend = global_trend_snapshot.get(business_name, {"scan_count": 0, "avg_score": 0.0})
+            user_trend = user_trend_snapshot.get(business_name, {"scan_count": 0, "avg_score": 0.0})
+
+            recommendations.append(
+                score_business_opportunity(
+                    profile_key,
+                    profile_data,
+                    user_profile,
+                    global_trend,
+                    user_trend,
+                )
+            )
+
+        recommendations.sort(key=lambda item: item.get("opportunity_score", 0), reverse=True)
+
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "summary": {
+                "profile_interest": user_profile.get("primary_business") or "Not set",
+                "startup_capital": user_profile.get("startup_capital"),
+                "risk_tolerance": user_profile.get("risk_tolerance") or "Not set",
+                "preferred_setup": user_profile.get("preferred_setup") or "Not set",
+                "time_commitment": user_profile.get("time_commitment") or "Not set",
+                "target_payback_months": user_profile.get("target_payback_months"),
+                "total_options_evaluated": len(recommendations),
+            },
+            "recommendations": recommendations[:safe_limit],
+        }
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
@@ -1219,6 +1335,28 @@ SME_DATABASE = {
     "hardware": {"key": "shop", "val": "hardware", "fear": 7, "need": 8, "name": "Hardware/Construction Supplies", "osm_tags": [("shop", "hardware"), ("shop", "doityourself"), ("shop", "trade")]}
 }
 
+TREND_BUSINESS_REQUIREMENTS = {
+    "coffee": {"capital_min": 120000, "capital_max": 450000, "risk": "medium", "setup": "storefront", "payback_months": 18},
+    "print": {"capital_min": 90000, "capital_max": 280000, "risk": "low", "setup": "storefront", "payback_months": 20},
+    "laundry": {"capital_min": 180000, "capital_max": 520000, "risk": "medium", "setup": "storefront", "payback_months": 22},
+    "carwash": {"capital_min": 220000, "capital_max": 700000, "risk": "high", "setup": "roadside", "payback_months": 24},
+    "kiosk": {"capital_min": 50000, "capital_max": 220000, "risk": "medium", "setup": "kiosk", "payback_months": 12},
+    "water": {"capital_min": 120000, "capital_max": 360000, "risk": "low", "setup": "storefront", "payback_months": 18},
+    "bakery": {"capital_min": 130000, "capital_max": 420000, "risk": "medium", "setup": "storefront", "payback_months": 18},
+    "pharmacy": {"capital_min": 250000, "capital_max": 900000, "risk": "medium", "setup": "storefront", "payback_months": 26},
+    "barber": {"capital_min": 70000, "capital_max": 260000, "risk": "low", "setup": "storefront", "payback_months": 14},
+    "moto": {"capital_min": 100000, "capital_max": 350000, "risk": "medium", "setup": "roadside", "payback_months": 16},
+    "internet": {"capital_min": 160000, "capital_max": 480000, "risk": "high", "setup": "storefront", "payback_months": 24},
+    "meat": {"capital_min": 110000, "capital_max": 320000, "risk": "medium", "setup": "market-stall", "payback_months": 15},
+    "hardware": {"capital_min": 300000, "capital_max": 1200000, "risk": "medium", "setup": "warehouse", "payback_months": 28},
+}
+
+SME_PROFILE_BY_NAME = {
+    str(profile.get("name") or "").strip().lower(): key
+    for key, profile in SME_DATABASE.items()
+    if str(profile.get("name") or "").strip()
+}
+
 PBF_NAME_KEYWORD_FALLBACK = {
     "coffee": ["coffee", "cafe"],
     "print": ["print", "copy", "xerox"],
@@ -1444,6 +1582,242 @@ def fetch_custom_msmes(business_key):
         return []
 
 
+def fetch_user_profile_by_id(cursor, user_pk_column: str, user_id: int):
+    cursor.execute(
+        f"""
+        SELECT
+            {user_pk_column} AS user_id,
+            full_name,
+            email,
+            address,
+            cellphone_number,
+            avatar_url,
+            age,
+            birthday,
+            primary_business,
+            startup_capital,
+            risk_tolerance,
+            preferred_setup,
+            time_commitment,
+            target_payback_months,
+            created_at
+        FROM users
+        WHERE {user_pk_column} = %s
+        LIMIT 1
+        """,
+        (user_id,)
+    )
+    return cursor.fetchone()
+
+
+def fetch_history_trend_snapshot(cursor):
+    cursor.execute(
+        """
+        SELECT
+            LOWER(TRIM(business_type)) AS business_name,
+            COUNT(*) AS scan_count,
+            AVG(viability_score) AS avg_score
+        FROM analysis_history
+        WHERE scan_date >= (NOW() - INTERVAL '180 days')
+        GROUP BY LOWER(TRIM(business_type))
+        """
+    )
+    rows = cursor.fetchall() or []
+    snapshot = {}
+    for row in rows:
+        business_name = (row.get("business_name") or "").strip()
+        if not business_name:
+            continue
+        snapshot[business_name] = {
+            "scan_count": int(row.get("scan_count") or 0),
+            "avg_score": float(row.get("avg_score") or 0.0),
+        }
+    return snapshot
+
+
+def fetch_user_business_history_snapshot(cursor, user_id: int):
+    cursor.execute(
+        """
+        SELECT
+            LOWER(TRIM(business_type)) AS business_name,
+            COUNT(*) AS scan_count,
+            AVG(viability_score) AS avg_score
+        FROM analysis_history
+        WHERE user_id = %s
+        GROUP BY LOWER(TRIM(business_type))
+        """,
+        (user_id,)
+    )
+    rows = cursor.fetchall() or []
+    snapshot = {}
+    for row in rows:
+        business_name = (row.get("business_name") or "").strip()
+        if not business_name:
+            continue
+        snapshot[business_name] = {
+            "scan_count": int(row.get("scan_count") or 0),
+            "avg_score": float(row.get("avg_score") or 0.0),
+        }
+    return snapshot
+
+
+def score_business_opportunity(profile_key, profile_data, user_profile, global_trend, user_trend):
+    business_name = str(profile_data.get("name") or profile_key).strip()
+    business_name_key = business_name.lower()
+
+    market_scan_count = int(global_trend.get("scan_count") or 0)
+    market_avg_score = float(global_trend.get("avg_score") or 0.0)
+    user_scan_count = int(user_trend.get("scan_count") or 0)
+    user_avg_score = float(user_trend.get("avg_score") or 0.0)
+
+    # Proxy demand potential using existing business need model.
+    demand_points = min(22, int((profile_data.get("need", 5) / 10) * 22))
+
+    # Proxy competition using locally cached OSM + custom MSME competitors.
+    local_competitors = len(get_cached_pbf_competitors(profile_data.get("val"))) + len(fetch_custom_msmes(profile_key))
+    market_gap_points = max(0, 22 - min(22, local_competitors * 2))
+
+    trend_points = min(18, int((market_avg_score / 100) * 18))
+    momentum_points = min(10, market_scan_count * 2)
+    user_experience_points = min(12, int((user_avg_score / 100) * 12)) if user_scan_count > 0 else 0
+
+    requirement = TREND_BUSINESS_REQUIREMENTS.get(profile_key, {})
+    capital_min = int(requirement.get("capital_min") or 0)
+    capital_max = int(requirement.get("capital_max") or 0)
+    business_risk = str(requirement.get("risk") or "medium").strip().lower()
+    business_setup = str(requirement.get("setup") or "storefront").strip().lower()
+    target_payback = int(requirement.get("payback_months") or 0)
+
+    startup_capital = user_profile.get("startup_capital")
+    risk_tolerance = str(user_profile.get("risk_tolerance") or "").strip().lower()
+    preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
+    target_payback_months = user_profile.get("target_payback_months")
+
+    capital_fit_points = 6
+    if isinstance(startup_capital, int):
+        if capital_min <= startup_capital <= max(capital_max, capital_min):
+            capital_fit_points = 14
+        elif startup_capital >= capital_min:
+            capital_fit_points = 10
+        else:
+            capital_fit_points = 2
+
+    risk_rank = {"low": 1, "medium": 2, "high": 3}
+    risk_fit_points = 5
+    if risk_tolerance in risk_rank:
+        if risk_rank[risk_tolerance] >= risk_rank.get(business_risk, 2):
+            risk_fit_points = 10
+        else:
+            risk_fit_points = 3
+
+    setup_fit_points = 4
+    if preferred_setup:
+        setup_fit_points = 9 if preferred_setup == business_setup else 3
+
+    payback_fit_points = 3
+    if isinstance(target_payback_months, int) and target_payback_months > 0 and target_payback > 0:
+        payback_fit_points = 9 if target_payback <= target_payback_months else 2
+
+    primary_interest = str(user_profile.get("primary_business") or "").strip().lower()
+    interest_hit = bool(
+        primary_interest
+        and (
+            profile_key in primary_interest
+            or business_name_key in primary_interest
+            or any(token in primary_interest for token in ["food"] if profile_key in {"kiosk", "bakery", "coffee", "meat"})
+        )
+    )
+    interest_points = 16 if interest_hit else 4
+
+    total_score = min(
+        100,
+        demand_points
+        + market_gap_points
+        + trend_points
+        + momentum_points
+        + user_experience_points
+        + interest_points
+        + capital_fit_points
+        + risk_fit_points
+        + setup_fit_points
+        + payback_fit_points
+    )
+
+    reasons = [
+        f"Demand potential is {'high' if demand_points >= 15 else 'moderate'} based on local infrastructure fit.",
+        (
+            "Direct competition is currently low in local Panabo map data."
+            if market_gap_points >= 14
+            else "Competition exists, but opportunities remain with differentiation."
+        ),
+        (
+            f"Recent market scans show strong viability trends (avg {market_avg_score:.1f}/100)."
+            if market_scan_count > 0
+            else "Limited recent scan history, so recommendation relies more on baseline demand and saturation."
+        ),
+    ]
+
+    if capital_min > 0 and capital_max > 0:
+        reasons.append(f"Typical startup capital range is around PHP {capital_min:,} to PHP {capital_max:,}.")
+    if isinstance(startup_capital, int):
+        if capital_fit_points >= 12:
+            reasons.append("Your declared startup capital fits this business range.")
+        elif capital_fit_points <= 3:
+            reasons.append("Your current startup capital may be below the usual requirement for this category.")
+
+    if risk_tolerance:
+        reasons.append(f"Risk alignment: your profile is {risk_tolerance} tolerance vs {business_risk} category risk.")
+
+    if preferred_setup:
+        reasons.append(
+            "Preferred setup matches this model."
+            if setup_fit_points >= 8
+            else f"This category is usually a {business_setup} setup, which differs from your preferred setup."
+        )
+
+    if isinstance(target_payback_months, int) and target_payback_months > 0 and target_payback > 0:
+        reasons.append(
+            f"Estimated payback around {target_payback} months; your target is {target_payback_months} months."
+        )
+
+    if interest_hit:
+        reasons.append("Matches your declared primary business interest.")
+    elif primary_interest:
+        reasons.append("Expands beyond your current primary interest for diversification.")
+
+    if user_scan_count > 0:
+        reasons.append(f"You already evaluated this category {user_scan_count} time(s), which improves decision confidence.")
+
+    return {
+        "business_key": profile_key,
+        "business_name": business_name,
+        "opportunity_score": int(total_score),
+        "market_scan_count": market_scan_count,
+        "market_average_viability": round(market_avg_score, 1),
+        "user_scan_count": user_scan_count,
+        "local_competitor_estimate": int(local_competitors),
+        "reasons": reasons,
+        "scoring": {
+            "demand_points": demand_points,
+            "market_gap_points": market_gap_points,
+            "trend_points": trend_points,
+            "momentum_points": momentum_points,
+            "user_experience_points": user_experience_points,
+            "interest_points": interest_points,
+            "capital_fit_points": capital_fit_points,
+            "risk_fit_points": risk_fit_points,
+            "setup_fit_points": setup_fit_points,
+            "payback_fit_points": payback_fit_points,
+        },
+        "profile_match": {
+            "capital_range": {"min": capital_min, "max": capital_max},
+            "business_risk": business_risk,
+            "business_setup": business_setup,
+            "estimated_payback_months": target_payback,
+        },
+    }
+
+
 def verify_admin_token(x_admin_token: str | None):
     if not x_admin_token or x_admin_token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
@@ -1462,7 +1836,12 @@ def fetch_user_for_admin(cursor, user_pk_column: str, user_id: int):
             avatar_url,
             age,
             birthday,
-            primary_business
+            primary_business,
+            startup_capital,
+            risk_tolerance,
+            preferred_setup,
+            time_commitment,
+            target_payback_months
         FROM users
         WHERE {user_pk_column} = %s
         """,
@@ -1545,7 +1924,12 @@ def admin_list_users(x_admin_token: str | None = Header(default=None)):
                 avatar_url,
                 age,
                 birthday,
-                primary_business
+                primary_business,
+                startup_capital,
+                risk_tolerance,
+                preferred_setup,
+                time_commitment,
+                target_payback_months
             FROM users
             ORDER BY created_at DESC, {user_pk_column} DESC
             """
@@ -1599,7 +1983,12 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 avatar_url = %s,
                 age = %s,
                 birthday = %s,
-                primary_business = %s
+                primary_business = %s,
+                startup_capital = %s,
+                risk_tolerance = %s,
+                preferred_setup = %s,
+                time_commitment = %s,
+                target_payback_months = %s
             WHERE {user_pk_column} = %s
             RETURNING
                 {user_pk_column} AS user_id,
@@ -1611,7 +2000,12 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 avatar_url,
                 age,
                 birthday,
-                primary_business
+                primary_business,
+                startup_capital,
+                risk_tolerance,
+                preferred_setup,
+                time_commitment,
+                target_payback_months
             """,
             (
                 payload.full_name,
@@ -1622,6 +2016,11 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 payload.age,
                 payload.birthday,
                 payload.primary_business or None,
+                payload.startup_capital,
+                payload.risk_tolerance or None,
+                payload.preferred_setup or None,
+                payload.time_commitment or None,
+                payload.target_payback_months,
                 user_id
             )
         )

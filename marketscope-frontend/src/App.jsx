@@ -4,6 +4,7 @@ import Header from './components/Header';
 import Home from './pages/Home';
 import Profile from './pages/Profile';
 import History from './pages/History';
+import Trends from './pages/Trends';
 import BottomNav from './components/BottomNav';
 import BottomSheet from './components/BottomSheet';
 import Report from './pages/Report';
@@ -12,7 +13,7 @@ import OnboardingModal from './components/OnboardingModal';
 import './App.css';
 
 export default function App() {
-  const validTabs = ['home', 'profile', 'history'];
+  const validTabs = ['home', 'trends', 'profile', 'history'];
   const OPEN_REPORT_KEY = 'marketscope_open_report';
   const ADMIN_SESSION_KEY = 'marketscope_admin_session';
   const ONBOARDING_SUPPRESS_KEY = 'marketscope_onboarding_suppress';
@@ -235,6 +236,8 @@ export default function App() {
         )}
         
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
+
+        {activeTab === 'trends' && <Trends user={session} />}
         
         {activeTab === 'history' && <History user={session} onOpenReport={(payload) => {
           const coords = payload.target_coords || null;
