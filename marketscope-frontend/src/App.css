@@ -2477,7 +2477,14 @@ html[data-theme="light"] .history-empty-state {
   align-items: center;
   justify-content: center;
   padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
-  animation: onboardingOverlayIn 320ms var(--ease-standard) both;
+  opacity: 0;
+  backdrop-filter: blur(0px);
+  transition: opacity 320ms var(--ease-standard), backdrop-filter 320ms var(--ease-standard);
+}
+
+.onboarding-overlay.is-visible {
+  opacity: 1;
+  backdrop-filter: blur(10px);
 }
 
 .onboarding-modal {
@@ -2487,7 +2494,14 @@ html[data-theme="light"] .history-empty-state {
   border-radius: 20px;
   padding: 18px;
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
-  animation: onboardingWindowIn 420ms var(--ease-standard) both;
+  opacity: 0;
+  transform: translateY(24px) scale(0.94);
+  transition: opacity 420ms var(--ease-standard), transform 420ms var(--ease-standard);
+}
+
+.onboarding-overlay.is-visible .onboarding-modal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .onboarding-step-card {
@@ -2610,28 +2624,6 @@ html[data-theme="light"] .history-empty-state {
   color: #fff;
 }
 
-@keyframes onboardingOverlayIn {
-  from {
-    opacity: 0;
-    backdrop-filter: blur(0px);
-  }
-  to {
-    opacity: 1;
-    backdrop-filter: blur(10px);
-  }
-}
-
-@keyframes onboardingWindowIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 @keyframes onboardingStepIn {
   from {
     opacity: 0;
@@ -2640,14 +2632,6 @@ html[data-theme="light"] .history-empty-state {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .onboarding-overlay,
-  .onboarding-modal,
-  .onboarding-step-card {
-    animation: none;
   }
 }
 

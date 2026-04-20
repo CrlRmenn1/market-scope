@@ -53,6 +53,7 @@ const steps = [
 export default function OnboardingModal({ isOpen, onClose }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   const step = useMemo(() => steps[stepIndex], [stepIndex]);
   const isLastStep = stepIndex === steps.length - 1;
@@ -61,13 +62,23 @@ export default function OnboardingModal({ isOpen, onClose }) {
     if (isOpen) {
       setStepIndex(0);
       setDoNotShowAgain(false);
+
+      const frame = window.requestAnimationFrame(() => {
+        setIsVisible(true);
+      });
+
+      return () => {
+        window.cancelAnimationFrame(frame);
+      };
     }
+
+    setIsVisible(false);
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="onboarding-overlay" role="presentation" onClick={() => onClose(doNotShowAgain)}>
+    <div className={`onboarding-overlay ${isVisible ? 'is-visible' : ''}`} role="presentation" onClick={() => onClose(doNotShowAgain)}>
       <div className="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" onClick={(event) => event.stopPropagation()}>
         <div key={stepIndex} className="onboarding-step-card">
           <div className="onboarding-progress" aria-hidden="true">
