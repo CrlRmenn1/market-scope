@@ -403,10 +403,6 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/12 blur-3xl" />
 
-      <div className="hero-logo-corner">
-        {renderMarketScopeBadge()}
-      </div>
-
       <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-40">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
           <span></span>
@@ -431,6 +427,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       </div>
 
       <div className="hero-content relative z-10 flex max-w-[680px] flex-col items-center gap-5 px-4 py-8 sm:gap-6 sm:px-6 lg:py-0">
+        {renderMarketScopeBadge()}
         <h1 className="hero-title max-w-[11ch] text-[clamp(2.7rem,7vw,4.5rem)] font-black leading-[0.96] tracking-[-0.06em] text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.35)]">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
         <p className="hero-description max-w-[28rem] text-base leading-7 text-violet-100/90 sm:text-lg">The geospatial viability engine designed exclusively for local entrepreneurs and MSMEs.</p>
         <p className="hero-instruction rounded-full border border-violet-200/20 bg-white/5 px-4 py-2 text-sm font-semibold leading-6 text-violet-50 shadow-[0_10px_35px_rgba(0,0,0,0.18)] backdrop-blur-md">Quick Start: Tap Get Started, drop a pin, and scan market potential in seconds.</p>
