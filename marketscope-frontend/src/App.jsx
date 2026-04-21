@@ -10,6 +10,7 @@ import BottomSheet from './components/BottomSheet';
 import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
 import OnboardingModal from './components/OnboardingModal';
+import SpaceSubmissionModal from './components/SpaceSubmissionModal';
 import './App.css';
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
   const [reportData, setReportData] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSpaceSubmissionModal, setShowSpaceSubmissionModal] = useState(false);
 
   const saveOpenReport = (data, coords) => {
     localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
@@ -209,6 +211,7 @@ export default function App() {
           onGoHome={() => {}}
           userName={adminName}
           userAvatarUrl={null}
+          onOpenSpaceSubmission={null}
         />
 
         <main className={`${appContentClass} ${adminContentClass}`}>
@@ -231,6 +234,7 @@ export default function App() {
         }}
         userName={session.full_name || session.name}
         userAvatarUrl={session.avatar_url}
+        onOpenSpaceSubmission={() => setShowSpaceSubmissionModal(true)}
       />
 
       <main className={`${appContentClass} ${reportData ? 'overflow-hidden' : ''}`}>
@@ -278,6 +282,12 @@ export default function App() {
       )}
 
       <OnboardingModal isOpen={showOnboarding} onClose={handleCloseOnboarding} />
+
+      <SpaceSubmissionModal
+        isOpen={showSpaceSubmissionModal}
+        onClose={() => setShowSpaceSubmissionModal(false)}
+        userId={session?.user_id || session?.id}
+      />
     </div>
   );
 }

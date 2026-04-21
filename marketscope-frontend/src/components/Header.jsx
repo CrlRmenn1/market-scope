@@ -3,10 +3,11 @@ import {
   Cog8ToothIcon, 
   SunIcon, 
   MoonIcon, 
+  MapPinIcon,
   ArrowRightOnRectangleIcon 
 } from '@heroicons/react/24/solid';
 
-export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl }) {
+export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl, onOpenSpaceSubmission }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Get first letter of name for a fallback avatar
@@ -65,6 +66,18 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
                   <><SunIcon className="dropdown-icon" /> Light Mode</>
                 )}
               </button>
+
+              {onOpenSpaceSubmission && (
+                <button
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    onOpenSpaceSubmission();
+                  }}
+                  className="dropdown-item"
+                >
+                  <MapPinIcon className="dropdown-icon" /> Submit Space Listing
+                </button>
+              )}
               
               <div className="dropdown-divider"></div>
               
