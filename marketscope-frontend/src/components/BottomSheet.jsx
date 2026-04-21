@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { apiUrl } from '../api';
 
-export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
-  const [step, setStep] = useState(1);
-  const [businessType, setBusinessType] = useState('');
+export default function BottomSheet({ onClose, coords, onViewReport, userId, initialBusinessType = '' }) {
+  const [step, setStep] = useState(initialBusinessType ? 2 : 1);
+  const [businessType, setBusinessType] = useState(initialBusinessType || '');
   const [selectedRadius, setSelectedRadius] = useState(340);
   const [apiData, setApiData] = useState(null);
   const [analysisModeIndex, setAnalysisModeIndex] = useState(0);
@@ -44,6 +44,17 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId }) {
       alert("⚠️ The MarketScope Geospatial Engine is temporarily overwhelmed or offline. Please wait a few seconds and try again.");
     }
   };
+
+  useEffect(() => {
+    if (initialBusinessType) {
+      setBusinessType(initialBusinessType);
+      setStep(2);
+      return;
+    }
+
+    setBusinessType('');
+    setStep(1);
+  }, [initialBusinessType]);
 
   useEffect(() => {
     let intervalId;

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { apiUrl } from '../api';
 
 // Fix for Vite + Leaflet image bug
 delete L.Icon.Default.prototype._getIconUrl;
@@ -58,11 +59,61 @@ export default function Home({ onMapTap }) {
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
   const hazardGeoJsonLayerRef = useRef(null);
+  const spaceMarkerLayerGroup = useRef(null);
+  const spaceHoverTimers = useRef(new Map());
   const selectedMarkerRef = useRef(null);
   const [selectedCoord, setSelectedCoord] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('normal');
   const mapViewModeRef = useRef('normal');
   const [outOfBounds, setOutOfBounds] = useState(false);
+
+  const getSpaceMarkerTone = (marker) => {
+    const sourceType = String(marker?.source_type || '').toLowerCase();
+    const guarantee = String(marker?.guarantee_level || '').toLowerCase();
+
+    if (sourceType === 'user') return 'user-guaranteed';
+    if (guarantee === 'guaranteed') return 'admin-guaranteed';
+    return 'admin-potential';
+  };
+
+  const createSpaceMarkerIcon = (marker) => {
+    const tone = getSpaceMarkerTone(marker);
+    const glyph = tone === 'user-guaranteed' ? 'U' : tone === 'admin-guaranteed' ? 'A' : 'P';
+    const badge = tone === 'admin-potential' ? '?' : 'OK';
+
+    return L.divIcon({
+      className: 'space-marker-icon-wrapper',
+      html: `
+        <div class="space-marker space-marker--${tone}">
+          <span class="space-marker__glyph">${glyph}</span>
+          <span class="space-marker__badge">${badge}</span>
+        </div>
+      `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 32],
+      tooltipAnchor: [0, -26],
+    });
+  };
+
+  const buildMarkerBrief = (marker) => {
+    const listingMode = String(marker?.listing_mode || '').toLowerCase();
+    const modeLabel = listingMode === 'buy' ? 'For Buy' : 'For Rent';
+    const sourceLabel = marker?.source_type === 'user' ? 'User Guaranteed' : marker?.guarantee_level === 'guaranteed' ? 'Admin Guaranteed' : 'Admin Potential';
+    const priceMin = Number(marker?.price_min || 0);
+    const priceMax = Number(marker?.price_max || 0);
+    let priceLabel = 'Price not set';
+
+    if (priceMin > 0 && priceMax > 0) {
+      priceLabel = `PHP ${priceMin.toLocaleString()} - PHP ${priceMax.toLocaleString()}`;
+    } else if (priceMin > 0) {
+      priceLabel = `From PHP ${priceMin.toLocaleString()}`;
+    } else if (priceMax > 0) {
+      priceLabel = `Up to PHP ${priceMax.toLocaleString()}`;
+    }
+
+    const title = marker?.title || 'Space listing';
+    return `<strong>${title}</strong><br/>${modeLabel} | ${sourceLabel}<br/>${priceLabel}`;
+  };
 
   const isWithinBounds = (lat, lng) => {
     return lat >= PANABO_BOUNDS.south && lat <= PANABO_BOUNDS.north &&
@@ -99,6 +150,66 @@ export default function Home({ onMapTap }) {
       }).addTo(mapInstance.current);
 
       hazardLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
+      spaceMarkerLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
+
+      fetch(apiUrl('/spaces/map-markers'))
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Unable to load map space markers');
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (!spaceMarkerLayerGroup.current || !mapInstance.current) return;
+          const markers = Array.isArray(data?.markers) ? data.markers : [];
+
+          markers.forEach((item) => {
+            const lat = Number(item?.latitude);
+            const lng = Number(item?.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+            const marker = L.marker([lat, lng], { icon: createSpaceMarkerIcon(item) }).addTo(spaceMarkerLayerGroup.current);
+            marker.bindTooltip(buildMarkerBrief(item), {
+              className: 'space-brief-tooltip',
+              direction: 'top',
+              sticky: false,
+              opacity: 1,
+            });
+
+            marker.on('mouseover', () => {
+              const timer = window.setTimeout(() => {
+                marker.openTooltip();
+              }, 1500);
+              spaceHoverTimers.current.set(marker._leaflet_id, timer);
+            });
+
+            marker.on('mouseout', () => {
+              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
+              if (timer) {
+                window.clearTimeout(timer);
+                spaceHoverTimers.current.delete(marker._leaflet_id);
+              }
+              marker.closeTooltip();
+            });
+
+            marker.on('click', () => {
+              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
+              if (timer) {
+                window.clearTimeout(timer);
+                spaceHoverTimers.current.delete(marker._leaflet_id);
+              }
+              const coords = { lat, lng };
+              setSelectedCoord(coords);
+              mapInstance.current.panTo([lat, lng]);
+              onMapTap(coords, {
+                prefillBusinessType: item?.business_type || '',
+              });
+            });
+          });
+        })
+        .catch(() => {
+          // Keep map usable even if marker feed is temporarily unavailable.
+        });
 
       fetch('/panabo_hazard_5yr.geojson')
         .then((response) => {
@@ -153,6 +264,15 @@ export default function Home({ onMapTap }) {
         selectedMarkerRef.current.remove();
         selectedMarkerRef.current = null;
       }
+
+      if (spaceMarkerLayerGroup.current) {
+        spaceMarkerLayerGroup.current.clearLayers();
+        spaceMarkerLayerGroup.current = null;
+      }
+
+      spaceHoverTimers.current.forEach((timer) => window.clearTimeout(timer));
+      spaceHoverTimers.current.clear();
+
       hazardLayerGroup.current = null;
       hazardGeoJsonLayerRef.current = null;
       if (mapInstance.current) {
@@ -241,6 +361,18 @@ export default function Home({ onMapTap }) {
         <div className="legend-item">
           <span className="legend-color flood-moderate"></span>
           <span className="legend-text">Moderate Flood Danger</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-color space-user-guaranteed"></span>
+          <span className="legend-text">User Guaranteed Space</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-color space-admin-guaranteed"></span>
+          <span className="legend-text">Admin Guaranteed Space</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-color space-admin-potential"></span>
+          <span className="legend-text">Admin Potential Space</span>
         </div>
       </div>
 

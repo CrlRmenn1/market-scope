@@ -485,6 +485,21 @@ html[data-theme="light"] .map-legend { box-shadow: 0 10px 25px rgba(0, 0, 0, 0.0
   background: #fbbf24;
   border: 2px solid #a16207;
 }
+
+.legend-color.space-user-guaranteed {
+  background: #16a34a;
+  border: 2px solid #14532d;
+}
+
+.legend-color.space-admin-guaranteed {
+  background: #2563eb;
+  border: 2px solid #1e3a8a;
+}
+
+.legend-color.space-admin-potential {
+  background: #f59e0b;
+  border: 2px dashed #9a3412;
+}
 .legend-text { font-size: 0.8rem; font-weight: 600; color: var(--text-main); }
 
 /* Custom CSS Radar Pin */
@@ -527,6 +542,79 @@ html[data-theme="light"] .leaflet-tooltip.hazard-zone-tooltip {
   background: rgba(255, 255, 255, 0.85);
   color: #111827;
   border-color: rgba(168, 85, 247, 0.3);
+}
+
+.space-marker-icon-wrapper {
+  background: transparent;
+  border: none;
+}
+
+.space-marker {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.7rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+  border: 2px solid rgba(255, 255, 255, 0.65);
+}
+
+.space-marker__badge {
+  position: absolute;
+  right: -5px;
+  bottom: -6px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #111827;
+  color: #f8fafc;
+  font-size: 0.58rem;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+}
+
+.space-marker--user-guaranteed {
+  background: linear-gradient(135deg, #22c55e, #15803d);
+}
+
+.space-marker--admin-guaranteed {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.space-marker--admin-potential {
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  border-style: dashed;
+}
+
+.leaflet-tooltip.space-brief-tooltip {
+  background: rgba(8, 12, 20, 0.82);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.35;
+  padding: 7px 9px;
+  backdrop-filter: blur(4px);
+}
+
+html[data-theme="light"] .leaflet-tooltip.space-brief-tooltip {
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.18);
+}
+
+html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
+  border-top-color: rgba(255, 255, 255, 0.94);
 }
 
 .pure-css-mark { position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; }

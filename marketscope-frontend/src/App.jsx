@@ -29,6 +29,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('marketscope_theme') || 'light');
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [selectedCoords, setSelectedCoords] = useState(null);
+  const [sheetInitialBusinessType, setSheetInitialBusinessType] = useState('');
   const [reportData, setReportData] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -162,14 +163,16 @@ export default function App() {
     localStorage.setItem('marketscope_theme', newTheme);
   };
 
-  const handleMapTap = (coords) => {
+  const handleMapTap = (coords, options = {}) => {
     setSelectedCoords(coords);
+    setSheetInitialBusinessType(options?.prefillBusinessType || '');
     setShowBottomSheet(true);
   };
 
   const handleViewReport = (data) => {
     const coords = data?.target_coords || selectedCoords || null;
     setSelectedCoords(coords);
+    setSheetInitialBusinessType('');
     setReportData(data);
     saveOpenReport(data, coords);
     setShowBottomSheet(false);
@@ -251,9 +254,13 @@ export default function App() {
         {showBottomSheet && (
           <BottomSheet 
             coords={selectedCoords} 
-            onClose={() => setShowBottomSheet(false)} 
+            onClose={() => {
+              setShowBottomSheet(false);
+              setSheetInitialBusinessType('');
+            }} 
             onViewReport={handleViewReport}
             userId={session.user_id || session.id}
+            initialBusinessType={sheetInitialBusinessType}
           />
         )}
 

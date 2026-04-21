@@ -192,6 +192,46 @@ class AdminUpdateUser(BaseModel):
     target_payback_months: int | None = None
 
 
+class UserSpaceSubmissionRequest(BaseModel):
+    user_id: int
+    title: str
+    listing_mode: str
+    property_type: str | None = None
+    business_type: str | None = None
+    latitude: float
+    longitude: float
+    address_text: str | None = None
+    price_min: int | None = None
+    price_max: int | None = None
+    contact_info: str | None = None
+    notes: str | None = None
+
+
+class AdminSpaceSubmissionRequest(BaseModel):
+    title: str
+    listing_mode: str
+    guarantee_level: str = "potential"
+    confidence_score: int | None = None
+    property_type: str | None = None
+    business_type: str | None = None
+    latitude: float
+    longitude: float
+    address_text: str | None = None
+    price_min: int | None = None
+    price_max: int | None = None
+    source_note: str | None = None
+    contact_info: str | None = None
+    notes: str | None = None
+    verified_at: date | None = None
+    expires_at: date | None = None
+    is_active: bool = True
+
+
+class AdminReviewUserSpaceSubmissionRequest(BaseModel):
+    status: str
+    review_note: str | None = None
+
+
 ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
 ADMIN_PASSWORD = os.environ.get("MARKETSCOPE_ADMIN_PASSWORD", "admin123")
 ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local-token")
@@ -235,6 +275,8 @@ def create_app_tables():
     ensure_users_profile_columns(cursor)
     ensure_custom_msme_table(cursor)
     ensure_admin_users_table(cursor)
+    ensure_user_space_submissions_table(cursor, user_pk_column)
+    ensure_admin_space_submissions_table(cursor)
     ensure_password_reset_codes_table(cursor, user_pk_column)
     ensure_default_admin_user(cursor)
 
@@ -279,6 +321,71 @@ def ensure_custom_msme_table(cursor):
     # Backfill for older local DBs where custom_msme existed before created_at was introduced.
     cursor.execute("ALTER TABLE custom_msme ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     cursor.execute("UPDATE custom_msme SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+
+
+def ensure_user_space_submissions_table(cursor, user_pk_column):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_space_submissions (
+            id SERIAL PRIMARY KEY,
+            submitted_by_user_id INTEGER NOT NULL REFERENCES users(%s) ON DELETE CASCADE,
+            title VARCHAR(255) NOT NULL,
+            listing_mode VARCHAR(12) NOT NULL,
+            guarantee_level VARCHAR(20) NOT NULL DEFAULT 'guaranteed',
+            property_type VARCHAR(80),
+            business_type VARCHAR(64),
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            address_text TEXT,
+            price_min INTEGER,
+            price_max INTEGER,
+            contact_info TEXT,
+            notes TEXT,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            review_note TEXT,
+            reviewed_by_admin_email VARCHAR(255),
+            reviewed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """ % user_pk_column
+    )
+    cursor.execute("ALTER TABLE user_space_submissions ADD COLUMN IF NOT EXISTS business_type VARCHAR(64)")
+    cursor.execute("ALTER TABLE user_space_submissions ADD COLUMN IF NOT EXISTS guarantee_level VARCHAR(20) DEFAULT 'guaranteed'")
+    cursor.execute("ALTER TABLE user_space_submissions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+
+def ensure_admin_space_submissions_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_space_submissions (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            listing_mode VARCHAR(12) NOT NULL,
+            guarantee_level VARCHAR(20) NOT NULL DEFAULT 'potential',
+            confidence_score INTEGER,
+            property_type VARCHAR(80),
+            business_type VARCHAR(64),
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            address_text TEXT,
+            price_min INTEGER,
+            price_max INTEGER,
+            source_note TEXT,
+            contact_info TEXT,
+            notes TEXT,
+            verified_at DATE,
+            expires_at DATE,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_by_admin_email VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute("ALTER TABLE admin_space_submissions ADD COLUMN IF NOT EXISTS confidence_score INTEGER")
+    cursor.execute("ALTER TABLE admin_space_submissions ADD COLUMN IF NOT EXISTS business_type VARCHAR(64)")
+    cursor.execute("ALTER TABLE admin_space_submissions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
 
 def ensure_admin_users_table(cursor):
@@ -1821,6 +1928,372 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
 def verify_admin_token(x_admin_token: str | None):
     if not x_admin_token or x_admin_token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
+
+
+def normalize_listing_mode(value: str) -> str:
+    mode = str(value or "").strip().lower()
+    if mode not in {"rent", "buy"}:
+        raise HTTPException(status_code=400, detail="listing_mode must be either 'rent' or 'buy'")
+    return mode
+
+
+def normalize_guarantee_level(value: str) -> str:
+    level = str(value or "").strip().lower()
+    if level not in {"guaranteed", "potential"}:
+        raise HTTPException(status_code=400, detail="guarantee_level must be either 'guaranteed' or 'potential'")
+    return level
+
+
+def normalize_space_submission_status(value: str) -> str:
+    status = str(value or "").strip().lower()
+    if status not in {"pending", "approved", "rejected", "archived"}:
+        raise HTTPException(status_code=400, detail="status must be pending, approved, rejected, or archived")
+    return status
+
+
+@app.post("/spaces/user-submissions")
+def create_user_space_submission(payload: UserSpaceSubmissionRequest):
+    try:
+        listing_mode = normalize_listing_mode(payload.listing_mode)
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_user_space_submissions_table(cursor, user_pk_column)
+
+        cursor.execute(
+            f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = %s",
+            (payload.user_id,)
+        )
+        existing_user = cursor.fetchone()
+        if not existing_user:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail="User not found")
+
+        cursor.execute(
+            """
+            INSERT INTO user_space_submissions (
+                submitted_by_user_id,
+                title,
+                listing_mode,
+                guarantee_level,
+                property_type,
+                business_type,
+                latitude,
+                longitude,
+                address_text,
+                price_min,
+                price_max,
+                contact_info,
+                notes,
+                status
+            )
+            VALUES (%s, %s, %s, 'guaranteed', %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+            RETURNING *
+            """,
+            (
+                payload.user_id,
+                payload.title,
+                listing_mode,
+                (payload.property_type or None),
+                (payload.business_type or None),
+                payload.latitude,
+                payload.longitude,
+                (payload.address_text or None),
+                payload.price_min,
+                payload.price_max,
+                (payload.contact_info or None),
+                (payload.notes or None),
+            )
+        )
+        created = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "submission": created}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/spaces/map-markers")
+def list_space_map_markers():
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_user_space_submissions_table(cursor, user_pk_column)
+        ensure_admin_space_submissions_table(cursor)
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                title,
+                listing_mode,
+                guarantee_level,
+                property_type,
+                business_type,
+                latitude,
+                longitude,
+                address_text,
+                price_min,
+                price_max,
+                contact_info,
+                notes,
+                created_at,
+                reviewed_at,
+                'user'::text AS source_type
+            FROM user_space_submissions
+            WHERE status = 'approved'
+            """
+        )
+        user_rows = cursor.fetchall() or []
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                title,
+                listing_mode,
+                guarantee_level,
+                property_type,
+                business_type,
+                latitude,
+                longitude,
+                address_text,
+                price_min,
+                price_max,
+                contact_info,
+                notes,
+                confidence_score,
+                created_at,
+                verified_at,
+                expires_at,
+                'admin'::text AS source_type
+            FROM admin_space_submissions
+            WHERE is_active = TRUE
+              AND (expires_at IS NULL OR expires_at >= CURRENT_DATE)
+            """
+        )
+        admin_rows = cursor.fetchall() or []
+
+        cursor.close()
+        conn.close()
+
+        markers = []
+        for row in user_rows:
+            markers.append({
+                "id": f"user-{row.get('id')}",
+                "source_type": "user",
+                "title": row.get("title"),
+                "listing_mode": row.get("listing_mode"),
+                "guarantee_level": "guaranteed",
+                "property_type": row.get("property_type"),
+                "business_type": row.get("business_type"),
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
+                "address_text": row.get("address_text"),
+                "price_min": row.get("price_min"),
+                "price_max": row.get("price_max"),
+                "contact_info": row.get("contact_info"),
+                "notes": row.get("notes"),
+                "confidence_score": 100,
+                "last_verified_at": row.get("reviewed_at") or row.get("created_at"),
+            })
+
+        for row in admin_rows:
+            markers.append({
+                "id": f"admin-{row.get('id')}",
+                "source_type": "admin",
+                "title": row.get("title"),
+                "listing_mode": row.get("listing_mode"),
+                "guarantee_level": row.get("guarantee_level") or "potential",
+                "property_type": row.get("property_type"),
+                "business_type": row.get("business_type"),
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
+                "address_text": row.get("address_text"),
+                "price_min": row.get("price_min"),
+                "price_max": row.get("price_max"),
+                "contact_info": row.get("contact_info"),
+                "notes": row.get("notes"),
+                "confidence_score": row.get("confidence_score"),
+                "last_verified_at": row.get("verified_at") or row.get("created_at"),
+            })
+
+        return {"status": "success", "markers": markers}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/spaces/user-submissions")
+def admin_list_user_space_submissions(status: str | None = None, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        normalized_status = normalize_space_submission_status(status) if status else None
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_user_space_submissions_table(cursor, user_pk_column)
+
+        if normalized_status:
+            cursor.execute(
+                "SELECT * FROM user_space_submissions WHERE status = %s ORDER BY created_at DESC, id DESC",
+                (normalized_status,)
+            )
+        else:
+            cursor.execute("SELECT * FROM user_space_submissions ORDER BY created_at DESC, id DESC")
+
+        rows = cursor.fetchall() or []
+        cursor.close()
+        conn.close()
+        return {"status": "success", "submissions": rows}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/admin/spaces/user-submissions/{submission_id}/status")
+def admin_update_user_space_submission_status(
+    submission_id: int,
+    payload: AdminReviewUserSpaceSubmissionRequest,
+    x_admin_token: str | None = Header(default=None)
+):
+    verify_admin_token(x_admin_token)
+    try:
+        normalized_status = normalize_space_submission_status(payload.status)
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        user_pk_column = get_users_primary_key_column(cursor)
+        ensure_user_space_submissions_table(cursor, user_pk_column)
+
+        cursor.execute(
+            """
+            UPDATE user_space_submissions
+            SET
+                status = %s,
+                review_note = %s,
+                reviewed_by_admin_email = %s,
+                reviewed_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING *
+            """,
+            (normalized_status, (payload.review_note or None), ADMIN_EMAIL, submission_id)
+        )
+        updated = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not updated:
+            raise HTTPException(status_code=404, detail="User space submission not found")
+
+        return {"status": "success", "submission": updated}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/spaces/admin-submissions")
+def admin_list_admin_space_submissions(x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_admin_space_submissions_table(cursor)
+        cursor.execute("SELECT * FROM admin_space_submissions ORDER BY created_at DESC, id DESC")
+        rows = cursor.fetchall() or []
+        cursor.close()
+        conn.close()
+        return {"status": "success", "submissions": rows}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/spaces/admin-submissions")
+def admin_create_admin_space_submission(
+    payload: AdminSpaceSubmissionRequest,
+    x_admin_token: str | None = Header(default=None)
+):
+    verify_admin_token(x_admin_token)
+    try:
+        listing_mode = normalize_listing_mode(payload.listing_mode)
+        guarantee_level = normalize_guarantee_level(payload.guarantee_level)
+        confidence_score = payload.confidence_score
+
+        if confidence_score is not None and (confidence_score < 0 or confidence_score > 100):
+            raise HTTPException(status_code=400, detail="confidence_score must be between 0 and 100")
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_admin_space_submissions_table(cursor)
+        cursor.execute(
+            """
+            INSERT INTO admin_space_submissions (
+                title,
+                listing_mode,
+                guarantee_level,
+                confidence_score,
+                property_type,
+                business_type,
+                latitude,
+                longitude,
+                address_text,
+                price_min,
+                price_max,
+                source_note,
+                contact_info,
+                notes,
+                verified_at,
+                expires_at,
+                is_active,
+                created_by_admin_email
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                payload.title,
+                listing_mode,
+                guarantee_level,
+                confidence_score,
+                (payload.property_type or None),
+                (payload.business_type or None),
+                payload.latitude,
+                payload.longitude,
+                (payload.address_text or None),
+                payload.price_min,
+                payload.price_max,
+                (payload.source_note or None),
+                (payload.contact_info or None),
+                (payload.notes or None),
+                payload.verified_at,
+                payload.expires_at,
+                payload.is_active,
+                ADMIN_EMAIL,
+            )
+        )
+        created = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "submission": created}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def fetch_user_for_admin(cursor, user_pk_column: str, user_id: int):
