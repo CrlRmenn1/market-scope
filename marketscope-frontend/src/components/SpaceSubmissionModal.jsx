@@ -43,7 +43,9 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
   const steps = ['Listing Basics', 'Location & Price', 'Contact & Notes'];
 
   const canSubmit = useMemo(() => {
-    return form.title.trim() && form.latitude !== '' && form.longitude !== '';
+    const latitude = Number(form.latitude);
+    const longitude = Number(form.longitude);
+    return form.title.trim() && Number.isFinite(latitude) && Number.isFinite(longitude);
   }, [form]);
 
   useEffect(() => {
@@ -62,6 +64,9 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
   };
 
   const handleSubmit = async () => {
+    const missingFields = [];
+    if (!form.title.trim()) missingFields.push('Listing Title');
+
     if (!userId) {
       setErrorMessage('User session is required to submit a space.');
       return;
@@ -69,6 +74,14 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
 
     const latitude = Number(form.latitude);
     const longitude = Number(form.longitude);
+    if (form.latitude === '') missingFields.push('Latitude');
+    if (form.longitude === '') missingFields.push('Longitude');
+
+    if (missingFields.length > 0) {
+      setErrorMessage(`Please complete required fields: ${missingFields.join(', ')}.`);
+      return;
+    }
+
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       setErrorMessage('Latitude and longitude must be valid numbers.');
       return;
@@ -120,13 +133,40 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     }
 
     if (stepIndex === 1) {
-      return form.latitude !== '' && form.longitude !== '';
+      const latitude = Number(form.latitude);
+      const longitude = Number(form.longitude);
+      return Number.isFinite(latitude) && Number.isFinite(longitude);
     }
 
     return true;
   };
 
   if (!isOpen) return null;
+
+  const handleNext = () => {
+    if (stepIndex === 0 && !form.title.trim()) {
+      setErrorMessage('Listing Title is required before continuing.');
+      return;
+    }
+
+    if (stepIndex === 1) {
+      const latitude = Number(form.latitude);
+      const longitude = Number(form.longitude);
+
+      if (form.latitude === '' || form.longitude === '') {
+        setErrorMessage('Latitude and Longitude are required before continuing.');
+        return;
+      }
+
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        setErrorMessage('Latitude and Longitude must be valid numbers.');
+        return;
+      }
+    }
+
+    setErrorMessage('');
+    setStepIndex((current) => Math.min(steps.length - 1, current + 1));
+  };
 
   return (
     <div className="sheet-overlay" onClick={onClose} role="presentation">
@@ -155,8 +195,8 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
               {stepIndex === 0 && (
                 <div className="fade-in">
                   <div className="input-group">
-                    <label className="input-label">Listing Title</label>
-                    <input className="history-search-input" value={form.title} onChange={(event) => handleFieldChange('title', event.target.value)} placeholder="Example: Corner stall near market" />
+                    <label className="input-label">Listing Title <span className="required-indicator">*</span></label>
+                    <input className="history-search-input" required value={form.title} onChange={(event) => handleFieldChange('title', event.target.value)} placeholder="Example: Corner stall near market" />
                   </div>
 
                   <div className="input-group">
@@ -187,12 +227,12 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                 <div className="fade-in">
                   <div className="history-tools-grid" style={{ marginBottom: 12 }}>
                     <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label className="input-label">Latitude</label>
-                      <input className="history-search-input" value={form.latitude} onChange={(event) => handleFieldChange('latitude', event.target.value)} placeholder="7.30750" />
+                      <label className="input-label">Latitude <span className="required-indicator">*</span></label>
+                      <input className="history-search-input" type="number" step="any" required value={form.latitude} onChange={(event) => handleFieldChange('latitude', event.target.value)} placeholder="7.30750" />
                     </div>
                     <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label className="input-label">Longitude</label>
-                      <input className="history-search-input" value={form.longitude} onChange={(event) => handleFieldChange('longitude', event.target.value)} placeholder="125.68110" />
+                      <label className="input-label">Longitude <span className="required-indicator">*</span></label>
+                      <input className="history-search-input" type="number" step="any" required value={form.longitude} onChange={(event) => handleFieldChange('longitude', event.target.value)} placeholder="125.68110" />
                     </div>
                   </div>
 
@@ -247,10 +287,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                     type="button"
                     className="primary-btn"
                     disabled={!canProceedFromCurrentStep()}
-                    onClick={() => {
-                      setErrorMessage('');
-                      setStepIndex((current) => Math.min(steps.length - 1, current + 1));
-                    }}
+                    onClick={handleNext}
                   >
                     Next
                   </button>

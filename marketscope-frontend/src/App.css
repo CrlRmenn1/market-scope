@@ -784,6 +784,146 @@ html[data-theme="light"] .wizard-back-btn {
 }
 .input-group { margin-bottom: 20px; }
 .input-label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.required-indicator {
+  color: #fb7185;
+  margin-left: 3px;
+}
+
+.admin-field-help {
+  margin-top: 6px;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.admin-submission-card {
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-submission-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.admin-submission-card.status-approved::before {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+}
+
+.admin-submission-card.status-pending::before {
+  background: linear-gradient(180deg, #facc15, #f59e0b);
+}
+
+.admin-submission-card.status-rejected::before {
+  background: linear-gradient(180deg, #fb7185, #ef4444);
+}
+
+.admin-submission-card.status-archived::before {
+  background: linear-gradient(180deg, #94a3b8, #64748b);
+}
+
+.admin-submission-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 4px;
+}
+
+.submission-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.submission-status-pill.status-pending {
+  background: rgba(250, 204, 21, 0.16);
+  border: 1px solid rgba(250, 204, 21, 0.38);
+  color: #fde68a;
+}
+
+.submission-status-pill.status-approved {
+  background: rgba(34, 197, 94, 0.16);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.submission-status-pill.status-rejected {
+  background: rgba(248, 113, 113, 0.16);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: #fecaca;
+}
+
+.submission-status-pill.status-archived {
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+.admin-submission-card.status-approved {
+  border-color: rgba(34, 197, 94, 0.46);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.08));
+}
+
+.admin-submission-card.status-pending {
+  border-color: rgba(250, 204, 21, 0.32);
+}
+
+.admin-submission-card.status-rejected {
+  border-color: rgba(248, 113, 113, 0.36);
+}
+
+.admin-submission-card.status-archived {
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.admin-submission-note {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.admin-submission-card-top {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-submission-card-copy {
+  padding-left: 10px;
+}
+
+.admin-submission-card .history-title {
+  margin-top: 2px;
+}
+
+html[data-theme="light"] .submission-status-pill.status-pending {
+  color: #854d0e;
+}
+
+html[data-theme="light"] .submission-status-pill.status-approved {
+  color: #166534;
+}
+
+html[data-theme="light"] .submission-status-pill.status-rejected {
+  color: #991b1b;
+}
+
+html[data-theme="light"] .submission-status-pill.status-archived {
+  color: #334155;
+}
 .styled-select { width: 100%; background: var(--bg-app); border: 1px solid var(--border-color); color: var(--text-main); padding: 14px; border-radius: 12px; font-size: 1rem; outline: none; }
 
 .radius-option-grid {

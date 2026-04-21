@@ -67,6 +67,40 @@ const getListingModeLabel = (value) => {
   return value || '-';
 };
 
+const getSubmissionStatusMeta = (status) => {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'approved') {
+    return {
+      label: 'Approved',
+      className: 'status-approved',
+      message: 'Approved listings are prioritized for map publishing.'
+    };
+  }
+
+  if (normalized === 'rejected') {
+    return {
+      label: 'Rejected',
+      className: 'status-rejected',
+      message: 'Rejected listings stay in records for audit and follow-up.'
+    };
+  }
+
+  if (normalized === 'archived') {
+    return {
+      label: 'Archived',
+      className: 'status-archived',
+      message: 'Archived listings are hidden from active review workflows.'
+    };
+  }
+
+  return {
+    label: 'Pending',
+    className: 'status-pending',
+    message: 'Pending listings need admin action before publication.'
+  };
+};
+
 const formatPesoRange = (minValue, maxValue) => {
   const min = Number(minValue || 0);
   const max = Number(maxValue || 0);
@@ -76,6 +110,8 @@ const formatPesoRange = (minValue, maxValue) => {
   if (max > 0) return `Up to PHP ${max.toLocaleString()}`;
   return 'Not set';
 };
+
+const hasValidNumber = (value) => Number.isFinite(Number(value));
 
 export default function AdminPanel({ adminSession }) {
   const token = adminSession?.token;
@@ -403,6 +439,8 @@ export default function AdminPanel({ adminSession }) {
     }
   };
 
+  const canSubmitAdminSpace = Boolean(adminSpaceForm.title.trim()) && hasValidNumber(adminSpaceForm.latitude) && hasValidNumber(adminSpaceForm.longitude);
+
   const reviewUserSubmission = async (submissionId, status) => {
     resetMessages();
     try {
@@ -596,8 +634,8 @@ export default function AdminPanel({ adminSession }) {
             <h3 className="section-heading" style={{ marginBottom: '12px' }}>Add Admin Space Submission</h3>
             <form onSubmit={submitAdminSpace}>
               <div className="input-group">
-                <label>Title</label>
-                <input value={adminSpaceForm.title} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, title: e.target.value }))} />
+                <label>Title <span className="required-indicator">*</span></label>
+                <input required value={adminSpaceForm.title} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, title: e.target.value }))} />
               </div>
 
               <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
@@ -640,12 +678,12 @@ export default function AdminPanel({ adminSession }) {
 
               <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
                 <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Latitude</label>
-                  <input value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} />
+                  <label>Latitude <span className="required-indicator">*</span></label>
+                  <input required type="number" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} />
                 </div>
                 <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Longitude</label>
-                  <input value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} />
+                  <label>Longitude <span className="required-indicator">*</span></label>
+                  <input required type="number" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} />
                 </div>
               </div>
 
@@ -689,10 +727,12 @@ export default function AdminPanel({ adminSession }) {
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Verified Date</label>
                   <input type="date" value={adminSpaceForm.verified_at} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, verified_at: e.target.value }))} />
+                  <p className="admin-field-help">When the listing was last confirmed as real and available.</p>
                 </div>
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Expires Date</label>
                   <input type="date" value={adminSpaceForm.expires_at} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, expires_at: e.target.value }))} />
+                  <p className="admin-field-help">After this date, the listing should be rechecked or marked inactive.</p>
                 </div>
               </div>
 
@@ -703,7 +743,7 @@ export default function AdminPanel({ adminSession }) {
                 </label>
               </div>
 
-              <button type="submit" className="primary-btn">Create Admin Space Entry</button>
+              <button type="submit" className="primary-btn" disabled={!canSubmitAdminSpace}>Create Admin Space Entry</button>
             </form>
           </div>
 
@@ -733,12 +773,21 @@ export default function AdminPanel({ adminSession }) {
               {spaceLoading && <p className="history-meta">Loading submissions...</p>}
               {!spaceLoading && userSpaceSubmissions.length === 0 && <p className="history-meta">No user submissions in this filter.</p>}
 
-              {!spaceLoading && userSpaceSubmissions.map((item) => (
-                <div key={item.id} className="history-card" style={{ marginTop: 12 }}>
-                  <div className="history-card-top">
-                    <div>
+              {!spaceLoading && userSpaceSubmissions.map((item) => {
+                const statusMeta = getSubmissionStatusMeta(item.status);
+                const statusClass = `admin-submission-card ${statusMeta.className}`;
+                const normalizedStatus = String(item.status || '').toLowerCase();
+
+                return (
+                <div key={item.id} className={statusClass} style={{ marginTop: 12 }}>
+                  <div className="admin-submission-card-top">
+                    <div className="admin-submission-card-copy">
+                      <div className="admin-submission-head">
+                        <span className={`submission-status-pill ${statusMeta.className}`}>{statusMeta.label}</span>
+                        <p className="history-meta">{statusMeta.message}</p>
+                      </div>
                       <h4 className="history-title">{item.title}</h4>
-                      <p className="history-meta">Status: {item.status} | Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
+                      <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
                       <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
                       <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
                       {item.address_text && <p className="history-meta">Address: {item.address_text}</p>}
@@ -746,13 +795,25 @@ export default function AdminPanel({ adminSession }) {
                     </div>
                   </div>
 
-                  <div className="admin-actions-row">
-                    <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Approve</button>
-                    <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Reject</button>
-                    <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
-                  </div>
+                  {normalizedStatus === 'pending' ? (
+                    <div className="admin-actions-row">
+                      <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Approve</button>
+                      <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Reject</button>
+                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
+                    </div>
+                  ) : normalizedStatus === 'approved' ? (
+                    <div className="admin-actions-row">
+                      <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Move to Rejected</button>
+                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
+                    </div>
+                  ) : (
+                    <div className="admin-actions-row">
+                      <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Mark Approved</button>
+                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
+                    </div>
+                  )}
                 </div>
-              ))}
+              )})}
             </div>
 
             <div className="data-card admin-card">
