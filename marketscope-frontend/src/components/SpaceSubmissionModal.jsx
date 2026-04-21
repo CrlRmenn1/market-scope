@@ -237,7 +237,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
               <div className="history-actions-row mt-4" style={{ gap: 12 }}>
                 {stepIndex > 0 && (
                   <button type="button" className="secondary-btn wizard-back-btn" style={{ marginTop: 0 }} onClick={() => setStepIndex((current) => Math.max(0, current - 1))}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
                     <span>Back</span>
                   </button>
                 )}

@@ -673,14 +673,15 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
 }
 
 .space-submission-sheet {
-  max-height: min(88svh, 760px);
-  overflow: hidden;
+  max-height: min(94svh, 860px);
+  width: min(100%, 560px);
+  overflow: visible;
 }
 
 .space-submission-content {
-  max-height: calc(min(88svh, 760px) - 92px);
-  overflow-y: auto;
-  padding-right: 4px;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .drag-handle { width: 40px; height: 4px; background: var(--border-color); border-radius: 10px; margin: -15px auto 25px auto; }
@@ -731,6 +732,55 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   color: var(--accent);
   transform: translateY(-1px);
   background: rgba(168, 85, 247, 0.06);
+}
+
+.wizard-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.wizard-back-btn svg {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  max-height: 16px;
+  flex: 0 0 16px;
+}
+
+html[data-theme="light"] .wizard-back-btn {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.space-submit-success-state {
+  text-align: center;
+  padding: 8px 4px 4px;
+}
+
+.space-submit-success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.32);
+}
+
+.space-submit-success-icon svg {
+  width: 30px;
+  height: 30px;
 }
 .input-group { margin-bottom: 20px; }
 .input-label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -872,6 +922,10 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
     border: 1px solid var(--border-color);
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     animation: modalScale 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .space-submission-sheet {
+    max-width: min(620px, 100%);
   }
   
   .drag-handle { display: none; }
