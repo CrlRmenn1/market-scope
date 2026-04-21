@@ -60,6 +60,13 @@ const getBusinessTypeLabel = (value) => {
   return found?.label || value || '-';
 };
 
+const getListingModeLabel = (value) => {
+  const normalized = String(value || '').toLowerCase();
+  if (normalized === 'buy') return 'For Sale';
+  if (normalized === 'rent') return 'For Rent';
+  return value || '-';
+};
+
 const formatPesoRange = (minValue, maxValue) => {
   const min = Number(minValue || 0);
   const max = Number(maxValue || 0);
@@ -598,7 +605,7 @@ export default function AdminPanel({ adminSession }) {
                   <label>Listing Mode</label>
                   <select className="app-select" value={adminSpaceForm.listing_mode} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, listing_mode: e.target.value }))}>
                     <option value="rent">For Rent</option>
-                    <option value="buy">For Buy</option>
+                    <option value="buy">For Sale</option>
                   </select>
                 </div>
                 <div className="input-group" style={{ marginBottom: 0 }}>
@@ -731,7 +738,7 @@ export default function AdminPanel({ adminSession }) {
                   <div className="history-card-top">
                     <div>
                       <h4 className="history-title">{item.title}</h4>
-                      <p className="history-meta">Status: {item.status} | Mode: {item.listing_mode} | Guarantee: {item.guarantee_level}</p>
+                      <p className="history-meta">Status: {item.status} | Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
                       <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
                       <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
                       {item.address_text && <p className="history-meta">Address: {item.address_text}</p>}
@@ -759,7 +766,7 @@ export default function AdminPanel({ adminSession }) {
                   <div className="history-card-top">
                     <div>
                       <h4 className="history-title">{item.title}</h4>
-                      <p className="history-meta">Mode: {item.listing_mode} | Guarantee: {item.guarantee_level} | Active: {item.is_active ? 'Yes' : 'No'}</p>
+                      <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level} | Active: {item.is_active ? 'Yes' : 'No'}</p>
                       <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
                       <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
                       <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>

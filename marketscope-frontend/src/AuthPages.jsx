@@ -403,6 +403,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/12 blur-3xl" />
 
+      <div className="hero-logo-corner">
+        {renderMarketScopeBadge()}
+      </div>
+
       <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-40">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
           <span></span>

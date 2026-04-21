@@ -97,7 +97,7 @@ export default function Home({ onMapTap }) {
 
   const buildMarkerBrief = (marker) => {
     const listingMode = String(marker?.listing_mode || '').toLowerCase();
-    const modeLabel = listingMode === 'buy' ? 'For Buy' : 'For Rent';
+    const modeLabel = listingMode === 'buy' ? 'For Sale' : 'For Rent';
     const sourceLabel = marker?.source_type === 'user' ? 'User Guaranteed' : marker?.guarantee_level === 'guaranteed' ? 'Admin Guaranteed' : 'Admin Potential';
     const priceMin = Number(marker?.price_min || 0);
     const priceMax = Number(marker?.price_max || 0);
