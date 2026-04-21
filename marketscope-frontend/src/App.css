@@ -672,6 +672,17 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   animation: slideUp 0.42s var(--ease-standard); position: relative;
 }
 
+.space-submission-sheet {
+  max-height: min(88svh, 760px);
+  overflow: hidden;
+}
+
+.space-submission-content {
+  max-height: calc(min(88svh, 760px) - 92px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .drag-handle { width: 40px; height: 4px; background: var(--border-color); border-radius: 10px; margin: -15px auto 25px auto; }
 .close-btn { position: absolute; top: 20px; right: 20px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; }
 .close-btn svg { width: 24px; height: 24px; }
