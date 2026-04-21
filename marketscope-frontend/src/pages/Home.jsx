@@ -120,6 +120,22 @@ export default function Home({ onMapTap }) {
            lng >= PANABO_BOUNDS.west && lng <= PANABO_BOUNDS.east;
   };
 
+  const legendItems = mapViewMode === 'flood'
+    ? [
+        { colorClass: 'boundary-line', text: 'Scanning Area' },
+        { colorClass: 'flood-critical', text: 'Very High Flood Danger' },
+        { colorClass: 'flood-high', text: 'High Flood Danger' },
+        { colorClass: 'flood-moderate', text: 'Moderate Flood Danger' }
+      ]
+    : [
+        { colorClass: 'boundary-line', text: 'Scanning Area' },
+        { colorClass: 'space-user-guaranteed', text: 'User Guaranteed Space' },
+        { colorClass: 'space-admin-guaranteed', text: 'Admin Guaranteed Space' },
+        { colorClass: 'space-admin-potential', text: 'Admin Potential Space' }
+      ];
+
+  const legendModeLabel = mapViewMode === 'flood' ? 'Flood Zones' : 'Normal Map';
+
   useEffect(() => {
     if (!mapInstance.current) {
       mapInstance.current = L.map(mapRef.current, {
@@ -203,6 +219,7 @@ export default function Home({ onMapTap }) {
               mapInstance.current.panTo([lat, lng]);
               onMapTap(coords, {
                 prefillBusinessType: item?.business_type || '',
+                selectedSpace: item,
               });
             });
           });
@@ -344,36 +361,17 @@ export default function Home({ onMapTap }) {
         </div>
       )}
 
-      <div className="map-legend">
-        <h4 className="legend-title">Panabo City Boundary</h4>
-        <div className="legend-item">
-          <span className="legend-color boundary-line"></span>
-          <span className="legend-text">Scanning Area</span>
+      <div className={`map-legend map-legend--${mapViewMode}`}>
+        <div className="map-legend-header">
+          <h4 className="legend-title">{legendModeLabel}</h4>
+          <span className="legend-mode-pill">Panabo City Boundary</span>
         </div>
-        <div className="legend-item">
-          <span className="legend-color flood-critical"></span>
-          <span className="legend-text">Very High Flood Danger</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color flood-high"></span>
-          <span className="legend-text">High Flood Danger</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color flood-moderate"></span>
-          <span className="legend-text">Moderate Flood Danger</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color space-user-guaranteed"></span>
-          <span className="legend-text">User Guaranteed Space</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color space-admin-guaranteed"></span>
-          <span className="legend-text">Admin Guaranteed Space</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-color space-admin-potential"></span>
-          <span className="legend-text">Admin Potential Space</span>
-        </div>
+        {legendItems.map((item) => (
+          <div key={item.text} className="legend-item">
+            <span className={`legend-color ${item.colorClass}`}></span>
+            <span className="legend-text">{item.text}</span>
+          </div>
+        ))}
       </div>
 
       <div className="map-mode-toggle" role="tablist" aria-label="Map view mode">

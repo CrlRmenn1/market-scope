@@ -248,6 +248,7 @@ export default function Report({ data, targetCoords, onClose }) {
   if (!data) return null;
 
   const { viability_score, competitors_found, breakdown, business_type, radius_meters, insight } = data;
+  const spaceContext = data?.space_context || data?.selected_space || null;
 
   const toggleDetail = (key) => {
     setExpandedDetail((prev) => (prev === key ? null : key));
@@ -257,6 +258,29 @@ export default function Report({ data, targetCoords, onClose }) {
     if (score >= 20) return '#4ade80'; 
     if (score >= 10) return '#facc15'; 
     return '#f87171'; 
+  };
+
+  const formatListingMode = (value) => {
+    const normalized = String(value || '').toLowerCase();
+    if (normalized === 'buy') return 'For Sale';
+    if (normalized === 'rent') return 'For Rent';
+    return value || '-';
+  };
+
+  const formatPriceRange = (minValue, maxValue) => {
+    const min = Number(minValue || 0);
+    const max = Number(maxValue || 0);
+
+    if (min > 0 && max > 0) return `PHP ${min.toLocaleString()} - PHP ${max.toLocaleString()}`;
+    if (min > 0) return `From PHP ${min.toLocaleString()}`;
+    if (max > 0) return `Up to PHP ${max.toLocaleString()}`;
+    return 'Not set';
+  };
+
+  const formatDateValue = (value) => {
+    if (!value) return '-';
+    const dateValue = String(value).slice(0, 10);
+    return dateValue || '-';
   };
 
   const getFactorDetailText = (key, factor) => {
@@ -616,6 +640,51 @@ export default function Report({ data, targetCoords, onClose }) {
             </div>
           ))}
         </div>
+
+        {spaceContext && (
+          <div className="data-card mt-6 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
+            <h3 className="section-heading mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Pinned Space Details</h3>
+            <p className="mb-4 text-sm text-[var(--text-muted)]">The report below reflects the exact space pinned on the map.</p>
+
+            <div className="space-report-grid grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Title</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{spaceContext.title || '-'}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Listing Mode</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{formatListingMode(spaceContext.listing_mode)}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Guarantee / Status</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{spaceContext.guarantee_level || spaceContext.status || '-'}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Price Range</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{formatPriceRange(spaceContext.price_min, spaceContext.price_max)}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Address / Contact</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{spaceContext.address_text || 'No address provided'}</p>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">{spaceContext.contact_info || 'No contact info provided'}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Verified Date</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{formatDateValue(spaceContext.verified_at)}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Expires Date</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text-main)]">{formatDateValue(spaceContext.expires_at)}</p>
+              </div>
+              {spaceContext.notes && (
+                <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 sm:col-span-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Listing Notes</p>
+                  <p className="mt-1 text-sm leading-6 text-[var(--text-main)]">{spaceContext.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* DISCLAIMER */}
         <div className="data-card disclaimer-card mt-6 mb-10 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">

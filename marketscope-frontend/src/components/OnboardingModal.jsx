@@ -14,7 +14,7 @@ const steps = [
   },
   {
     title: '1. Drop a Pin on the Map',
-    description: 'On the Map tab, tap any location inside Panabo city boundary, then press Lock on this location.',
+    description: 'On the Map tab, tap any location or available space inside Panabo city boundary, then press Lock on this location.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 2c-3.31 0-6 2.69-6 6 0 4.2 4.64 9.14 5.89 10.41a1.5 1.5 0 0 0 2.12 0C13.36 17.14 18 12.2 18 8c0-3.31-2.69-6-6-6z" />
