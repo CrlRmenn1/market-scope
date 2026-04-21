@@ -47,6 +47,27 @@ const steps = [
         <path d="M9 17h6" />
       </svg>
     )
+  },
+  {
+    title: '4. Submit a Space Listing',
+    description: 'Use Submit Space Listing to send a guaranteed space to admin review. Fill the required fields first, then continue through the steps until the success screen appears.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 4h16v16H4z" />
+        <path d="M8 12h8" />
+        <path d="M12 8v8" />
+      </svg>
+    )
+  },
+  {
+    title: '5. Track Admin Review',
+    description: 'Approved entries are highlighted for publishing, while archived entries are hidden from the map. Admins can also use Verified Date and Expires Date to keep listings fresh.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 2l7 4v6c0 5-3.5 9-7 10-3.5-1-7-5-7-10V6z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+    )
   }
 ];
 

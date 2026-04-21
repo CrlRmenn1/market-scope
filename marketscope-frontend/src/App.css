@@ -1975,6 +1975,49 @@ html[data-theme="light"] .report-map-container .leaflet-tile-pane {
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.14);
 }
 
+.admin-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-main);
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.admin-checkbox-input {
+  width: 18px;
+  height: 18px;
+  accent-color: #a855f7;
+  margin: 0;
+  flex: 0 0 18px;
+}
+
+.admin-reload-btn {
+  width: 100%;
+  margin-top: 0;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.16), rgba(147, 51, 234, 0.08));
+  border: 1px solid rgba(168, 85, 247, 0.22);
+  color: var(--text-main);
+  padding: 13px 14px;
+  border-radius: 12px;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.admin-reload-btn:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.24), rgba(147, 51, 234, 0.14));
+  border-color: rgba(168, 85, 247, 0.35);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+html[data-theme="light"] .admin-reload-btn {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(147, 51, 234, 0.05));
+}
+
 html[data-theme="light"] .admin-page .input-group input,
 html[data-theme="light"] .admin-page .input-group textarea,
 html[data-theme="light"] .admin-page .input-group select {

@@ -101,6 +101,22 @@ const getSubmissionStatusMeta = (status) => {
   };
 };
 
+const getAdminEntryMeta = (isActive) => {
+  if (isActive) {
+    return {
+      label: 'Active',
+      className: 'status-approved',
+      message: 'This admin entry is live on the map.'
+    };
+  }
+
+  return {
+    label: 'Archived',
+    className: 'status-archived',
+    message: 'This admin entry is archived and hidden from the map.'
+  };
+};
+
 const formatPesoRange = (minValue, maxValue) => {
   const min = Number(minValue || 0);
   const max = Number(maxValue || 0);
@@ -459,11 +475,30 @@ export default function AdminPanel({ adminSession }) {
     }
   };
 
+  const toggleAdminSubmissionActiveState = async (submissionId, isActive) => {
+    resetMessages();
+    try {
+      const response = await fetch(apiUrl(`/admin/spaces/admin-submissions/${submissionId}/active`), {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ is_active: isActive })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Unable to update admin entry state');
+
+      setSuccessMessage(isActive ? 'Admin entry restored.' : 'Admin entry archived.');
+      await loadSpaces(spaceFilterStatus);
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to update admin entry state');
+    }
+  };
+
   return (
     <div className="profile-page page-enter admin-page">
       <div className="profile-card fade-in" style={{ textAlign: 'left' }}>
         <h2 className="profile-name" style={{ marginBottom: '6px' }}>Admin Panel</h2>
         <p className="profile-email">Manage users, custom MSMEs, and space submission workflows.</p>
+        <p className="admin-field-help" style={{ marginTop: '8px' }}>Archived admin entries are hidden from the map. Use Verified Date to record the last check-in, and Expires Date to mark when a listing should be reviewed again.</p>
       </div>
 
       {errorMessage && <div className="error-alert mt-4">{errorMessage}</div>}
@@ -737,9 +772,14 @@ export default function AdminPanel({ adminSession }) {
               </div>
 
               <div className="input-group">
-                <label>
-                  <input type="checkbox" checked={adminSpaceForm.is_active} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, is_active: e.target.checked }))} style={{ marginRight: 8 }} />
-                  Active on map
+                <label className="admin-checkbox-row">
+                  <input
+                    type="checkbox"
+                    className="admin-checkbox-input"
+                    checked={adminSpaceForm.is_active}
+                    onChange={(e) => setAdminSpaceForm((c) => ({ ...c, is_active: e.target.checked }))}
+                  />
+                  <span>Active on map</span>
                 </label>
               </div>
 
@@ -761,7 +801,7 @@ export default function AdminPanel({ adminSession }) {
               </div>
               <div className="input-group" style={{ marginBottom: 0 }}>
                 <label>Refresh</label>
-                <button type="button" className="secondary-btn" onClick={() => loadSpaces(spaceFilterStatus)}>Reload Space Data</button>
+                <button type="button" className="secondary-btn admin-reload-btn" onClick={() => loadSpaces(spaceFilterStatus)}>Reload Space Data</button>
               </div>
             </div>
           </div>
@@ -823,17 +863,35 @@ export default function AdminPanel({ adminSession }) {
               {!spaceLoading && adminSpaceSubmissions.length === 0 && <p className="history-meta">No admin entries yet.</p>}
 
               {!spaceLoading && adminSpaceSubmissions.map((item) => (
-                <div key={item.id} className="history-card" style={{ marginTop: 12 }}>
-                  <div className="history-card-top">
-                    <div>
-                      <h4 className="history-title">{item.title}</h4>
-                      <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level} | Active: {item.is_active ? 'Yes' : 'No'}</p>
-                      <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
-                      <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
-                      <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>
+                (() => {
+                  const adminMeta = getAdminEntryMeta(item.is_active);
+
+                  return (
+                    <div key={item.id} className={`admin-submission-card ${adminMeta.className}`} style={{ marginTop: 12 }}>
+                      <div className="admin-submission-card-top">
+                        <div className="admin-submission-card-copy">
+                          <div className="admin-submission-head">
+                            <span className={`submission-status-pill ${adminMeta.className}`}>{adminMeta.label}</span>
+                            <p className="history-meta">{adminMeta.message}</p>
+                          </div>
+                          <h4 className="history-title">{item.title}</h4>
+                          <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
+                          <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
+                          <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
+                          <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>
+                        </div>
+                      </div>
+
+                      <div className="admin-actions-row">
+                        {item.is_active ? (
+                          <button className="admin-action-btn admin-action-btn-delete" onClick={() => toggleAdminSubmissionActiveState(item.id, false)}>Archive</button>
+                        ) : (
+                          <button className="admin-action-btn admin-action-btn-edit" onClick={() => toggleAdminSubmissionActiveState(item.id, true)}>Unarchive</button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()
               ))}
             </div>
           </div>

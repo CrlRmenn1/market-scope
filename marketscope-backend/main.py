@@ -227,6 +227,10 @@ class AdminSpaceSubmissionRequest(BaseModel):
     is_active: bool = True
 
 
+class AdminToggleSpaceSubmissionActiveRequest(BaseModel):
+    is_active: bool
+
+
 class AdminReviewUserSpaceSubmissionRequest(BaseModel):
     status: str
     review_note: str | None = None
@@ -2290,6 +2294,44 @@ def admin_create_admin_space_submission(
         cursor.close()
         conn.close()
         return {"status": "success", "submission": created}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/admin/spaces/admin-submissions/{submission_id}/active")
+def admin_update_admin_space_submission_active_state(
+    submission_id: int,
+    payload: AdminToggleSpaceSubmissionActiveRequest,
+    x_admin_token: str | None = Header(default=None)
+):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_admin_space_submissions_table(cursor)
+
+        cursor.execute(
+            """
+            UPDATE admin_space_submissions
+            SET
+                is_active = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING *
+            """,
+            (payload.is_active, submission_id)
+        )
+        updated = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not updated:
+            raise HTTPException(status_code=404, detail="Admin space submission not found")
+
+        return {"status": "success", "submission": updated}
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
