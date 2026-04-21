@@ -277,7 +277,7 @@ export default function App() {
         )}
       </main>
 
-      {!showBottomSheet && !reportData && (
+      {!showBottomSheet && !reportData && !showSpaceSubmissionModal && (
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       )}
 
