@@ -254,7 +254,14 @@ export default function App() {
         
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
 
-        {activeTab === 'trends' && <Trends user={session} />}
+        {activeTab === 'trends' && <Trends user={session} onOpenReport={(payload) => {
+          const coords = payload?.target_coords || null;
+          setSelectedCoords(coords);
+          setReportData(payload);
+          saveOpenReport(payload, coords);
+          setShowBottomSheet(false);
+          setActiveTab('trends');
+        }} />}
         
         {activeTab === 'history' && <History user={session} onOpenReport={(payload) => {
           const coords = payload.target_coords || null;

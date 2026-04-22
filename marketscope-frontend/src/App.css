@@ -2861,6 +2861,59 @@ html[data-theme="light"] .trends-card .text-violet-200 {
   line-height: 1.45;
 }
 
+.trends-prescan {
+  border: 1px solid var(--border-color);
+}
+
+.trends-swot-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.trends-swot-card {
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+}
+
+.trends-swot-title {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.trends-swot-card ul {
+  margin: 0;
+  padding-left: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.42;
+}
+
+.trends-swot-upside {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.trends-swot-upside .trends-swot-title {
+  color: #86efac;
+}
+
+.trends-swot-downside {
+  background: rgba(251, 146, 60, 0.1);
+  border-color: rgba(251, 146, 60, 0.28);
+}
+
+.trends-swot-downside .trends-swot-title {
+  color: #fdba74;
+}
+
 html[data-theme="light"] .trends-score-badge.high {
   color: #166534;
 }
@@ -2871,6 +2924,34 @@ html[data-theme="light"] .trends-score-badge.medium {
 
 html[data-theme="light"] .trends-score-badge.low {
   color: #991b1b;
+}
+
+html[data-theme="light"] .trends-swot-upside {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(22, 163, 74, 0.28);
+}
+
+html[data-theme="light"] .trends-swot-upside .trends-swot-title {
+  color: #166534;
+}
+
+html[data-theme="light"] .trends-swot-downside {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(217, 119, 6, 0.28);
+}
+
+html[data-theme="light"] .trends-swot-downside .trends-swot-title {
+  color: #9a3412;
+}
+
+html[data-theme="light"] .trends-swot-card ul {
+  color: var(--text-main);
+}
+
+@media (min-width: 640px) {
+  .trends-swot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .history-breakdown {

@@ -1182,6 +1182,66 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
 
         recommendations.sort(key=lambda item: item.get("opportunity_score", 0), reverse=True)
 
+        preference_business_keys = match_preference_business_keys(user_profile.get("primary_business"))
+        recommendations_by_key = {
+            item.get("business_key"): item
+            for item in recommendations
+            if item.get("business_key")
+        }
+
+        selected_recommendations = []
+        selected_keys = set()
+
+        for item in recommendations:
+            business_key = item.get("business_key")
+            if business_key in selected_keys:
+                continue
+            selected_recommendations.append(dict(item))
+            selected_keys.add(business_key)
+            if len(selected_recommendations) >= safe_limit:
+                break
+
+        for preferred_key in preference_business_keys:
+            if preferred_key in selected_keys:
+                continue
+            preferred_item = recommendations_by_key.get(preferred_key)
+            if preferred_item:
+                selected_recommendations.append(dict(preferred_item))
+                selected_keys.add(preferred_key)
+
+        space_markers = fetch_active_space_markers_for_analysis()
+        enriched_recommendations = []
+
+        for item in selected_recommendations:
+            business_key = item.get("business_key")
+            pre_scanned_report = run_pre_scanned_trend_report(
+                business_key,
+                user_id=user_id,
+                radius=340,
+                space_markers=space_markers,
+            ) if business_key else None
+
+            upsides, downsides = build_trend_upside_downside(item, pre_scanned_report)
+
+            pre_scanned_location = None
+            if pre_scanned_report:
+                target_coords = pre_scanned_report.get("target_coords") or {}
+                pre_scanned_location = {
+                    "lat": target_coords.get("lat"),
+                    "lng": target_coords.get("lng"),
+                    "source": pre_scanned_report.get("scan_source"),
+                    "source_type": pre_scanned_report.get("scan_source_type"),
+                    "viability_score": pre_scanned_report.get("viability_score"),
+                    "space_context": pre_scanned_report.get("space_context"),
+                }
+
+            item["included_by_preference"] = item.get("business_key") in preference_business_keys
+            item["upsides"] = upsides
+            item["downsides"] = downsides
+            item["pre_scanned_location"] = pre_scanned_location
+            item["full_report"] = pre_scanned_report
+            enriched_recommendations.append(item)
+
         return {
             "status": "success",
             "user_id": user_id,
@@ -1194,8 +1254,9 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
                 "time_commitment": user_profile.get("time_commitment") or "Not set",
                 "target_payback_months": user_profile.get("target_payback_months"),
                 "total_options_evaluated": len(recommendations),
+                "preference_business_matches": sorted(list(preference_business_keys)),
             },
-            "recommendations": recommendations[:safe_limit],
+            "recommendations": enriched_recommendations,
         }
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -1929,6 +1990,320 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
     }
 
 
+def match_preference_business_keys(primary_interest: str | None):
+    interest_text = str(primary_interest or "").strip().lower()
+    if not interest_text:
+        return set()
+
+    matched = set()
+    tokenized_interest = {
+        token
+        for token in interest_text.replace("/", " ").replace(",", " ").replace("-", " ").split()
+        if token
+    }
+
+    for business_key, profile_data in SME_DATABASE.items():
+        business_name = str(profile_data.get("name") or "").strip().lower()
+        if not business_name:
+            continue
+
+        if business_key in interest_text or business_name in interest_text:
+            matched.add(business_key)
+            continue
+
+        business_tokens = {
+            token
+            for token in business_name.replace("/", " ").replace("-", " ").split()
+            if token
+        }
+        if tokenized_interest.intersection(business_tokens):
+            matched.add(business_key)
+
+    if "food" in interest_text:
+        matched.update({"kiosk", "bakery", "coffee", "meat"})
+
+    return matched
+
+
+def fetch_active_space_markers_for_analysis():
+    conn = psycopg2.connect(**DB_CONFIG)
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    user_pk_column = get_users_primary_key_column(cursor)
+    ensure_user_space_submissions_table(cursor, user_pk_column)
+    ensure_admin_space_submissions_table(cursor)
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            title,
+            listing_mode,
+            guarantee_level,
+            property_type,
+            business_type,
+            latitude,
+            longitude,
+            address_text,
+            price_min,
+            price_max,
+            contact_info,
+            notes,
+            created_at,
+            reviewed_at,
+            'user'::text AS source_type
+        FROM user_space_submissions
+        WHERE status = 'approved'
+        """
+    )
+    user_rows = cursor.fetchall() or []
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            title,
+            listing_mode,
+            guarantee_level,
+            property_type,
+            business_type,
+            latitude,
+            longitude,
+            address_text,
+            price_min,
+            price_max,
+            contact_info,
+            notes,
+            confidence_score,
+            created_at,
+            verified_at,
+            expires_at,
+            'admin'::text AS source_type
+        FROM admin_space_submissions
+        WHERE is_active = TRUE
+          AND (expires_at IS NULL OR expires_at >= CURRENT_DATE)
+        """
+    )
+    admin_rows = cursor.fetchall() or []
+
+    cursor.close()
+    conn.close()
+
+    markers = []
+
+    for row in user_rows:
+        markers.append({
+            "id": f"user-{row.get('id')}",
+            "source_type": "user",
+            "title": row.get("title"),
+            "listing_mode": row.get("listing_mode"),
+            "guarantee_level": "guaranteed",
+            "property_type": row.get("property_type"),
+            "business_type": row.get("business_type"),
+            "latitude": row.get("latitude"),
+            "longitude": row.get("longitude"),
+            "address_text": row.get("address_text"),
+            "price_min": row.get("price_min"),
+            "price_max": row.get("price_max"),
+            "contact_info": row.get("contact_info"),
+            "notes": row.get("notes"),
+            "confidence_score": 100,
+            "verified_at": row.get("reviewed_at") or row.get("created_at"),
+            "expires_at": None,
+        })
+
+    for row in admin_rows:
+        markers.append({
+            "id": f"admin-{row.get('id')}",
+            "source_type": "admin",
+            "title": row.get("title"),
+            "listing_mode": row.get("listing_mode"),
+            "guarantee_level": row.get("guarantee_level") or "potential",
+            "property_type": row.get("property_type"),
+            "business_type": row.get("business_type"),
+            "latitude": row.get("latitude"),
+            "longitude": row.get("longitude"),
+            "address_text": row.get("address_text"),
+            "price_min": row.get("price_min"),
+            "price_max": row.get("price_max"),
+            "contact_info": row.get("contact_info"),
+            "notes": row.get("notes"),
+            "confidence_score": row.get("confidence_score"),
+            "verified_at": row.get("verified_at") or row.get("created_at"),
+            "expires_at": row.get("expires_at"),
+        })
+
+    return markers
+
+
+def resolve_space_context_for_coords(lat: float, lon: float, space_markers=None, max_distance_meters: int = 85):
+    markers = space_markers if isinstance(space_markers, list) else fetch_active_space_markers_for_analysis()
+    best_match = None
+    best_distance = None
+
+    for marker in markers:
+        marker_lat = to_finite_number(marker.get("latitude"))
+        marker_lon = to_finite_number(marker.get("longitude"))
+        if marker_lat is None or marker_lon is None:
+            continue
+
+        distance_m = calculate_distance(lat, lon, marker_lat, marker_lon)
+        if distance_m > max_distance_meters:
+            continue
+
+        if best_distance is None or distance_m < best_distance:
+            best_distance = distance_m
+            best_match = marker
+
+    if not best_match:
+        return None
+
+    return {
+        "id": best_match.get("id"),
+        "source_type": best_match.get("source_type"),
+        "title": best_match.get("title"),
+        "listing_mode": best_match.get("listing_mode"),
+        "guarantee_level": best_match.get("guarantee_level"),
+        "property_type": best_match.get("property_type"),
+        "business_type": best_match.get("business_type"),
+        "latitude": best_match.get("latitude"),
+        "longitude": best_match.get("longitude"),
+        "address_text": best_match.get("address_text"),
+        "price_min": best_match.get("price_min"),
+        "price_max": best_match.get("price_max"),
+        "contact_info": best_match.get("contact_info"),
+        "notes": best_match.get("notes"),
+        "confidence_score": best_match.get("confidence_score"),
+        "verified_at": best_match.get("verified_at"),
+        "expires_at": best_match.get("expires_at"),
+        "distance_meters": int(round(best_distance)),
+    }
+
+
+def build_panabo_prescan_points(space_markers=None, max_space_points: int = 12):
+    points = [{"lat": 7.3075, "lon": 125.6811, "label": "Panabo central corridor", "source": "city-grid"}]
+
+    for anchor in PANABO_ANCHORS:
+        points.append({
+            "lat": anchor["lat"],
+            "lon": anchor["lon"],
+            "label": anchor["name"],
+            "source": "anchor",
+        })
+
+    if isinstance(space_markers, list):
+        for marker in space_markers[:max_space_points]:
+            lat = to_finite_number(marker.get("latitude"))
+            lon = to_finite_number(marker.get("longitude"))
+            if lat is None or lon is None:
+                continue
+
+            points.append({
+                "lat": lat,
+                "lon": lon,
+                "label": marker.get("title") or "Approved space listing",
+                "source": "space",
+            })
+
+    deduped = []
+    seen = set()
+    for point in points:
+        dedupe_key = (round(point["lat"], 6), round(point["lon"], 6))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        deduped.append(point)
+
+    return deduped
+
+
+def build_trend_upside_downside(recommendation, pre_scanned_report):
+    scoring = recommendation.get("scoring") or {}
+    upsides = []
+    downsides = []
+
+    if recommendation.get("opportunity_score", 0) >= 75:
+        upsides.append("Strong overall opportunity score based on local demand, saturation, and profile fit.")
+
+    if recommendation.get("local_competitor_estimate", 0) <= 2:
+        upsides.append("Low local competitor pressure leaves room to capture unmet demand.")
+    else:
+        downsides.append("Local competition is already present, so differentiation is required.")
+
+    if scoring.get("capital_fit_points", 0) >= 10:
+        upsides.append("Startup capital fit is favorable for this category.")
+    elif scoring.get("capital_fit_points", 0) <= 3:
+        downsides.append("Your startup capital may be below the typical range for this business type.")
+
+    if scoring.get("risk_fit_points", 0) >= 8:
+        upsides.append("Risk profile aligns with the operating risk of this business.")
+    elif scoring.get("risk_fit_points", 0) <= 3:
+        downsides.append("Risk mismatch detected between your profile and this business category.")
+
+    if pre_scanned_report:
+        pre_scan_score = int(pre_scanned_report.get("viability_score") or 0)
+        if pre_scan_score >= 70:
+            upsides.append("The pre-scanned Panabo location shows strong viability for this business.")
+        elif pre_scan_score <= 45:
+            downsides.append("The pre-scanned Panabo location has mixed or weak viability indicators.")
+
+        breakdown = pre_scanned_report.get("breakdown") or {}
+        hazard_score = int((breakdown.get("hazard") or {}).get("score") or 0)
+        if hazard_score <= 12:
+            downsides.append("Flood hazard exposure may increase operating and mitigation costs in the selected area.")
+
+        if pre_scanned_report.get("space_context"):
+            upsides.append("A nearby active For Rent/For Sale listing matches the pre-scanned location.")
+
+    if not upsides:
+        upsides.append("Baseline demand and location-fit indicators are present, but require validation through full report review.")
+    if not downsides:
+        downsides.append("No major downside triggered in scoring, but permit checks and site validation are still required.")
+
+    return upsides[:4], downsides[:4]
+
+
+def run_pre_scanned_trend_report(business_key: str, user_id: int | None = None, radius: int = 340, space_markers=None):
+    candidates = build_panabo_prescan_points(space_markers=space_markers)
+    best_report = None
+    best_candidate = None
+
+    for candidate in candidates:
+        report = perform_analysis(
+            AnalysisRequest(
+                lat=float(candidate["lat"]),
+                lon=float(candidate["lon"]),
+                business_type=business_key,
+                radius=radius,
+                user_id=None,
+            )
+        )
+
+        if best_report is None or int(report.get("viability_score") or 0) > int(best_report.get("viability_score") or 0):
+            best_report = report
+            best_candidate = candidate
+
+    if not best_report:
+        return None
+
+    best_report["scan_source"] = (best_candidate or {}).get("label")
+    best_report["scan_source_type"] = (best_candidate or {}).get("source")
+    best_report["trend_generated_for_user"] = user_id
+
+    target_coords = best_report.get("target_coords") or {}
+    target_lat = to_finite_number(target_coords.get("lat"))
+    target_lng = to_finite_number(target_coords.get("lng"))
+    if target_lat is not None and target_lng is not None:
+        best_report["space_context"] = resolve_space_context_for_coords(
+            target_lat,
+            target_lng,
+            space_markers=space_markers,
+        )
+    else:
+        best_report["space_context"] = None
+
+    return best_report
+
+
 def verify_admin_token(x_admin_token: str | None):
     if not x_admin_token or x_admin_token != ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
@@ -2025,108 +2400,10 @@ def create_user_space_submission(payload: UserSpaceSubmissionRequest):
 @app.get("/spaces/map-markers")
 def list_space_map_markers():
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        user_pk_column = get_users_primary_key_column(cursor)
-        ensure_user_space_submissions_table(cursor, user_pk_column)
-        ensure_admin_space_submissions_table(cursor)
+        markers = fetch_active_space_markers_for_analysis()
 
-        cursor.execute(
-            """
-            SELECT
-                id,
-                title,
-                listing_mode,
-                guarantee_level,
-                property_type,
-                business_type,
-                latitude,
-                longitude,
-                address_text,
-                price_min,
-                price_max,
-                contact_info,
-                notes,
-                created_at,
-                reviewed_at,
-                'user'::text AS source_type
-            FROM user_space_submissions
-            WHERE status = 'approved'
-            """
-        )
-        user_rows = cursor.fetchall() or []
-
-        cursor.execute(
-            """
-            SELECT
-                id,
-                title,
-                listing_mode,
-                guarantee_level,
-                property_type,
-                business_type,
-                latitude,
-                longitude,
-                address_text,
-                price_min,
-                price_max,
-                contact_info,
-                notes,
-                confidence_score,
-                created_at,
-                verified_at,
-                expires_at,
-                'admin'::text AS source_type
-            FROM admin_space_submissions
-            WHERE is_active = TRUE
-              AND (expires_at IS NULL OR expires_at >= CURRENT_DATE)
-            """
-        )
-        admin_rows = cursor.fetchall() or []
-
-        cursor.close()
-        conn.close()
-
-        markers = []
-        for row in user_rows:
-            markers.append({
-                "id": f"user-{row.get('id')}",
-                "source_type": "user",
-                "title": row.get("title"),
-                "listing_mode": row.get("listing_mode"),
-                "guarantee_level": "guaranteed",
-                "property_type": row.get("property_type"),
-                "business_type": row.get("business_type"),
-                "latitude": row.get("latitude"),
-                "longitude": row.get("longitude"),
-                "address_text": row.get("address_text"),
-                "price_min": row.get("price_min"),
-                "price_max": row.get("price_max"),
-                "contact_info": row.get("contact_info"),
-                "notes": row.get("notes"),
-                "confidence_score": 100,
-                "last_verified_at": row.get("reviewed_at") or row.get("created_at"),
-            })
-
-        for row in admin_rows:
-            markers.append({
-                "id": f"admin-{row.get('id')}",
-                "source_type": "admin",
-                "title": row.get("title"),
-                "listing_mode": row.get("listing_mode"),
-                "guarantee_level": row.get("guarantee_level") or "potential",
-                "property_type": row.get("property_type"),
-                "business_type": row.get("business_type"),
-                "latitude": row.get("latitude"),
-                "longitude": row.get("longitude"),
-                "address_text": row.get("address_text"),
-                "price_min": row.get("price_min"),
-                "price_max": row.get("price_max"),
-                "contact_info": row.get("contact_info"),
-                "notes": row.get("notes"),
-                "confidence_score": row.get("confidence_score"),
-                "last_verified_at": row.get("verified_at") or row.get("created_at"),
-            })
+        for marker in markers:
+            marker["last_verified_at"] = marker.get("verified_at")
 
         return {"status": "success", "markers": markers}
     except Exception as e:

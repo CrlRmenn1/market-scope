@@ -13,7 +13,16 @@ const getScoreLabel = (score) => {
   return 'Watchlist';
 };
 
-export default function Trends({ user }) {
+const formatListingMode = (mode) => {
+  const normalized = String(mode || '').toLowerCase();
+  if (normalized === 'buy') return 'For Sale';
+  if (normalized === 'rent') return 'For Rent';
+  return 'Not specified';
+};
+
+const formatScore = (value) => `${Math.max(0, Math.min(100, Number(value) || 0))}/100`;
+
+export default function Trends({ user, onOpenReport }) {
   const userId = user?.user_id || user?.id;
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState('');
@@ -100,6 +109,13 @@ export default function Trends({ user }) {
               const score = Number(item?.opportunity_score || 0);
               const tone = getScoreTone(score);
               const scoreLabel = getScoreLabel(score);
+              const preScannedLocation = item?.pre_scanned_location || null;
+              const locationSource = preScannedLocation?.source || 'Panabo pre-scan engine';
+              const spaceContext = preScannedLocation?.space_context || null;
+              const upsides = Array.isArray(item?.upsides) ? item.upsides : [];
+              const downsides = Array.isArray(item?.downsides) ? item.downsides : [];
+              const hasFullReport = Boolean(item?.full_report && typeof onOpenReport === 'function');
+
               return (
                 <article key={item.business_key} className="data-card trends-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
                   <div className="trends-card-top">
@@ -108,6 +124,11 @@ export default function Trends({ user }) {
                       <p className="history-meta mt-1 text-sm text-slate-400">
                         Local competitors: {item.local_competitor_estimate} | Market scans: {item.market_scan_count}
                       </p>
+                      {item?.included_by_preference && (
+                        <p className="mt-2 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-xs font-semibold text-amber-100">
+                          Included by your profile preference
+                        </p>
+                      )}
                     </div>
                     <div className="trends-score-wrap">
                       <span className={`trends-score-badge ${tone}`}>{scoreLabel}</span>
@@ -119,11 +140,59 @@ export default function Trends({ user }) {
                     <span style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
                   </div>
 
+                  {preScannedLocation && (
+                    <div className="trends-prescan mt-3 rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Pre-scanned location in Panabo</p>
+                      <p className="mt-1 text-sm text-slate-200">{locationSource}</p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        Viability: {formatScore(preScannedLocation?.viability_score)} | Coordinates: {Number(preScannedLocation?.lat || 0).toFixed(5)}, {Number(preScannedLocation?.lng || 0).toFixed(5)}
+                      </p>
+                      {spaceContext && (
+                        <p className="mt-2 text-xs text-emerald-200">
+                          Nearby {formatListingMode(spaceContext.listing_mode)} space: {spaceContext.title || 'Unnamed listing'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="trends-swot-grid mt-3">
+                    <div className="trends-swot-card trends-swot-upside">
+                      <p className="trends-swot-title">Upside</p>
+                      <ul>
+                        {upsides.slice(0, 3).map((point, index) => (
+                          <li key={`${item.business_key}-up-${index}`}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="trends-swot-card trends-swot-downside">
+                      <p className="trends-swot-title">Downside</p>
+                      <ul>
+                        {downsides.slice(0, 3).map((point, index) => (
+                          <li key={`${item.business_key}-down-${index}`}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
                   <ul className="trends-reasons mt-3">
                     {(item.reasons || []).slice(0, 4).map((reason, index) => (
                       <li key={`${item.business_key}-reason-${index}`}>{reason}</li>
                     ))}
                   </ul>
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      className="history-open-btn"
+                      disabled={!hasFullReport}
+                      onClick={() => {
+                        if (!hasFullReport) return;
+                        onOpenReport(item.full_report);
+                      }}
+                    >
+                      Open Full Report
+                    </button>
+                  </div>
                 </article>
               );
             })}
