@@ -4,6 +4,7 @@ import { apiUrl } from '../api';
 const defaultMsmeForm = {
   name: '',
   business_type: '',
+  coordinate_pair: '',
   latitude: '',
   longitude: ''
 };
@@ -15,6 +16,7 @@ const defaultAdminSpaceForm = {
   confidence_score: '',
   property_type: '',
   business_type: '',
+  coordinate_pair: '',
   latitude: '',
   longitude: '',
   address_text: '',
@@ -128,6 +130,18 @@ const formatPesoRange = (minValue, maxValue) => {
 };
 
 const hasValidNumber = (value) => Number.isFinite(Number(value));
+
+const parseCoordinatePair = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw.includes(',')) return null;
+
+  const [latRaw, lonRaw] = raw.split(',').map((part) => part.trim());
+  const lat = Number(latRaw);
+  const lon = Number(lonRaw);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+};
 
 export default function AdminPanel({ adminSession }) {
   const token = adminSession?.token;
@@ -269,15 +283,17 @@ export default function AdminPanel({ adminSession }) {
     event.preventDefault();
     resetMessages();
 
+    const parsedCoords = parseCoordinatePair(msmeForm.coordinate_pair);
+
     const payload = {
       name: msmeForm.name.trim(),
       business_type: msmeForm.business_type.trim(),
-      latitude: Number(msmeForm.latitude),
-      longitude: Number(msmeForm.longitude)
+      latitude: Number(parsedCoords?.lat),
+      longitude: Number(parsedCoords?.lon)
     };
 
     if (!payload.name || !payload.business_type || Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
-      setErrorMessage('Please complete all custom MSME fields with valid coordinates.');
+      setErrorMessage('Please complete all custom MSME fields with valid coordinates in "latitude, longitude" format.');
       return;
     }
 
@@ -309,6 +325,7 @@ export default function AdminPanel({ adminSession }) {
     setMsmeForm({
       name: item.name || '',
       business_type: item.business_type || '',
+      coordinate_pair: `${item.latitude ?? ''}, ${item.longitude ?? ''}`,
       latitude: item.latitude ?? '',
       longitude: item.longitude ?? ''
     });
@@ -408,6 +425,8 @@ export default function AdminPanel({ adminSession }) {
     event.preventDefault();
     resetMessages();
 
+    const parsedCoords = parseCoordinatePair(adminSpaceForm.coordinate_pair);
+
     const payload = {
       title: adminSpaceForm.title.trim(),
       listing_mode: adminSpaceForm.listing_mode,
@@ -415,8 +434,8 @@ export default function AdminPanel({ adminSession }) {
       confidence_score: adminSpaceForm.confidence_score === '' ? null : Number(adminSpaceForm.confidence_score),
       property_type: adminSpaceForm.property_type.trim() || null,
       business_type: adminSpaceForm.business_type || null,
-      latitude: Number(adminSpaceForm.latitude),
-      longitude: Number(adminSpaceForm.longitude),
+      latitude: Number(parsedCoords?.lat),
+      longitude: Number(parsedCoords?.lon),
       address_text: adminSpaceForm.address_text.trim() || null,
       price_min: adminSpaceForm.price_min === '' ? null : Number(adminSpaceForm.price_min),
       price_max: adminSpaceForm.price_max === '' ? null : Number(adminSpaceForm.price_max),
@@ -429,7 +448,7 @@ export default function AdminPanel({ adminSession }) {
     };
 
     if (!payload.title || Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
-      setErrorMessage('Title and valid coordinates are required for admin space submission.');
+      setErrorMessage('Title and valid coordinates in "latitude, longitude" format are required for admin space submission.');
       return;
     }
 
@@ -455,7 +474,7 @@ export default function AdminPanel({ adminSession }) {
     }
   };
 
-  const canSubmitAdminSpace = Boolean(adminSpaceForm.title.trim()) && hasValidNumber(adminSpaceForm.latitude) && hasValidNumber(adminSpaceForm.longitude);
+  const canSubmitAdminSpace = Boolean(adminSpaceForm.title.trim()) && Boolean(parseCoordinatePair(adminSpaceForm.coordinate_pair));
 
   const reviewUserSubmission = async (submissionId, status) => {
     resetMessages();
@@ -535,12 +554,33 @@ export default function AdminPanel({ adminSession }) {
                 </select>
               </div>
               <div className="input-group">
-                <label>Latitude</label>
-                <input value={msmeForm.latitude} onChange={(e) => setMsmeForm((c) => ({ ...c, latitude: e.target.value }))} />
-              </div>
-              <div className="input-group">
-                <label>Longitude</label>
-                <input value={msmeForm.longitude} onChange={(e) => setMsmeForm((c) => ({ ...c, longitude: e.target.value }))} />
+                <label>Coordinates (lat, lon)</label>
+                <input
+                  value={msmeForm.coordinate_pair}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const parsed = parseCoordinatePair(value);
+
+                    if (parsed) {
+                      setMsmeForm((c) => ({
+                        ...c,
+                        coordinate_pair: value,
+                        latitude: String(parsed.lat),
+                        longitude: String(parsed.lon)
+                      }));
+                      return;
+                    }
+
+                    setMsmeForm((c) => ({
+                      ...c,
+                      coordinate_pair: value,
+                      latitude: '',
+                      longitude: ''
+                    }));
+                  }}
+                  placeholder="7.30750, 125.68110"
+                />
+                <p className="admin-field-help">Use one input only. Numbers after the comma are treated as longitude.</p>
               </div>
               <button type="submit" className="primary-btn">{editingMsmeId ? 'Update MSME' : 'Create MSME'}</button>
               {editingMsmeId && (
@@ -712,13 +752,33 @@ export default function AdminPanel({ adminSession }) {
               </div>
 
               <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Latitude <span className="required-indicator">*</span></label>
-                  <input required type="number" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} />
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Longitude <span className="required-indicator">*</span></label>
-                  <input required type="number" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} />
+                <div className="input-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+                  <label>Paste Coordinates (lat, lon)</label>
+                  <input
+                    value={adminSpaceForm.coordinate_pair}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const parsed = parseCoordinatePair(value);
+                      if (parsed) {
+                        setAdminSpaceForm((c) => ({
+                          ...c,
+                          coordinate_pair: value,
+                          latitude: String(parsed.lat),
+                          longitude: String(parsed.lon)
+                        }));
+                        return;
+                      }
+
+                      setAdminSpaceForm((c) => ({
+                        ...c,
+                        coordinate_pair: value,
+                        latitude: '',
+                        longitude: ''
+                      }));
+                    }}
+                    placeholder="7.30750, 125.68110"
+                  />
+                  <p className="admin-field-help">Use one input only. Numbers after the comma are treated as longitude.</p>
                 </div>
               </div>
 

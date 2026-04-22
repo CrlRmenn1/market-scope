@@ -23,6 +23,7 @@ const defaultForm = {
   listing_mode: 'rent',
   property_type: '',
   business_type: '',
+  coordinate_pair: '',
   latitude: '',
   longitude: '',
   address_text: '',
@@ -30,6 +31,18 @@ const defaultForm = {
   price_max: '',
   contact_info: '',
   notes: ''
+};
+
+const parseCoordinatePair = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw.includes(',')) return null;
+
+  const [latRaw, lonRaw] = raw.split(',').map((part) => part.trim());
+  const lat = Number(latRaw);
+  const lon = Number(lonRaw);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
 };
 
 export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
@@ -60,7 +73,31 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
   }, [isOpen]);
 
   const handleFieldChange = (key, value) => {
-    setForm((current) => ({ ...current, [key]: value }));
+    if (key === 'coordinate_pair') {
+      const parsed = parseCoordinatePair(value);
+      if (parsed) {
+        setForm((current) => ({
+          ...current,
+          coordinate_pair: value,
+          latitude: String(parsed.lat),
+          longitude: String(parsed.lon)
+        }));
+        return;
+      }
+
+      setForm((current) => ({
+        ...current,
+        coordinate_pair: value,
+        latitude: '',
+        longitude: ''
+      }));
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      [key]: value
+    }));
   };
 
   const handleSubmit = async () => {
@@ -72,10 +109,10 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
       return;
     }
 
-    const latitude = Number(form.latitude);
-    const longitude = Number(form.longitude);
-    if (form.latitude === '') missingFields.push('Latitude');
-    if (form.longitude === '') missingFields.push('Longitude');
+    const parsedCoords = parseCoordinatePair(form.coordinate_pair);
+    const latitude = parsedCoords?.lat;
+    const longitude = parsedCoords?.lon;
+    if (!form.coordinate_pair.trim()) missingFields.push('Coordinates (lat, lon)');
 
     if (missingFields.length > 0) {
       setErrorMessage(`Please complete required fields: ${missingFields.join(', ')}.`);
@@ -83,7 +120,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     }
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      setErrorMessage('Latitude and longitude must be valid numbers.');
+      setErrorMessage('Coordinates must be in "latitude, longitude" format.');
       return;
     }
 
@@ -150,16 +187,17 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     }
 
     if (stepIndex === 1) {
-      const latitude = Number(form.latitude);
-      const longitude = Number(form.longitude);
+      const parsedCoords = parseCoordinatePair(form.coordinate_pair);
+      const latitude = parsedCoords?.lat;
+      const longitude = parsedCoords?.lon;
 
-      if (form.latitude === '' || form.longitude === '') {
-        setErrorMessage('Latitude and Longitude are required before continuing.');
+      if (!form.coordinate_pair.trim()) {
+        setErrorMessage('Coordinates are required before continuing.');
         return;
       }
 
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        setErrorMessage('Latitude and Longitude must be valid numbers.');
+        setErrorMessage('Coordinates must be in "latitude, longitude" format.');
         return;
       }
     }
@@ -225,15 +263,15 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
 
               {stepIndex === 1 && (
                 <div className="fade-in">
-                  <div className="history-tools-grid" style={{ marginBottom: 12 }}>
-                    <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label className="input-label">Latitude <span className="required-indicator">*</span></label>
-                      <input className="history-search-input" type="number" step="any" required value={form.latitude} onChange={(event) => handleFieldChange('latitude', event.target.value)} placeholder="7.30750" />
-                    </div>
-                    <div className="input-group" style={{ marginBottom: 0 }}>
-                      <label className="input-label">Longitude <span className="required-indicator">*</span></label>
-                      <input className="history-search-input" type="number" step="any" required value={form.longitude} onChange={(event) => handleFieldChange('longitude', event.target.value)} placeholder="125.68110" />
-                    </div>
+                  <div className="input-group">
+                    <label className="input-label">Coordinates (lat, lon) <span className="required-indicator">*</span></label>
+                    <input
+                      className="history-search-input"
+                      value={form.coordinate_pair}
+                      onChange={(event) => handleFieldChange('coordinate_pair', event.target.value)}
+                      placeholder="7.30750, 125.68110"
+                    />
+                    <p className="admin-field-help">Paste from Google Maps with a comma. Example: 7.30750, 125.68110</p>
                   </div>
 
                   <div className="input-group">
