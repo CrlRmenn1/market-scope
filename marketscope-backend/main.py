@@ -1182,6 +1182,25 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
 
         recommendations.sort(key=lambda item: item.get("opportunity_score", 0), reverse=True)
 
+        citywide_snapshot = get_citywide_scan_snapshot(radius=340)
+        citywide_businesses = citywide_snapshot.get("businesses") or {}
+
+        for item in recommendations:
+            business_key = item.get("business_key")
+            city_bucket = citywide_businesses.get(business_key) or {}
+            city_report = city_bucket.get("best_report") or {}
+            city_score = int(city_report.get("viability_score") or 0)
+            item["citywide_potential_score"] = city_score
+            item["citywide_hotspots"] = city_bucket.get("hotspots") or []
+
+        recommendations.sort(
+            key=lambda item: (
+                item.get("citywide_potential_score", 0),
+                item.get("opportunity_score", 0)
+            ),
+            reverse=True,
+        )
+
         preference_business_keys = match_preference_business_keys(user_profile.get("primary_business"))
         recommendations_by_key = {
             item.get("business_key"): item
@@ -1209,7 +1228,6 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
                 selected_recommendations.append(dict(preferred_item))
                 selected_keys.add(preferred_key)
 
-        space_markers = fetch_active_space_markers_for_analysis()
         enriched_recommendations = []
 
         for item in selected_recommendations:
@@ -1218,7 +1236,6 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
                 business_key,
                 user_id=user_id,
                 radius=340,
-                space_markers=space_markers,
             ) if business_key else None
 
             upsides, downsides = build_trend_upside_downside(item, pre_scanned_report)
@@ -1255,6 +1272,9 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
                 "target_payback_months": user_profile.get("target_payback_months"),
                 "total_options_evaluated": len(recommendations),
                 "preference_business_matches": sorted(list(preference_business_keys)),
+                "scan_engine": "citywide-standalone",
+                "citywide_scan_generated_at": citywide_snapshot.get("generated_at"),
+                "citywide_scan_points": citywide_snapshot.get("candidate_count"),
             },
             "recommendations": enriched_recommendations,
         }
@@ -1309,6 +1329,9 @@ HAZARD_LAYER_CACHE = []
 HAZARD_LAYER_CACHE_LOADED = False
 HAZARD_LAYER_LOCK = Lock()
 HAZARD_LAYER_SOURCE = None
+TREND_SCAN_CACHE = {}
+TREND_SCAN_CACHE_LOCK = Lock()
+TREND_SCAN_CACHE_TTL_SECONDS = 1800
 
 HAZARD_LAYER_LABELS = {
     1: {"name": "Very High Flood Hazard (5-Year Return Period)", "score": 5},
@@ -2180,7 +2203,27 @@ def resolve_space_context_for_coords(lat: float, lon: float, space_markers=None,
 
 
 def build_panabo_prescan_points(space_markers=None, max_space_points: int = 12):
-    points = [{"lat": 7.3075, "lon": 125.6811, "label": "Panabo central corridor", "source": "city-grid"}]
+    min_lat, max_lat, min_lon, max_lon = PANABO_BOUNDS
+    lat_step = 0.006
+    lon_step = 0.006
+
+    points = []
+
+    lat_value = min_lat
+    while lat_value <= max_lat:
+        lon_value = min_lon
+        while lon_value <= max_lon:
+            points.append({
+                "lat": round(lat_value, 6),
+                "lon": round(lon_value, 6),
+                "label": "Panabo citywide scan point",
+                "source": "city-grid",
+            })
+            lon_value += lon_step
+        lat_value += lat_step
+
+    # Keep one central point even if grid spacing changes.
+    points.append({"lat": 7.3075, "lon": 125.6811, "label": "Panabo central corridor", "source": "city-grid"})
 
     for anchor in PANABO_ANCHORS:
         points.append({
@@ -2214,6 +2257,103 @@ def build_panabo_prescan_points(space_markers=None, max_space_points: int = 12):
         deduped.append(point)
 
     return deduped
+
+
+def run_citywide_business_scan(business_key: str, candidates, radius: int = 340, space_markers=None, top_hotspots: int = 3):
+    best_report = None
+    hotspots = []
+
+    for candidate in candidates:
+        report = perform_analysis(
+            AnalysisRequest(
+                lat=float(candidate["lat"]),
+                lon=float(candidate["lon"]),
+                business_type=business_key,
+                radius=radius,
+                user_id=None,
+            )
+        )
+
+        score = int(report.get("viability_score") or 0)
+        report["scan_source"] = candidate.get("label")
+        report["scan_source_type"] = candidate.get("source")
+
+        target_coords = report.get("target_coords") or {}
+        target_lat = to_finite_number(target_coords.get("lat"))
+        target_lng = to_finite_number(target_coords.get("lng"))
+        if target_lat is not None and target_lng is not None:
+            report["space_context"] = resolve_space_context_for_coords(
+                target_lat,
+                target_lng,
+                space_markers=space_markers,
+            )
+        else:
+            report["space_context"] = None
+
+        hotspots.append({
+            "score": score,
+            "source": candidate.get("label"),
+            "source_type": candidate.get("source"),
+            "coords": target_coords,
+            "space_context": report.get("space_context"),
+        })
+
+        if best_report is None or score > int(best_report.get("viability_score") or 0):
+            best_report = report
+
+    hotspots.sort(key=lambda item: item.get("score", 0), reverse=True)
+    return {
+        "best_report": best_report,
+        "hotspots": hotspots[:top_hotspots],
+    }
+
+
+def build_citywide_scan_snapshot(radius: int = 340):
+    space_markers = fetch_active_space_markers_for_analysis()
+    candidates = build_panabo_prescan_points(space_markers=space_markers, max_space_points=24)
+
+    businesses = {}
+    for business_key in SME_DATABASE.keys():
+        scan_result = run_citywide_business_scan(
+            business_key,
+            candidates,
+            radius=radius,
+            space_markers=space_markers,
+            top_hotspots=3,
+        )
+
+        businesses[business_key] = {
+            "best_report": scan_result.get("best_report"),
+            "hotspots": scan_result.get("hotspots") or [],
+        }
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "radius": radius,
+        "candidate_count": len(candidates),
+        "businesses": businesses,
+    }
+
+
+def get_citywide_scan_snapshot(radius: int = 340):
+    cache_key = f"radius:{int(radius)}"
+    now = datetime.utcnow()
+
+    with TREND_SCAN_CACHE_LOCK:
+        cached = TREND_SCAN_CACHE.get(cache_key)
+        if cached:
+            cached_at = cached.get("cached_at")
+            if isinstance(cached_at, datetime) and (now - cached_at).total_seconds() <= TREND_SCAN_CACHE_TTL_SECONDS:
+                return cached.get("payload") or {}
+
+    payload = build_citywide_scan_snapshot(radius=radius)
+    with TREND_SCAN_CACHE_LOCK:
+        TREND_SCAN_CACHE[cache_key] = {
+            "cached_at": now,
+            "payload": payload,
+        }
+
+    return payload
 
 
 def build_trend_upside_downside(recommendation, pre_scanned_report):
@@ -2263,45 +2403,15 @@ def build_trend_upside_downside(recommendation, pre_scanned_report):
 
 
 def run_pre_scanned_trend_report(business_key: str, user_id: int | None = None, radius: int = 340, space_markers=None):
-    candidates = build_panabo_prescan_points(space_markers=space_markers)
-    best_report = None
-    best_candidate = None
-
-    for candidate in candidates:
-        report = perform_analysis(
-            AnalysisRequest(
-                lat=float(candidate["lat"]),
-                lon=float(candidate["lon"]),
-                business_type=business_key,
-                radius=radius,
-                user_id=None,
-            )
-        )
-
-        if best_report is None or int(report.get("viability_score") or 0) > int(best_report.get("viability_score") or 0):
-            best_report = report
-            best_candidate = candidate
-
-    if not best_report:
+    snapshot = get_citywide_scan_snapshot(radius=radius)
+    business_bucket = (snapshot.get("businesses") or {}).get(business_key) or {}
+    report = business_bucket.get("best_report")
+    if not report:
         return None
 
-    best_report["scan_source"] = (best_candidate or {}).get("label")
-    best_report["scan_source_type"] = (best_candidate or {}).get("source")
-    best_report["trend_generated_for_user"] = user_id
-
-    target_coords = best_report.get("target_coords") or {}
-    target_lat = to_finite_number(target_coords.get("lat"))
-    target_lng = to_finite_number(target_coords.get("lng"))
-    if target_lat is not None and target_lng is not None:
-        best_report["space_context"] = resolve_space_context_for_coords(
-            target_lat,
-            target_lng,
-            space_markers=space_markers,
-        )
-    else:
-        best_report["space_context"] = None
-
-    return best_report
+    hydrated = dict(report)
+    hydrated["trend_generated_for_user"] = user_id
+    return hydrated
 
 
 def verify_admin_token(x_admin_token: str | None):
