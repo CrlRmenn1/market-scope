@@ -22,16 +22,42 @@ const formatListingMode = (mode) => {
 
 const formatScore = (value) => `${Math.max(0, Math.min(100, Number(value) || 0))}/100`;
 
+const formatRelativeTime = (value) => {
+  if (!value) return 'Not yet updated';
+
+  const ts = Number(value);
+  if (!Number.isFinite(ts)) return 'Not yet updated';
+
+  const diffMs = Date.now() - ts;
+  if (diffMs < 60 * 1000) return 'Updated just now';
+
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `Updated ${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `Updated ${diffDays}d ago`;
+};
+
 export default function Trends({ user, onOpenReport }) {
   const userId = user?.user_id || user?.id;
+  const trendsCacheKey = userId ? `marketscope_trends_cache_${userId}` : null;
   const [loading, setLoading] = useState(Boolean(userId));
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [summary, setSummary] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = async ({ silent = false } = {}) => {
     if (!userId) return;
-    setLoading(true);
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError('');
 
     try {
@@ -42,20 +68,61 @@ export default function Trends({ user, onOpenReport }) {
         throw new Error(data?.detail || 'Unable to load trend recommendations.');
       }
 
-      setSummary(data?.summary || null);
-      setRecommendations(Array.isArray(data?.recommendations) ? data.recommendations : []);
+      const nextSummary = data?.summary || null;
+      const nextRecommendations = Array.isArray(data?.recommendations) ? data.recommendations : [];
+
+      setSummary(nextSummary);
+      setRecommendations(nextRecommendations);
+
+      if (trendsCacheKey) {
+        const cachedAt = Date.now();
+        setLastUpdatedAt(cachedAt);
+        localStorage.setItem(
+          trendsCacheKey,
+          JSON.stringify({
+            cachedAt,
+            summary: nextSummary,
+            recommendations: nextRecommendations,
+          })
+        );
+      }
     } catch (fetchError) {
       setRecommendations([]);
       setError(fetchError.message || 'Unable to load trend recommendations.');
     } finally {
-      setLoading(false);
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchRecommendations();
+    if (!userId) return;
+
+    let hydratedFromCache = false;
+    if (trendsCacheKey) {
+      try {
+        const raw = localStorage.getItem(trendsCacheKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed?.recommendations)) {
+            setSummary(parsed?.summary || null);
+            setRecommendations(parsed.recommendations);
+            setLastUpdatedAt(Number(parsed?.cachedAt) || null);
+            setLoading(false);
+            hydratedFromCache = true;
+          }
+        }
+      } catch {
+        // Ignore malformed cache data.
+      }
+    }
+
+    fetchRecommendations({ silent: hydratedFromCache });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, trendsCacheKey]);
 
   const hasRecommendations = useMemo(() => recommendations.length > 0, [recommendations]);
 
@@ -69,7 +136,7 @@ export default function Trends({ user, onOpenReport }) {
               <p className="profile-email text-sm text-slate-300">Recommendations where market opportunities can find you.</p>
             </div>
             <button type="button" className="edit-btn trends-refresh-btn" onClick={fetchRecommendations} disabled={loading}>
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading || refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
 
@@ -78,6 +145,10 @@ export default function Trends({ user, onOpenReport }) {
               Based on your profile interest: <strong>{summary.profile_interest || 'Not set'}</strong>
             </p>
           )}
+
+          <p className="trends-cache-meta mt-2 text-xs text-slate-400">
+            {refreshing ? 'Refreshing latest trend data...' : formatRelativeTime(lastUpdatedAt)}
+          </p>
         </div>
 
         {loading && <div className="data-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300 shadow-sm">Generating recommendations...</div>}
@@ -105,8 +176,10 @@ export default function Trends({ user, onOpenReport }) {
 
         {!loading && !error && hasRecommendations && (
           <div className="trends-list mt-2 flex flex-col gap-4">
-            {recommendations.map((item) => {
-              const score = Number(item?.opportunity_score || 0);
+            {recommendations.map((item, index) => {
+              const opportunityScore = Number(item?.opportunity_score || 0);
+              const projectedReportScore = Number(item?.pre_scanned_location?.viability_score ?? item?.full_report?.viability_score);
+              const score = Number.isFinite(projectedReportScore) ? projectedReportScore : opportunityScore;
               const tone = getScoreTone(score);
               const scoreLabel = getScoreLabel(score);
               const preScannedLocation = item?.pre_scanned_location || null;
@@ -117,13 +190,25 @@ export default function Trends({ user, onOpenReport }) {
               const hasFullReport = Boolean(item?.full_report && typeof onOpenReport === 'function');
 
               return (
-                <article key={item.business_key} className="data-card trends-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+                <article
+                  key={item.business_key}
+                  className="data-card trends-card trends-card-animate rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm"
+                  style={{ '--trend-index': index }}
+                >
+                  <div className="trends-chip-row">
+                    <span className="trends-chip trends-chip-score">Projected viability: {score}/100</span>
+                    <span className="trends-chip trends-chip-source">Pre-scanned insight</span>
+                  </div>
+
                   <div className="trends-card-top">
                     <div>
                       <h3 className="history-title text-lg font-semibold text-slate-50">{item.business_name}</h3>
                       <p className="history-meta mt-1 text-sm text-slate-400">
                         Local competitors: {item.local_competitor_estimate} | Market scans: {item.market_scan_count}
                       </p>
+                      {opportunityScore !== score && (
+                        <p className="mt-1 text-xs text-slate-400">Opportunity score: {opportunityScore}/100</p>
+                      )}
                       {item?.included_by_preference && (
                         <p className="mt-2 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-xs font-semibold text-amber-100">
                           Included by your profile preference
@@ -138,6 +223,21 @@ export default function Trends({ user, onOpenReport }) {
 
                   <div className="trends-progress mt-3" role="presentation">
                     <span style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
+                  </div>
+
+                  <div className="trends-kpi-row mt-3">
+                    <div className="trends-kpi-card">
+                      <span className="trends-kpi-label">Viability</span>
+                      <strong className="trends-kpi-value">{score}/100</strong>
+                    </div>
+                    <div className="trends-kpi-card">
+                      <span className="trends-kpi-label">Competitors</span>
+                      <strong className="trends-kpi-value">{item.local_competitor_estimate}</strong>
+                    </div>
+                    <div className="trends-kpi-card">
+                      <span className="trends-kpi-label">Market Scans</span>
+                      <strong className="trends-kpi-value">{item.market_scan_count}</strong>
+                    </div>
                   </div>
 
                   {preScannedLocation && (
@@ -176,7 +276,7 @@ export default function Trends({ user, onOpenReport }) {
 
                   <ul className="trends-reasons mt-3">
                     {(item.reasons || []).slice(0, 4).map((reason, index) => (
-                      <li key={`${item.business_key}-reason-${index}`}>{reason}</li>
+                      <li key={`${item.business_key}-reason-${index}`} className="trends-reason-pill">{reason}</li>
                     ))}
                   </ul>
 

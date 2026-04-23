@@ -2784,6 +2784,64 @@ html[data-theme="light"] .trends-card .text-violet-200 {
 
 .trends-card {
   text-align: left;
+  background:
+    radial-gradient(circle at 92% -8%, rgba(56, 189, 248, 0.12), transparent 40%),
+    radial-gradient(circle at 8% 108%, rgba(16, 185, 129, 0.09), transparent 42%),
+    rgba(2, 6, 23, 0.66);
+}
+
+.trends-card-animate {
+  opacity: 0;
+  transform: translateY(10px) scale(0.992);
+  animation: trendCardEnter 460ms var(--ease-standard) forwards;
+  animation-delay: calc(var(--trend-index, 0) * 70ms);
+  will-change: transform, opacity;
+}
+
+@keyframes trendCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.trends-cache-meta {
+  letter-spacing: 0.01em;
+}
+
+.trends-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.trends-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.trends-chip-score {
+  background: rgba(45, 212, 191, 0.16);
+  border-color: rgba(45, 212, 191, 0.32);
+  color: #99f6e4;
+}
+
+.trends-chip-source {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.28);
+  color: #bfdbfe;
 }
 
 .trends-card-top {
@@ -2850,15 +2908,53 @@ html[data-theme="light"] .trends-card .text-violet-200 {
   background: linear-gradient(90deg, #22c55e 0%, #a3e635 45%, #f59e0b 100%);
 }
 
-.trends-reasons {
-  margin: 0;
-  padding-left: 18px;
+.trends-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.trends-kpi-card {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  padding: 10px 10px;
+  background: rgba(15, 23, 42, 0.38);
   display: flex;
   flex-direction: column;
+  gap: 3px;
+}
+
+.trends-kpi-label {
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.92);
+  font-weight: 700;
+}
+
+.trends-kpi-value {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.trends-reasons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 6px;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  line-height: 1.45;
+}
+
+.trends-reason-pill {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.34);
+  color: rgba(226, 232, 240, 0.95);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  padding: 8px 10px;
 }
 
 .trends-prescan {
@@ -2948,9 +3044,57 @@ html[data-theme="light"] .trends-swot-card ul {
   color: var(--text-main);
 }
 
+html[data-theme="light"] .trends-card {
+  background:
+    radial-gradient(circle at 92% -8%, rgba(59, 130, 246, 0.12), transparent 42%),
+    radial-gradient(circle at 8% 108%, rgba(16, 185, 129, 0.1), transparent 44%),
+    rgba(255, 255, 255, 0.92);
+}
+
+html[data-theme="light"] .trends-chip-score {
+  color: #115e59;
+  border-color: rgba(13, 148, 136, 0.35);
+  background: rgba(45, 212, 191, 0.14);
+}
+
+html[data-theme="light"] .trends-chip-source {
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.34);
+  background: rgba(96, 165, 250, 0.14);
+}
+
+html[data-theme="light"] .trends-kpi-card {
+  background: rgba(241, 245, 249, 0.85);
+  border-color: rgba(148, 163, 184, 0.34);
+}
+
+html[data-theme="light"] .trends-kpi-label {
+  color: #64748b;
+}
+
+html[data-theme="light"] .trends-reason-pill {
+  background: rgba(241, 245, 249, 0.88);
+  border-color: rgba(148, 163, 184, 0.34);
+  color: #334155;
+}
+
 @media (min-width: 640px) {
   .trends-swot-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .trends-kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trends-card-animate {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 }
 

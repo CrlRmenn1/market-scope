@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from datetime import date, datetime, timedelta
 from contextlib import asynccontextmanager
-from threading import Lock
+from threading import Lock, Thread
 from email.message import EmailMessage
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
@@ -72,14 +72,24 @@ async def lifespan(app: FastAPI):
     create_app_tables()
     preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
+    warm_citywide_scan_snapshot_async(radius=340)
     yield
 
 
 app = FastAPI(lifespan=lifespan)
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "MARKETSCOPE_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:4173,http://localhost:3000,https://market-scope.onrender.com"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -255,6 +265,7 @@ SMTP_USE_SSL = os.environ.get("MARKETSCOPE_SMTP_USE_SSL", "false").lower() == "t
 def create_app_tables():
     conn = psycopg2.connect(**get_startup_db_config())
     cursor = conn.cursor()
+    ensure_users_table(cursor)
     user_pk_column = get_users_primary_key_column(cursor)
     cursor.execute(
         """
@@ -287,6 +298,20 @@ def create_app_tables():
     conn.commit()
     cursor.close()
     conn.close()
+
+
+def ensure_users_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id SERIAL PRIMARY KEY,
+            full_name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
 
 
 def ensure_history_table_columns(cursor):
@@ -1160,6 +1185,7 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
 
         global_trend_snapshot = fetch_history_trend_snapshot(cursor)
         user_trend_snapshot = fetch_user_business_history_snapshot(cursor, user_id)
+        custom_msme_counts = fetch_custom_msme_counts(cursor)
 
         cursor.close()
         conn.close()
@@ -1169,6 +1195,7 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
             business_name = str(profile_data.get("name") or profile_key).strip().lower()
             global_trend = global_trend_snapshot.get(business_name, {"scan_count": 0, "avg_score": 0.0})
             user_trend = user_trend_snapshot.get(business_name, {"scan_count": 0, "avg_score": 0.0})
+            local_competitor_count = len(get_cached_pbf_competitors(profile_data.get("val"))) + int(custom_msme_counts.get(profile_key, 0))
 
             recommendations.append(
                 score_business_opportunity(
@@ -1177,6 +1204,7 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
                     user_profile,
                     global_trend,
                     user_trend,
+                    local_competitor_count=local_competitor_count,
                 )
             )
 
@@ -1331,7 +1359,9 @@ HAZARD_LAYER_LOCK = Lock()
 HAZARD_LAYER_SOURCE = None
 TREND_SCAN_CACHE = {}
 TREND_SCAN_CACHE_LOCK = Lock()
-TREND_SCAN_CACHE_TTL_SECONDS = 1800
+TREND_SCAN_CACHE_TTL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_TTL_SECONDS", "21600"))
+TREND_SCAN_CACHE_MAX_STALE_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_MAX_STALE_SECONDS", "86400"))
+TREND_SCAN_REFRESH_IN_FLIGHT = set()
 
 HAZARD_LAYER_LABELS = {
     1: {"name": "Very High Flood Hazard (5-Year Return Period)", "score": 5},
@@ -1777,6 +1807,28 @@ def fetch_custom_msmes(business_key):
         return []
 
 
+def fetch_custom_msme_counts(cursor):
+    cursor.execute(
+        """
+        SELECT
+            LOWER(TRIM(business_type)) AS business_key,
+            COUNT(*) AS total
+        FROM custom_msme
+        GROUP BY LOWER(TRIM(business_type))
+        """
+    )
+
+    rows = cursor.fetchall() or []
+    counts = {}
+    for row in rows:
+        business_key = str(row.get("business_key") or "").strip()
+        if not business_key:
+            continue
+        counts[business_key] = int(row.get("total") or 0)
+
+    return counts
+
+
 def fetch_user_profile_by_id(cursor, user_pk_column: str, user_id: int):
     cursor.execute(
         f"""
@@ -1856,7 +1908,7 @@ def fetch_user_business_history_snapshot(cursor, user_id: int):
     return snapshot
 
 
-def score_business_opportunity(profile_key, profile_data, user_profile, global_trend, user_trend):
+def score_business_opportunity(profile_key, profile_data, user_profile, global_trend, user_trend, local_competitor_count=None):
     business_name = str(profile_data.get("name") or profile_key).strip()
     business_name_key = business_name.lower()
 
@@ -1869,7 +1921,9 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
     demand_points = min(22, int((profile_data.get("need", 5) / 10) * 22))
 
     # Proxy competition using locally cached OSM + custom MSME competitors.
-    local_competitors = len(get_cached_pbf_competitors(profile_data.get("val"))) + len(fetch_custom_msmes(profile_key))
+    local_competitors = local_competitor_count
+    if local_competitors is None:
+        local_competitors = len(get_cached_pbf_competitors(profile_data.get("val"))) + len(fetch_custom_msmes(profile_key))
     market_gap_points = max(0, 22 - min(22, local_competitors * 2))
 
     trend_points = min(18, int((market_avg_score / 100) * 18))
@@ -2335,6 +2389,36 @@ def build_citywide_scan_snapshot(radius: int = 340):
     }
 
 
+def _refresh_citywide_scan_snapshot_worker(cache_key: str, radius: int):
+    try:
+        payload = build_citywide_scan_snapshot(radius=radius)
+        with TREND_SCAN_CACHE_LOCK:
+            TREND_SCAN_CACHE[cache_key] = {
+                "cached_at": datetime.utcnow(),
+                "payload": payload,
+            }
+    except Exception as exc:
+        print(f"Citywide scan refresh warning ({cache_key}): {exc}")
+    finally:
+        with TREND_SCAN_CACHE_LOCK:
+            TREND_SCAN_REFRESH_IN_FLIGHT.discard(cache_key)
+
+
+def warm_citywide_scan_snapshot_async(radius: int = 340):
+    cache_key = f"radius:{int(radius)}"
+
+    with TREND_SCAN_CACHE_LOCK:
+        if cache_key in TREND_SCAN_REFRESH_IN_FLIGHT:
+            return
+        TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
+
+    Thread(
+        target=_refresh_citywide_scan_snapshot_worker,
+        args=(cache_key, int(radius)),
+        daemon=True,
+    ).start()
+
+
 def get_citywide_scan_snapshot(radius: int = 340):
     cache_key = f"radius:{int(radius)}"
     now = datetime.utcnow()
@@ -2343,13 +2427,27 @@ def get_citywide_scan_snapshot(radius: int = 340):
         cached = TREND_SCAN_CACHE.get(cache_key)
         if cached:
             cached_at = cached.get("cached_at")
-            if isinstance(cached_at, datetime) and (now - cached_at).total_seconds() <= TREND_SCAN_CACHE_TTL_SECONDS:
-                return cached.get("payload") or {}
+            if isinstance(cached_at, datetime):
+                age_seconds = (now - cached_at).total_seconds()
+                payload = cached.get("payload") or {}
+
+                if age_seconds <= TREND_SCAN_CACHE_TTL_SECONDS:
+                    return payload
+
+                if age_seconds <= TREND_SCAN_CACHE_MAX_STALE_SECONDS:
+                    if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
+                        TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
+                        Thread(
+                            target=_refresh_citywide_scan_snapshot_worker,
+                            args=(cache_key, int(radius)),
+                            daemon=True,
+                        ).start()
+                    return payload
 
     payload = build_citywide_scan_snapshot(radius=radius)
     with TREND_SCAN_CACHE_LOCK:
         TREND_SCAN_CACHE[cache_key] = {
-            "cached_at": now,
+            "cached_at": datetime.utcnow(),
             "payload": payload,
         }
 

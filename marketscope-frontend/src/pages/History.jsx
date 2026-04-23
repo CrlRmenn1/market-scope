@@ -9,18 +9,40 @@ const formatDate = (value) => {
   return date.toLocaleString();
 };
 
+const formatRelativeTime = (value) => {
+  if (!value) return 'Not yet updated';
+
+  const ts = Number(value);
+  if (!Number.isFinite(ts)) return 'Not yet updated';
+
+  const diffMs = Date.now() - ts;
+  if (diffMs < 60 * 1000) return 'Updated just now';
+
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `Updated ${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `Updated ${diffDays}d ago`;
+};
+
 export default function History({ user, onOpenReport }) {
   const userId = user?.user_id || user?.id;
+  const historyCacheKey = userId ? `marketscope_history_cache_${userId}` : null;
   const [history, setHistory] = useState([]);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [historyScoreFilter, setHistoryScoreFilter] = useState('all');
   const [loading, setLoading] = useState(Boolean(userId));
+  const [refreshing, setRefreshing] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState(null);
   const [expandedFactorKeyByHistoryId, setExpandedFactorKeyByHistoryId] = useState({});
   const [deletingHistoryId, setDeletingHistoryId] = useState(null);
   const [openingHistoryId, setOpeningHistoryId] = useState(null);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
   const getCompetitorCount = (item) => {
     if (typeof item?.competitors_found === 'number') return item.competitors_found;
@@ -28,29 +50,78 @@ export default function History({ user, onOpenReport }) {
     return 0;
   };
 
+  const fetchHistory = async ({ silent = false } = {}) => {
+    if (!userId) return;
+
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const response = await fetch(apiUrl(`/users/${userId}/history`), { cache: 'no-store' });
+      const data = await response.json();
+      const nextHistory = Array.isArray(data?.history) ? data.history : [];
+      setHistory(nextHistory);
+
+      if (historyCacheKey) {
+        const cachedAt = Date.now();
+        setLastUpdatedAt(cachedAt);
+        localStorage.setItem(
+          historyCacheKey,
+          JSON.stringify({
+            cachedAt,
+            history: nextHistory,
+          })
+        );
+      }
+    } catch {
+      if (!silent) setHistory([]);
+    } finally {
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!userId) return;
 
-    let active = true;
-    setLoading(true);
+    let hydratedFromCache = false;
+    if (historyCacheKey) {
+      try {
+        const raw = localStorage.getItem(historyCacheKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed?.history)) {
+            setHistory(parsed.history);
+            setLastUpdatedAt(Number(parsed?.cachedAt) || null);
+            setLoading(false);
+            hydratedFromCache = true;
+          }
+        }
+      } catch {
+        // Ignore malformed cache data.
+      }
+    }
 
-    fetch(apiUrl(`/users/${userId}/history`), { cache: 'no-store' })
-      .then((response) => response.json())
-      .then((data) => {
-        if (!active) return;
-        setHistory(Array.isArray(data?.history) ? data.history : []);
-      })
-      .catch(() => {
-        if (active) setHistory([]);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    fetchHistory({ silent: hydratedFromCache });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, historyCacheKey]);
 
-    return () => {
-      active = false;
-    };
-  }, [userId]);
+  useEffect(() => {
+    if (!historyCacheKey) return;
+    localStorage.setItem(
+      historyCacheKey,
+      JSON.stringify({
+        cachedAt: Date.now(),
+        history,
+      })
+    );
+  }, [history, historyCacheKey]);
 
   const filteredHistory = useMemo(() => {
     const term = historySearchTerm.trim().toLowerCase();
@@ -238,8 +309,18 @@ export default function History({ user, onOpenReport }) {
     <div className="profile-page page-enter min-h-full">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
         <div className="profile-card fade-in rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-left shadow-sm">
-          <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Analysis History</h2>
-          <p className="profile-email text-sm text-slate-300">Previous site analyses for your account.</p>
+          <div className="trends-header-row">
+            <div>
+              <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Analysis History</h2>
+              <p className="profile-email text-sm text-slate-300">Previous site analyses for your account.</p>
+              <p className="trends-cache-meta mt-2 text-xs text-slate-400">
+                {refreshing ? 'Refreshing latest history...' : formatRelativeTime(lastUpdatedAt)}
+              </p>
+            </div>
+            <button type="button" className="edit-btn trends-refresh-btn" onClick={() => fetchHistory()} disabled={loading || refreshing}>
+              {loading || refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
       {loading && <div className="data-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300 shadow-sm">Loading history...</div>}
