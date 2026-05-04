@@ -112,12 +112,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+allowed_origins_env = os.environ.get("MARKETSCOPE_ALLOWED_ORIGINS", "").strip()
 allowed_origins = [
     origin.strip()
-    for origin in os.environ.get(
-        "MARKETSCOPE_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:4173,http://localhost:3000,https://market-scope.onrender.com"
-    ).split(",")
+    for origin in allowed_origins_env.split(",")
     if origin.strip()
 ]
 
