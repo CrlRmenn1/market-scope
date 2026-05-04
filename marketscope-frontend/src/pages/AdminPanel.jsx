@@ -4,7 +4,6 @@ import { apiUrl } from '../api';
 const defaultMsmeForm = {
   name: '',
   business_type: '',
-  coordinate_pair: '',
   latitude: '',
   longitude: ''
 };
@@ -16,7 +15,6 @@ const defaultAdminSpaceForm = {
   confidence_score: '',
   property_type: '',
   business_type: '',
-  coordinate_pair: '',
   latitude: '',
   longitude: '',
   address_text: '',
@@ -103,22 +101,6 @@ const getSubmissionStatusMeta = (status) => {
   };
 };
 
-const getAdminEntryMeta = (isActive) => {
-  if (isActive) {
-    return {
-      label: 'Active',
-      className: 'status-approved',
-      message: 'This admin entry is live on the map.'
-    };
-  }
-
-  return {
-    label: 'Archived',
-    className: 'status-archived',
-    message: 'This admin entry is archived and hidden from the map.'
-  };
-};
-
 const formatPesoRange = (minValue, maxValue) => {
   const min = Number(minValue || 0);
   const max = Number(maxValue || 0);
@@ -127,20 +109,6 @@ const formatPesoRange = (minValue, maxValue) => {
   if (min > 0) return `From PHP ${min.toLocaleString()}`;
   if (max > 0) return `Up to PHP ${max.toLocaleString()}`;
   return 'Not set';
-};
-
-const hasValidNumber = (value) => Number.isFinite(Number(value));
-
-const parseCoordinatePair = (value) => {
-  const raw = String(value || '').trim();
-  if (!raw.includes(',')) return null;
-
-  const [latRaw, lonRaw] = raw.split(',').map((part) => part.trim());
-  const lat = Number(latRaw);
-  const lon = Number(lonRaw);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  return { lat, lon };
 };
 
 export default function AdminPanel({ adminSession }) {
@@ -283,17 +251,15 @@ export default function AdminPanel({ adminSession }) {
     event.preventDefault();
     resetMessages();
 
-    const parsedCoords = parseCoordinatePair(msmeForm.coordinate_pair);
-
     const payload = {
       name: msmeForm.name.trim(),
       business_type: msmeForm.business_type.trim(),
-      latitude: Number(parsedCoords?.lat),
-      longitude: Number(parsedCoords?.lon)
+      latitude: Number(msmeForm.latitude),
+      longitude: Number(msmeForm.longitude)
     };
 
     if (!payload.name || !payload.business_type || Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
-      setErrorMessage('Please complete all custom MSME fields with valid coordinates in "latitude, longitude" format.');
+      setErrorMessage('Please complete all custom MSME fields with valid coordinates.');
       return;
     }
 
@@ -325,7 +291,6 @@ export default function AdminPanel({ adminSession }) {
     setMsmeForm({
       name: item.name || '',
       business_type: item.business_type || '',
-      coordinate_pair: `${item.latitude ?? ''}, ${item.longitude ?? ''}`,
       latitude: item.latitude ?? '',
       longitude: item.longitude ?? ''
     });
@@ -425,8 +390,6 @@ export default function AdminPanel({ adminSession }) {
     event.preventDefault();
     resetMessages();
 
-    const parsedCoords = parseCoordinatePair(adminSpaceForm.coordinate_pair);
-
     const payload = {
       title: adminSpaceForm.title.trim(),
       listing_mode: adminSpaceForm.listing_mode,
@@ -434,8 +397,8 @@ export default function AdminPanel({ adminSession }) {
       confidence_score: adminSpaceForm.confidence_score === '' ? null : Number(adminSpaceForm.confidence_score),
       property_type: adminSpaceForm.property_type.trim() || null,
       business_type: adminSpaceForm.business_type || null,
-      latitude: Number(parsedCoords?.lat),
-      longitude: Number(parsedCoords?.lon),
+      latitude: Number(adminSpaceForm.latitude),
+      longitude: Number(adminSpaceForm.longitude),
       address_text: adminSpaceForm.address_text.trim() || null,
       price_min: adminSpaceForm.price_min === '' ? null : Number(adminSpaceForm.price_min),
       price_max: adminSpaceForm.price_max === '' ? null : Number(adminSpaceForm.price_max),
@@ -448,7 +411,7 @@ export default function AdminPanel({ adminSession }) {
     };
 
     if (!payload.title || Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
-      setErrorMessage('Title and valid coordinates in "latitude, longitude" format are required for admin space submission.');
+      setErrorMessage('Title and valid coordinates are required for admin space submission.');
       return;
     }
 
@@ -474,8 +437,6 @@ export default function AdminPanel({ adminSession }) {
     }
   };
 
-  const canSubmitAdminSpace = Boolean(adminSpaceForm.title.trim()) && Boolean(parseCoordinatePair(adminSpaceForm.coordinate_pair));
-
   const reviewUserSubmission = async (submissionId, status) => {
     resetMessages();
     try {
@@ -494,30 +455,11 @@ export default function AdminPanel({ adminSession }) {
     }
   };
 
-  const toggleAdminSubmissionActiveState = async (submissionId, isActive) => {
-    resetMessages();
-    try {
-      const response = await fetch(apiUrl(`/admin/spaces/admin-submissions/${submissionId}/active`), {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ is_active: isActive })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Unable to update admin entry state');
-
-      setSuccessMessage(isActive ? 'Admin entry restored.' : 'Admin entry archived.');
-      await loadSpaces(spaceFilterStatus);
-    } catch (error) {
-      setErrorMessage(error.message || 'Unable to update admin entry state');
-    }
-  };
-
   return (
     <div className="profile-page page-enter admin-page">
       <div className="profile-card fade-in" style={{ textAlign: 'left' }}>
         <h2 className="profile-name" style={{ marginBottom: '6px' }}>Admin Panel</h2>
         <p className="profile-email">Manage users, custom MSMEs, and space submission workflows.</p>
-        <p className="admin-field-help" style={{ marginTop: '8px' }}>Archived admin entries are hidden from the map. Use Verified Date to record the last check-in, and Expires Date to mark when a listing should be reviewed again.</p>
       </div>
 
       {errorMessage && <div className="error-alert mt-4">{errorMessage}</div>}
@@ -554,33 +496,12 @@ export default function AdminPanel({ adminSession }) {
                 </select>
               </div>
               <div className="input-group">
-                <label>Coordinates (lat, lon)</label>
-                <input
-                  value={msmeForm.coordinate_pair}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const parsed = parseCoordinatePair(value);
-
-                    if (parsed) {
-                      setMsmeForm((c) => ({
-                        ...c,
-                        coordinate_pair: value,
-                        latitude: String(parsed.lat),
-                        longitude: String(parsed.lon)
-                      }));
-                      return;
-                    }
-
-                    setMsmeForm((c) => ({
-                      ...c,
-                      coordinate_pair: value,
-                      latitude: '',
-                      longitude: ''
-                    }));
-                  }}
-                  placeholder="7.30750, 125.68110"
-                />
-                <p className="admin-field-help">Use one input only. Numbers after the comma are treated as longitude.</p>
+                <label>Latitude</label>
+                <input value={msmeForm.latitude} onChange={(e) => setMsmeForm((c) => ({ ...c, latitude: e.target.value }))} />
+              </div>
+              <div className="input-group">
+                <label>Longitude</label>
+                <input value={msmeForm.longitude} onChange={(e) => setMsmeForm((c) => ({ ...c, longitude: e.target.value }))} />
               </div>
               <button type="submit" className="primary-btn">{editingMsmeId ? 'Update MSME' : 'Create MSME'}</button>
               {editingMsmeId && (
@@ -752,33 +673,13 @@ export default function AdminPanel({ adminSession }) {
               </div>
 
               <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
-                  <label>Paste Coordinates (lat, lon)</label>
-                  <input
-                    value={adminSpaceForm.coordinate_pair}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const parsed = parseCoordinatePair(value);
-                      if (parsed) {
-                        setAdminSpaceForm((c) => ({
-                          ...c,
-                          coordinate_pair: value,
-                          latitude: String(parsed.lat),
-                          longitude: String(parsed.lon)
-                        }));
-                        return;
-                      }
-
-                      setAdminSpaceForm((c) => ({
-                        ...c,
-                        coordinate_pair: value,
-                        latitude: '',
-                        longitude: ''
-                      }));
-                    }}
-                    placeholder="7.30750, 125.68110"
-                  />
-                  <p className="admin-field-help">Use one input only. Numbers after the comma are treated as longitude.</p>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Latitude <span className="required-indicator">*</span></label>
+                  <input required type="number" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Longitude <span className="required-indicator">*</span></label>
+                  <input required type="number" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} />
                 </div>
               </div>
 
@@ -832,18 +733,13 @@ export default function AdminPanel({ adminSession }) {
               </div>
 
               <div className="input-group">
-                <label className="admin-checkbox-row">
-                  <input
-                    type="checkbox"
-                    className="admin-checkbox-input"
-                    checked={adminSpaceForm.is_active}
-                    onChange={(e) => setAdminSpaceForm((c) => ({ ...c, is_active: e.target.checked }))}
-                  />
-                  <span>Active on map</span>
+                <label>
+                  <input type="checkbox" checked={adminSpaceForm.is_active} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, is_active: e.target.checked }))} style={{ marginRight: 8 }} />
+                  Active on map
                 </label>
               </div>
 
-              <button type="submit" className="primary-btn" disabled={!canSubmitAdminSpace}>Create Admin Space Entry</button>
+              <button type="submit" className="primary-btn">Create Admin Space Entry</button>
             </form>
           </div>
 
@@ -861,7 +757,7 @@ export default function AdminPanel({ adminSession }) {
               </div>
               <div className="input-group" style={{ marginBottom: 0 }}>
                 <label>Refresh</label>
-                <button type="button" className="secondary-btn admin-reload-btn" onClick={() => loadSpaces(spaceFilterStatus)}>Reload Space Data</button>
+                <button type="button" className="secondary-btn" onClick={() => loadSpaces(spaceFilterStatus)}>Reload Space Data</button>
               </div>
             </div>
           </div>
@@ -880,18 +776,18 @@ export default function AdminPanel({ adminSession }) {
 
                 return (
                 <div key={item.id} className={statusClass} style={{ marginTop: 12 }}>
-                  <div className="admin-submission-card-top">
-                    <div className="admin-submission-card-copy">
+                  <div className="history-card-top">
+                    <div>
+                      <h4 className="history-title">{item.title}</h4>
                       <div className="admin-submission-head">
                         <span className={`submission-status-pill ${statusMeta.className}`}>{statusMeta.label}</span>
-                        <p className="history-meta">{statusMeta.message}</p>
+                        <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
                       </div>
-                      <h4 className="history-title">{item.title}</h4>
-                      <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
                       <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
                       <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
                       {item.address_text && <p className="history-meta">Address: {item.address_text}</p>}
                       {item.contact_info && <p className="history-meta">Contact: {item.contact_info}</p>}
+                      <p className="admin-submission-note">{statusMeta.message}</p>
                     </div>
                   </div>
 
@@ -923,35 +819,17 @@ export default function AdminPanel({ adminSession }) {
               {!spaceLoading && adminSpaceSubmissions.length === 0 && <p className="history-meta">No admin entries yet.</p>}
 
               {!spaceLoading && adminSpaceSubmissions.map((item) => (
-                (() => {
-                  const adminMeta = getAdminEntryMeta(item.is_active);
-
-                  return (
-                    <div key={item.id} className={`admin-submission-card ${adminMeta.className}`} style={{ marginTop: 12 }}>
-                      <div className="admin-submission-card-top">
-                        <div className="admin-submission-card-copy">
-                          <div className="admin-submission-head">
-                            <span className={`submission-status-pill ${adminMeta.className}`}>{adminMeta.label}</span>
-                            <p className="history-meta">{adminMeta.message}</p>
-                          </div>
-                          <h4 className="history-title">{item.title}</h4>
-                          <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
-                          <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
-                          <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
-                          <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>
-                        </div>
-                      </div>
-
-                      <div className="admin-actions-row">
-                        {item.is_active ? (
-                          <button className="admin-action-btn admin-action-btn-delete" onClick={() => toggleAdminSubmissionActiveState(item.id, false)}>Archive</button>
-                        ) : (
-                          <button className="admin-action-btn admin-action-btn-edit" onClick={() => toggleAdminSubmissionActiveState(item.id, true)}>Unarchive</button>
-                        )}
-                      </div>
+                <div key={item.id} className="history-card" style={{ marginTop: 12 }}>
+                  <div className="history-card-top">
+                    <div>
+                      <h4 className="history-title">{item.title}</h4>
+                      <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level} | Active: {item.is_active ? 'Yes' : 'No'}</p>
+                      <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
+                      <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
+                      <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>
                     </div>
-                  );
-                })()
+                  </div>
+                </div>
               ))}
             </div>
           </div>

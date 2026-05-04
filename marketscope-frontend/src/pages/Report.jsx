@@ -67,6 +67,10 @@ export default function Report({ data, targetCoords, onClose }) {
     scale: 2
   });
   const resolvedTargetCoords = normalizeCoords(targetCoords) || normalizeCoords(data?.target_coords);
+  const strictCompetitorsFound = Math.max(0, Number(data?.competitors_found || 0));
+  const competitorLocations = strictCompetitorsFound > 0 && Array.isArray(data?.competitor_locations)
+    ? data.competitor_locations
+    : [];
 
   const fitMapToFeatures = () => {
     if (!mapInstance.current) return;
@@ -137,14 +141,14 @@ export default function Report({ data, targetCoords, onClose }) {
       L.marker([resolvedTargetCoords.lat, resolvedTargetCoords.lng], { icon: targetIcon }).addTo(elementsGroup);
 
       // Draw Competitor Pins
-      if (data.competitor_locations && data.competitor_locations.length > 0) {
+      if (competitorLocations.length > 0) {
         const compIcon = L.divIcon({
           className: 'competitor-pin',
           html: `<div style="width:14px; height:14px; background:#ef4444; border:2px solid white; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
           iconSize: [14, 14], iconAnchor: [7, 7]
         });
 
-        data.competitor_locations.forEach((comp, index) => {
+        competitorLocations.forEach((comp, index) => {
           const compCoords = normalizeCoords(comp);
           if (!compCoords) return;
 
@@ -247,7 +251,7 @@ export default function Report({ data, targetCoords, onClose }) {
 
   if (!data) return null;
 
-  const { viability_score, competitors_found, breakdown, business_type, radius_meters, insight } = data;
+  const { viability_score, breakdown, business_type, radius_meters, insight } = data;
   const spaceContext = data?.space_context || data?.selected_space || null;
 
   const toggleDetail = (key) => {
@@ -599,7 +603,7 @@ export default function Report({ data, targetCoords, onClose }) {
           
           <div className="report-map-legend flex flex-wrap items-center gap-4 border-t border-[var(--border-color)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium text-[var(--text-muted)]">
             <span className="inline-flex items-center gap-2"><span className="legend-dot target"></span> Proposed Site</span>
-            <span className="inline-flex items-center gap-2"><span className="legend-dot competitor"></span> Competitors ({competitors_found || 0})</span>
+            <span className="inline-flex items-center gap-2"><span className="legend-dot competitor"></span> Competitors ({strictCompetitorsFound})</span>
           </div>
         </div>
 

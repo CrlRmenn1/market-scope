@@ -4,4 +4,3 @@ __pycache__/
 .venv
 dist/
 *.pbf
-!marketscope-backend/panabo.pbf

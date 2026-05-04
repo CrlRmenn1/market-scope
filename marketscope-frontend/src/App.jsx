@@ -31,7 +31,6 @@ export default function App() {
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [sheetInitialBusinessType, setSheetInitialBusinessType] = useState('');
-  const [selectedSpaceContext, setSelectedSpaceContext] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -169,7 +168,6 @@ export default function App() {
   const handleMapTap = (coords, options = {}) => {
     setSelectedCoords(coords);
     setSheetInitialBusinessType(options?.prefillBusinessType || '');
-    setSelectedSpaceContext(options?.selectedSpace || null);
     setShowBottomSheet(true);
   };
 
@@ -177,21 +175,14 @@ export default function App() {
     const coords = data?.target_coords || selectedCoords || null;
     setSelectedCoords(coords);
     setSheetInitialBusinessType('');
-    const nextReportData = selectedSpaceContext
-      ? { ...data, space_context: selectedSpaceContext }
-      : data;
-    setReportData(nextReportData);
-    saveOpenReport(nextReportData, coords);
+    setReportData(data);
+    saveOpenReport(data, coords);
     setShowBottomSheet(false);
   };
 
   const handleCloseReport = () => {
     setReportData(null);
     clearOpenReport();
-  };
-
-  const clearMapSelectionContext = () => {
-    setSelectedSpaceContext(null);
   };
 
   if (!session && !adminSession) {
@@ -240,7 +231,6 @@ export default function App() {
           setActiveTab('home');
           handleCloseReport();
           setShowBottomSheet(false);
-          clearMapSelectionContext();
         }}
         userName={session.full_name || session.name}
         userAvatarUrl={session.avatar_url}
@@ -254,22 +244,18 @@ export default function App() {
         
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
 
-        {activeTab === 'trends' && <Trends user={session} onOpenReport={(payload) => {
-          const coords = payload?.target_coords || null;
+        {activeTab === 'trends' && <Trends user={session} onRunAnalysis={(coords, businessType) => {
           setSelectedCoords(coords);
-          setReportData(payload);
-          saveOpenReport(payload, coords);
-          setShowBottomSheet(false);
-          setActiveTab('trends');
+          setSheetInitialBusinessType(businessType);
+          setShowBottomSheet(true);
         }} />}
-        
+
         {activeTab === 'history' && <History user={session} onOpenReport={(payload) => {
           const coords = payload.target_coords || null;
           setSelectedCoords(coords);
           setReportData(payload);
           saveOpenReport(payload, coords);
           setShowBottomSheet(false);
-          setActiveTab('history');
         }} />}
 
         {showBottomSheet && (
@@ -278,7 +264,6 @@ export default function App() {
             onClose={() => {
               setShowBottomSheet(false);
               setSheetInitialBusinessType('');
-              setSelectedSpaceContext(null);
             }} 
             onViewReport={handleViewReport}
             userId={session.user_id || session.id}

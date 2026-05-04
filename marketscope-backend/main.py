@@ -6,12 +6,14 @@ import os
 import random
 import socket
 import smtplib
+import json
 from pathlib import Path
 from urllib.parse import urlparse
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from contextlib import asynccontextmanager
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from email.message import EmailMessage
+import asyncpg
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import bcrypt
@@ -28,6 +30,17 @@ except Exception:
     Point = None
     box = None
     unary_union = None
+
+# ==========================================
+# UTC HELPERS (Replace Deprecated datetime.utcnow())
+# ==========================================
+def utc_now_naive():
+    """Return current UTC time as naive datetime (no timezone info)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+def utc_now_iso_z():
+    """Return current UTC time as ISO 8601 string with Z suffix."""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
 
 # ==========================================
 # DATABASE CONFIGURATION
@@ -67,13 +80,34 @@ def get_startup_db_config():
 
     return startup_config
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_app_tables()
+    # Create asyncpg pool and attach to app state
+    app.state.db_pool = await asyncpg.create_pool(
+        user=DB_CONFIG["user"],
+        password=DB_CONFIG["password"],
+        database=DB_CONFIG["dbname"],
+        host=DB_CONFIG["host"],
+        port=int(DB_CONFIG["port"]),
+        min_size=2,
+        max_size=10,
+        timeout=DB_CONFIG.get("connect_timeout", 8),
+    )
     preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
     warm_citywide_scan_snapshot_async(radius=340)
+    stop_event = Event()
+    auto_refresh_thread = Thread(
+        target=_trend_snapshot_auto_refresh_loop,
+        args=(stop_event, 340),
+        daemon=True,
+    )
+    auto_refresh_thread.start()
     yield
+    stop_event.set()
+    await app.state.db_pool.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -293,6 +327,7 @@ def create_app_tables():
     ensure_user_space_submissions_table(cursor, user_pk_column)
     ensure_admin_space_submissions_table(cursor)
     ensure_password_reset_codes_table(cursor, user_pk_column)
+    ensure_trend_scan_snapshots_table(cursor)
     ensure_default_admin_user(cursor)
 
     conn.commit()
@@ -451,6 +486,28 @@ def ensure_password_reset_codes_table(cursor, user_pk_column):
     )
 
 
+def ensure_trend_scan_snapshots_table(cursor):
+    """Create trend_scan_snapshots table for persistent trend caching."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trend_scan_snapshots (
+            id SERIAL PRIMARY KEY,
+            radius INTEGER NOT NULL,
+            snapshot_payload JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(radius)
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_trend_snapshots_radius_updated
+        ON trend_scan_snapshots(radius, updated_at DESC)
+        """
+    )
+
+
 def generate_reset_code():
     return ''.join(random.choice('0123456789') for _ in range(6))
 
@@ -553,6 +610,40 @@ def get_analysis_history_pk_column(cursor):
     return result[0]
 
 
+async def get_users_primary_key_column_async(conn):
+    result = await conn.fetchrow(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name IN ('user_id', 'id')
+        ORDER BY CASE WHEN column_name = 'user_id' THEN 0 ELSE 1 END
+        LIMIT 1
+        """
+    )
+    if not result:
+        raise HTTPException(status_code=500, detail="Users table must include either user_id or id")
+    return result["column_name"]
+
+
+async def get_analysis_history_pk_column_async(conn):
+    result = await conn.fetchrow(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'analysis_history'
+          AND column_name IN ('history_id', 'id')
+        ORDER BY CASE WHEN column_name = 'history_id' THEN 0 ELSE 1 END
+        LIMIT 1
+        """
+    )
+    if not result:
+        raise HTTPException(status_code=500, detail="analysis_history table must include either history_id or id")
+    return result["column_name"]
+
+
 def saturation_score_from_competitors(competitor_count):
     if competitor_count <= 0:
         return 25
@@ -621,6 +712,12 @@ def normalize_history_row(row):
     if row.get("radius_meters") is None:
         row["radius_meters"] = 340
 
+    # Backward-compatibility guard: older records may contain context markers
+    # in competitor_locations even when competitors_found is 0.
+    competitors_found = int(row.get("competitors_found") or 0)
+    if competitors_found <= 0:
+        row["competitor_locations"] = []
+
     breakdown = row.get("breakdown")
     if not isinstance(breakdown, dict) or not breakdown:
         row["breakdown"] = build_legacy_breakdown(row)
@@ -631,41 +728,40 @@ def normalize_history_row(row):
 # ==========================================
 # AUTHENTICATION ROUTES
 # ==========================================
+
 @app.post("/register")
-def register(user: RegisterUser):
+async def register(user: RegisterUser):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        user_pk_column = get_users_primary_key_column(cursor)
-        
-        # Check if email already exists
-        cursor.execute(f"SELECT {user_pk_column} FROM users WHERE email = %s", (user.email,))
-        if cursor.fetchone():
-            raise HTTPException(status_code=400, detail="Email already registered")
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            user_pk_column = await get_users_primary_key_column_async(conn)
+            # Check if email already exists
+            row = await conn.fetchrow(f"SELECT {user_pk_column} FROM users WHERE email = $1", user.email)
+            if row:
+                raise HTTPException(status_code=400, detail="Email already registered")
 
-        # Hash the password
-        salt = bcrypt.gensalt()
-        hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), salt).decode('utf-8')
+            # Hash the password
+            salt = bcrypt.gensalt()
+            hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), salt).decode('utf-8')
 
-        # Save to database
-        cursor.execute(
-            f"""
-            INSERT INTO users (
-                full_name, email, password_hash,
-                address, cellphone_number, avatar_url,
-                age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING
-                {user_pk_column}, full_name, email, created_at,
-                address, cellphone_number, avatar_url,
-                age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
-            """,
-            (
+            # Save to database
+            insert_query = f"""
+                INSERT INTO users (
+                    full_name, email, password_hash,
+                    address, cellphone_number, avatar_url,
+                    age, birthday, primary_business,
+                    startup_capital, risk_tolerance, preferred_setup,
+                    time_commitment, target_payback_months
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                RETURNING
+                    {user_pk_column}, full_name, email, created_at,
+                    address, cellphone_number, avatar_url,
+                    age, birthday, primary_business,
+                    startup_capital, risk_tolerance, preferred_setup,
+                    time_commitment, target_payback_months
+            """
+            values = (
                 user.full_name,
                 user.email,
                 hashed_password,
@@ -681,11 +777,7 @@ def register(user: RegisterUser):
                 user.time_commitment or None,
                 user.target_payback_months,
             )
-        )
-        new_user = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
+            new_user = await conn.fetchrow(insert_query, *values)
 
         return {
             "status": "success",
@@ -712,30 +804,29 @@ def register(user: RegisterUser):
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/login")
-def login(user: LoginUser):
+async def login(user: LoginUser):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        user_pk_column = get_users_primary_key_column(cursor)
-        
-        cursor.execute(
-            f"""
-            SELECT
-                {user_pk_column} AS user_id,
-                full_name, email, password_hash, created_at,
-                address, cellphone_number, avatar_url,
-                age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
-            FROM users
-            WHERE email = %s
-            """,
-            (user.email,)
-        )
-        db_user = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            user_pk_column = await get_users_primary_key_column_async(conn)
+            row = await conn.fetchrow(
+                f"""
+                SELECT
+                    {user_pk_column} AS user_id,
+                    full_name, email, password_hash, created_at,
+                    address, cellphone_number, avatar_url,
+                    age, birthday, primary_business,
+                    startup_capital, risk_tolerance, preferred_setup,
+                    time_commitment, target_payback_months
+                FROM users
+                WHERE email = $1
+                """,
+                user.email
+            )
+
+        db_user = dict(row) if row else None
 
         # Verify password
         if not db_user or not bcrypt.checkpw(user.password.encode('utf-8'), db_user['password_hash'].encode('utf-8')):
@@ -792,7 +883,7 @@ def forgot_password(payload: ForgotPasswordRequest):
         user_id = db_user['user_id']
         reset_code = generate_reset_code()
         reset_code_hash = bcrypt.hashpw(reset_code.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        expires_at = datetime.utcnow() + timedelta(minutes=RESET_CODE_TTL_MINUTES)
+        expires_at = utc_now_naive() + timedelta(minutes=RESET_CODE_TTL_MINUTES)
 
         cursor.execute(
             """
@@ -867,7 +958,7 @@ def reset_password(payload: ResetPasswordRequest):
             raise HTTPException(status_code=400, detail="No active reset code found")
 
         expires_at = reset_row['expires_at']
-        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow():
+        if isinstance(expires_at, datetime) and expires_at < utc_now_naive():
             raise HTTPException(status_code=400, detail="Reset code expired. Request a new one.")
 
         is_valid_code = bcrypt.checkpw(payload.code.encode('utf-8'), reset_row['code_hash'].encode('utf-8'))
@@ -929,12 +1020,12 @@ def reset_password_direct(payload: DirectResetPasswordRequest):
 
 
 @app.get("/users/{user_id}")
-def get_user_profile(user_id: int):
+async def get_user_profile(user_id: int):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        user_pk_column = get_users_primary_key_column(cursor)
-        cursor.execute(
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            user_pk_column = await get_users_primary_key_column_async(conn)
+            profile = await conn.fetchrow(
             f"""
             SELECT
                 {user_pk_column} AS user_id,
@@ -944,81 +1035,73 @@ def get_user_profile(user_id: int):
                 startup_capital, risk_tolerance, preferred_setup,
                 time_commitment, target_payback_months
             FROM users
-            WHERE {user_pk_column} = %s
+            WHERE {user_pk_column} = $1
             """,
-            (user_id,)
+            user_id,
         )
-        profile = cursor.fetchone()
-        cursor.close()
-        conn.close()
 
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return {"status": "success", "user": profile}
+        return {"status": "success", "user": dict(profile)}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/users/{user_id}")
-def update_user_profile(user_id: int, payload: UpdateUserProfile):
+async def update_user_profile(user_id: int, payload: UpdateUserProfile):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        user_pk_column = get_users_primary_key_column(cursor)
-
-        cursor.execute(
-            f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = %s",
-            (user_id,)
-        )
-        existing_user = cursor.fetchone()
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            user_pk_column = await get_users_primary_key_column_async(conn)
+            existing_user = await conn.fetchrow(
+                f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = $1",
+                user_id,
+            )
         if not existing_user:
-            cursor.close()
-            conn.close()
             raise HTTPException(status_code=404, detail="User not found")
 
-        cursor.execute(
-            f"""
-            SELECT {user_pk_column} AS user_id
-            FROM users
-            WHERE email = %s AND {user_pk_column} <> %s
-            """,
-            (payload.email, user_id)
-        )
-        duplicate_email = cursor.fetchone()
+        async with pool.acquire() as conn:
+            duplicate_email = await conn.fetchrow(
+                f"""
+                SELECT {user_pk_column} AS user_id
+                FROM users
+                WHERE email = $1 AND {user_pk_column} <> $2
+                """,
+                payload.email,
+                user_id,
+            )
         if duplicate_email:
-            cursor.close()
-            conn.close()
             raise HTTPException(status_code=400, detail="Email already registered")
 
-        cursor.execute(
-            f"""
-            UPDATE users
-            SET
-                full_name = %s,
-                email = %s,
-                address = %s,
-                cellphone_number = %s,
-                avatar_url = %s,
-                age = %s,
-                birthday = %s,
-                primary_business = %s,
-                startup_capital = %s,
-                risk_tolerance = %s,
-                preferred_setup = %s,
-                time_commitment = %s,
-                target_payback_months = %s
-            WHERE {user_pk_column} = %s
-            RETURNING
-                {user_pk_column} AS user_id,
-                full_name, email, created_at,
-                address, cellphone_number, avatar_url,
-                age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
-            """,
-            (
+        async with pool.acquire() as conn:
+            updated_user = await conn.fetchrow(
+                f"""
+                UPDATE users
+                SET
+                    full_name = $1,
+                    email = $2,
+                    address = $3,
+                    cellphone_number = $4,
+                    avatar_url = $5,
+                    age = $6,
+                    birthday = $7,
+                    primary_business = $8,
+                    startup_capital = $9,
+                    risk_tolerance = $10,
+                    preferred_setup = $11,
+                    time_commitment = $12,
+                    target_payback_months = $13
+                WHERE {user_pk_column} = $14
+                RETURNING
+                    {user_pk_column} AS user_id,
+                    full_name, email, created_at,
+                    address, cellphone_number, avatar_url,
+                    age, birthday, primary_business,
+                    startup_capital, risk_tolerance, preferred_setup,
+                    time_commitment, target_payback_months
+                """,
                 payload.full_name,
                 payload.email,
                 payload.address or None,
@@ -1032,15 +1115,10 @@ def update_user_profile(user_id: int, payload: UpdateUserProfile):
                 payload.preferred_setup or None,
                 payload.time_commitment or None,
                 payload.target_payback_months,
-                user_id
+                user_id,
             )
-        )
-        updated_user = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
 
-        return {"status": "success", "user": updated_user}
+        return {"status": "success", "user": dict(updated_user) if updated_user else None}
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -1048,12 +1126,12 @@ def update_user_profile(user_id: int, payload: UpdateUserProfile):
 
 
 @app.get("/users/{user_id}/history")
-def get_user_history(user_id: int):
+async def get_user_history(user_id: int):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        history_pk_column = get_analysis_history_pk_column(cursor)
-        cursor.execute(
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            history_pk_column = await get_analysis_history_pk_column_async(conn)
+            rows = await conn.fetch(
             f"""
             SELECT
                 {history_pk_column} AS history_id,
@@ -1075,18 +1153,16 @@ def get_user_history(user_id: int):
                 scan_date AS created_at,
                 breakdown
             FROM analysis_history
-            WHERE user_id = %s
+            WHERE user_id = $1
             ORDER BY scan_date DESC, {history_pk_column} DESC
             """,
-            (user_id,)
+            user_id,
         )
-        history = cursor.fetchall()
+
+        history = [dict(row) for row in rows]
 
         for row in history:
             normalize_history_row(row)
-
-        cursor.close()
-        conn.close()
 
         return {"status": "success", "history": history}
     except Exception as e:
@@ -1095,13 +1171,12 @@ def get_user_history(user_id: int):
 
 
 @app.get("/users/{user_id}/history/{history_id}")
-def get_user_history_item(user_id: int, history_id: int):
+async def get_user_history_item(user_id: int, history_id: int):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        history_pk_column = get_analysis_history_pk_column(cursor)
-
-        cursor.execute(
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            history_pk_column = await get_analysis_history_pk_column_async(conn)
+            history_item = await conn.fetchrow(
             f"""
             SELECT
                 {history_pk_column} AS history_id,
@@ -1123,40 +1198,35 @@ def get_user_history_item(user_id: int, history_id: int):
                 scan_date AS created_at,
                 breakdown
             FROM analysis_history
-            WHERE user_id = %s AND {history_pk_column} = %s
+            WHERE user_id = $1 AND {history_pk_column} = $2
             LIMIT 1
             """,
-            (user_id, history_id)
+            user_id,
+            history_id,
         )
-
-        history_item = cursor.fetchone()
-        cursor.close()
-        conn.close()
 
         if not history_item:
             raise HTTPException(status_code=404, detail="History item not found")
 
-        normalize_history_row(history_item)
-        return {"status": "success", "history": history_item}
+        history_payload = dict(history_item)
+        normalize_history_row(history_payload)
+        return {"status": "success", "history": history_payload}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/users/{user_id}/history/{history_id}")
-def delete_user_history_item(user_id: int, history_id: int):
+async def delete_user_history_item(user_id: int, history_id: int):
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        history_pk_column = get_analysis_history_pk_column(cursor)
-        cursor.execute(
-            f"DELETE FROM analysis_history WHERE user_id = %s AND {history_pk_column} = %s RETURNING {history_pk_column}",
-            (user_id, history_id)
-        )
-        deleted_row = cursor.fetchone()
-        conn.commit()
-        cursor.close()
-        conn.close()
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            history_pk_column = await get_analysis_history_pk_column_async(conn)
+            deleted_row = await conn.fetchrow(
+                f"DELETE FROM analysis_history WHERE user_id = $1 AND {history_pk_column} = $2 RETURNING {history_pk_column}",
+                user_id,
+                history_id,
+            )
 
         if not deleted_row:
             return {"status": "success", "deleted_history_id": history_id, "already_missing": True}
@@ -1168,27 +1238,23 @@ def delete_user_history_item(user_id: int, history_id: int):
 
 
 @app.get("/users/{user_id}/trend-recommendations")
-def get_user_trend_recommendations(user_id: int, limit: int = 5):
+async def get_user_trend_recommendations(user_id: int, limit: int = 5):
     try:
         safe_limit = max(1, min(10, int(limit)))
         preload_pbf_competitor_cache()
 
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        user_pk_column = get_users_primary_key_column(cursor)
+        pool = app.state.db_pool
+        async with pool.acquire() as conn:
+            user_pk_column = await get_users_primary_key_column_async(conn)
+            user_profile = await fetch_user_profile_by_id_async(conn, user_pk_column, user_id)
 
-        user_profile = fetch_user_profile_by_id(cursor, user_pk_column, user_id)
         if not user_profile:
-            cursor.close()
-            conn.close()
             raise HTTPException(status_code=404, detail="User not found")
 
-        global_trend_snapshot = fetch_history_trend_snapshot(cursor)
-        user_trend_snapshot = fetch_user_business_history_snapshot(cursor, user_id)
-        custom_msme_counts = fetch_custom_msme_counts(cursor)
-
-        cursor.close()
-        conn.close()
+        async with pool.acquire() as conn:
+            global_trend_snapshot = await fetch_history_trend_snapshot_async(conn)
+            user_trend_snapshot = await fetch_user_business_history_snapshot_async(conn, user_id)
+            custom_msme_counts = await fetch_custom_msme_counts_async(conn)
 
         recommendations = []
         for profile_key, profile_data in SME_DATABASE.items():
@@ -1290,7 +1356,7 @@ def get_user_trend_recommendations(user_id: int, limit: int = 5):
         return {
             "status": "success",
             "user_id": user_id,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": utc_now_iso_z(),
             "summary": {
                 "profile_interest": user_profile.get("primary_business") or "Not set",
                 "startup_capital": user_profile.get("startup_capital"),
@@ -1361,7 +1427,33 @@ TREND_SCAN_CACHE = {}
 TREND_SCAN_CACHE_LOCK = Lock()
 TREND_SCAN_CACHE_TTL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_TTL_SECONDS", "21600"))
 TREND_SCAN_CACHE_MAX_STALE_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_MAX_STALE_SECONDS", "86400"))
+TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS", "7200"))
 TREND_SCAN_REFRESH_IN_FLIGHT = set()
+
+
+def _parse_utc_iso_z(value: str):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+
+    try:
+        if raw.endswith("Z"):
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(raw)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _is_snapshot_stale(payload: dict, threshold_seconds: int) -> bool:
+    generated_at = _parse_utc_iso_z((payload or {}).get("generated_at"))
+    if generated_at is None:
+        return True
+
+    age_seconds = (datetime.now(timezone.utc) - generated_at).total_seconds()
+    return age_seconds > max(0, int(threshold_seconds))
 
 HAZARD_LAYER_LABELS = {
     1: {"name": "Very High Flood Hazard (5-Year Return Period)", "score": 5},
@@ -1908,6 +2000,104 @@ def fetch_user_business_history_snapshot(cursor, user_id: int):
     return snapshot
 
 
+async def fetch_custom_msme_counts_async(conn):
+    rows = await conn.fetch(
+        """
+        SELECT
+            LOWER(TRIM(business_type)) AS business_key,
+            COUNT(*) AS total
+        FROM custom_msme
+        GROUP BY LOWER(TRIM(business_type))
+        """
+    )
+
+    counts = {}
+    for row in rows or []:
+        business_key = str(row.get("business_key") or "").strip()
+        if not business_key:
+            continue
+        counts[business_key] = int(row.get("total") or 0)
+
+    return counts
+
+
+async def fetch_user_profile_by_id_async(conn, user_pk_column: str, user_id: int):
+    row = await conn.fetchrow(
+        f"""
+        SELECT
+            {user_pk_column} AS user_id,
+            full_name,
+            email,
+            address,
+            cellphone_number,
+            avatar_url,
+            age,
+            birthday,
+            primary_business,
+            startup_capital,
+            risk_tolerance,
+            preferred_setup,
+            time_commitment,
+            target_payback_months,
+            created_at
+        FROM users
+        WHERE {user_pk_column} = $1
+        LIMIT 1
+        """,
+        user_id,
+    )
+    return dict(row) if row else None
+
+
+async def fetch_history_trend_snapshot_async(conn):
+    rows = await conn.fetch(
+        """
+        SELECT
+            LOWER(TRIM(business_type)) AS business_name,
+            COUNT(*) AS scan_count,
+            AVG(viability_score) AS avg_score
+        FROM analysis_history
+        WHERE scan_date >= (NOW() - INTERVAL '180 days')
+        GROUP BY LOWER(TRIM(business_type))
+        """
+    )
+    snapshot = {}
+    for row in rows or []:
+        business_name = (row.get("business_name") or "").strip()
+        if not business_name:
+            continue
+        snapshot[business_name] = {
+            "scan_count": int(row.get("scan_count") or 0),
+            "avg_score": float(row.get("avg_score") or 0.0),
+        }
+    return snapshot
+
+
+async def fetch_user_business_history_snapshot_async(conn, user_id: int):
+    rows = await conn.fetch(
+        """
+        SELECT
+            LOWER(TRIM(business_type)) AS business_name,
+            COUNT(*) AS scan_count,
+            AVG(viability_score) AS avg_score
+        FROM analysis_history
+        WHERE user_id = $1
+        GROUP BY LOWER(TRIM(business_type))
+        """,
+        user_id,
+    )
+    snapshot = {}
+    for row in rows or []:
+        business_name = (row.get("business_name") or "").strip()
+        if not business_name:
+            continue
+        snapshot[business_name] = {
+            "scan_count": int(row.get("scan_count") or 0),
+            "avg_score": float(row.get("avg_score") or 0.0),
+        }
+    return snapshot
+
+
 def score_business_opportunity(profile_key, profile_data, user_profile, global_trend, user_trend, local_competitor_count=None):
     business_name = str(profile_data.get("name") or profile_key).strip()
     business_name_key = business_name.lower()
@@ -2362,12 +2552,56 @@ def run_citywide_business_scan(business_key: str, candidates, radius: int = 340,
     }
 
 
+def save_citywide_scan_snapshot_to_db(radius: int, payload: dict):
+    """Save trend snapshot to database."""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO trend_scan_snapshots (radius, snapshot_payload, updated_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (radius) DO UPDATE SET
+                snapshot_payload = EXCLUDED.snapshot_payload,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (radius, json.dumps(payload))
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as exc:
+        print(f"Warning: Failed to save trend snapshot to DB: {exc}")
+
+def load_citywide_scan_snapshot_from_db(radius: int):
+    """Load trend snapshot from database."""
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(RealDictCursor)
+        cursor.execute(
+            "SELECT snapshot_payload FROM trend_scan_snapshots WHERE radius = %s",
+            (radius,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if row and row["snapshot_payload"]:
+            payload = row["snapshot_payload"]
+            if isinstance(payload, str):
+                return json.loads(payload)
+            return payload
+    except Exception as exc:
+        print(f"Warning: Failed to load trend snapshot from DB: {exc}")
+    return None
+
+
 def build_citywide_scan_snapshot(radius: int = 340):
     space_markers = fetch_active_space_markers_for_analysis()
     candidates = build_panabo_prescan_points(space_markers=space_markers, max_space_points=24)
-
+    print(f"[DEBUG] Citywide scan: {len(candidates)} grid points")
     businesses = {}
     for business_key in SME_DATABASE.keys():
+        print(f"[DEBUG] Scanning business: {business_key}")
         scan_result = run_citywide_business_scan(
             business_key,
             candidates,
@@ -2375,14 +2609,15 @@ def build_citywide_scan_snapshot(radius: int = 340):
             space_markers=space_markers,
             top_hotspots=3,
         )
-
+        best_report = scan_result.get("best_report")
+        print(f"[DEBUG] Best report for {business_key}: score={best_report.get('viability_score') if best_report else None}, competitors={best_report.get('competitors_found') if best_report else None}")
         businesses[business_key] = {
-            "best_report": scan_result.get("best_report"),
+            "best_report": best_report,
             "hotspots": scan_result.get("hotspots") or [],
         }
 
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": utc_now_iso_z(),
         "radius": radius,
         "candidate_count": len(candidates),
         "businesses": businesses,
@@ -2392,9 +2627,12 @@ def build_citywide_scan_snapshot(radius: int = 340):
 def _refresh_citywide_scan_snapshot_worker(cache_key: str, radius: int):
     try:
         payload = build_citywide_scan_snapshot(radius=radius)
+        # Save to database
+        save_citywide_scan_snapshot_to_db(radius, payload)
+        # Also update in-memory cache
         with TREND_SCAN_CACHE_LOCK:
             TREND_SCAN_CACHE[cache_key] = {
-                "cached_at": datetime.utcnow(),
+                "cached_at": utc_now_naive(),
                 "payload": payload,
             }
     except Exception as exc:
@@ -2406,6 +2644,17 @@ def _refresh_citywide_scan_snapshot_worker(cache_key: str, radius: int):
 
 def warm_citywide_scan_snapshot_async(radius: int = 340):
     cache_key = f"radius:{int(radius)}"
+
+    db_payload = load_citywide_scan_snapshot_from_db(radius)
+    if db_payload:
+        with TREND_SCAN_CACHE_LOCK:
+            TREND_SCAN_CACHE[cache_key] = {
+                "cached_at": utc_now_naive(),
+                "payload": db_payload,
+            }
+
+        if not _is_snapshot_stale(db_payload, TREND_SCAN_CACHE_TTL_SECONDS):
+            return
 
     with TREND_SCAN_CACHE_LOCK:
         if cache_key in TREND_SCAN_REFRESH_IN_FLIGHT:
@@ -2420,9 +2669,16 @@ def warm_citywide_scan_snapshot_async(radius: int = 340):
 
 
 def get_citywide_scan_snapshot(radius: int = 340):
+    """Get trend snapshot with non-blocking first load and background refresh.
+    
+    Strategy:
+    1. First call: Return empty snapshot immediately, trigger background scan
+    2. Subsequent calls: Return latest from DB or cache, refresh in background if stale
+    """
     cache_key = f"radius:{int(radius)}"
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
+    # Check in-memory cache first
     with TREND_SCAN_CACHE_LOCK:
         cached = TREND_SCAN_CACHE.get(cache_key)
         if cached:
@@ -2444,14 +2700,56 @@ def get_citywide_scan_snapshot(radius: int = 340):
                         ).start()
                     return payload
 
-    payload = build_citywide_scan_snapshot(radius=radius)
-    with TREND_SCAN_CACHE_LOCK:
-        TREND_SCAN_CACHE[cache_key] = {
-            "cached_at": datetime.utcnow(),
-            "payload": payload,
-        }
+    # Try to load from database
+    db_payload = load_citywide_scan_snapshot_from_db(radius)
+    if db_payload:
+        # Cache it in memory
+        with TREND_SCAN_CACHE_LOCK:
+            TREND_SCAN_CACHE[cache_key] = {
+                "cached_at": now,
+                "payload": db_payload,
+            }
+        # Trigger background refresh only when snapshot is stale.
+        if _is_snapshot_stale(db_payload, TREND_SCAN_CACHE_TTL_SECONDS):
+            with TREND_SCAN_CACHE_LOCK:
+                if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
+                    TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
+                    Thread(
+                        target=_refresh_citywide_scan_snapshot_worker,
+                        args=(cache_key, int(radius)),
+                        daemon=True,
+                    ).start()
+        return db_payload
 
-    return payload
+    # No cache and no DB entry: trigger background scan
+    if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
+        TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
+        Thread(
+            target=_refresh_citywide_scan_snapshot_worker,
+            args=(cache_key, int(radius)),
+            daemon=True,
+        ).start()
+    # Return empty snapshot immediately (non-blocking)
+    return {
+        "generated_at": utc_now_iso_z(),
+        "radius": radius,
+        "candidate_count": 0,
+        "businesses": {},
+        "snapshot_ready": False,
+    }
+
+
+def _trend_snapshot_auto_refresh_loop(stop_event: Event, radius: int = 340):
+    interval_seconds = max(300, TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS)
+
+    while not stop_event.is_set():
+        if stop_event.wait(interval_seconds):
+            break
+
+        try:
+            warm_citywide_scan_snapshot_async(radius=radius)
+        except Exception as exc:
+            print(f"Trend auto-refresh warning (radius:{radius}): {exc}")
 
 
 def build_trend_upside_downside(recommendation, pre_scanned_report):
@@ -3169,6 +3467,7 @@ def perform_analysis(data: AnalysisRequest):
     sme_profile = SME_DATABASE.get(data.business_type, {"key": "shop", "val": "convenience", "fear": 5, "need": 5, "name": "MSME"})
     search_val = sme_profile["val"]
     osm_tags = sme_profile.get("osm_tags") or [(sme_profile.get("key", "shop"), search_val)]
+    print(f"[DEBUG] perform_analysis: business_type={data.business_type}, lat={data.lat}, lon={data.lon}, radius={data.radius}, osm_tags={osm_tags}")
     
     # FACTOR 1: ZONING - Normalized to 0-25 scale
     zoning_score = 0
@@ -3197,12 +3496,13 @@ def perform_analysis(data: AnalysisRequest):
     # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
     competitors_list = []
     competitor_dedupe = set()
-    used_generic_competitor_fallback = False
 
     try:
         cached_competitors = []
         for _, tag_value in osm_tags:
-            cached_competitors.extend(get_cached_pbf_competitors(tag_value))
+            competitors = get_cached_pbf_competitors(tag_value)
+            print(f"[DEBUG] OSM competitors for tag_value={tag_value}: {len(competitors)} found")
+            cached_competitors.extend(competitors)
 
         for competitor in cached_competitors:
             _append_competitor_if_within_radius(
@@ -3219,6 +3519,7 @@ def perform_analysis(data: AnalysisRequest):
 
     # Scan PostgreSQL Database and include them as direct competitors.
     custom_shops = fetch_custom_msmes(data.business_type)
+    print(f"[DEBUG] Custom MSMEs for {data.business_type}: {len(custom_shops)} found")
     for shop in custom_shops:
         _append_competitor_if_within_radius(
             competitors_list,
@@ -3245,20 +3546,7 @@ def perform_analysis(data: AnalysisRequest):
 
     # Strict competitors are the only ones used for saturation scoring.
     strict_competitors_found = len(competitors_list)
-
-    # Final local fallback: show nearby named commercial OSM entities as map context only.
-    if strict_competitors_found == 0:
-        used_generic_competitor_fallback = True
-        for competitor in get_generic_nearby_pbf_competitors(data.lat, data.lon, data.radius, limit=30):
-            _append_competitor_if_within_radius(
-                competitors_list,
-                competitor_dedupe,
-                competitor,
-                data.lat,
-                data.lon,
-                data.radius,
-                "Nearby Business"
-            )
+    print(f"[DEBUG] Total competitors found for {data.business_type} at ({data.lat},{data.lon}): {strict_competitors_found}")
 
     competitors_found = strict_competitors_found
 
@@ -3317,8 +3605,6 @@ def perform_analysis(data: AnalysisRequest):
         f"The algorithm scanned local Panabo OSM data from panabo.pbf plus local MSME entries for matching businesses within {data.radius} meters. "
         + f"It counted direct competitors and then mapped that count to a 0-25 score: 0 competitors => 25, 1 competitor => 20, 2-3 => 15, 4-5 => 10, 6+ => 5."
     )
-    if used_generic_competitor_fallback:
-        saturation_details += " No direct category matches were found, so nearby commercial businesses are shown on the map as context only."
 
     zoning_details = (
         "The zoning score is derived by checking whether the target coordinates fall inside Panabo commercial or industrial polygon bounds. "
@@ -3388,6 +3674,8 @@ def perform_analysis(data: AnalysisRequest):
 
     if data.user_id is not None:
         try:
+            sanitized_competitors_list = competitors_list if competitors_found > 0 else []
+
             conn = psycopg2.connect(**DB_CONFIG)
             cursor = conn.cursor()
             cursor.execute(
@@ -3407,7 +3695,7 @@ def perform_analysis(data: AnalysisRequest):
                     data.radius,
                     generated_insight,
                     competitors_found,
-                    Json(competitors_list),
+                    Json(sanitized_competitors_list),
                     Json(breakdown_payload)
                 )
             )
@@ -3418,11 +3706,12 @@ def perform_analysis(data: AnalysisRequest):
             print(f"History Save Error: {e}")
 
     # FINAL PAYLOAD
+    print(f"[DEBUG] Final score for {data.business_type} at ({data.lat},{data.lon}): {int(total_score)}\n---")
     return {
         "viability_score": int(total_score),
         "business_type": sme_profile["name"], 
         "competitors_found": competitors_found,
-        "competitor_locations": competitors_list, 
+        "competitor_locations": competitors_list if competitors_found > 0 else [],
         "target_coords": {"lat": data.lat, "lng": data.lon}, 
         "radius_meters": data.radius,
         "insight": generated_insight, 
