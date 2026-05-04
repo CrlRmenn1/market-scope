@@ -160,42 +160,42 @@ export default function Profile({ user, onProfileUpdate }) {
 
   return (
     <div className="profile-page page-enter min-h-full">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
-        <div className="profile-card fade-in flex flex-col items-center gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-center shadow-sm sm:flex-row sm:items-center sm:text-left">
+      <div className="profile-shell mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
+        <div className="profile-card profile-hero-card fade-in flex flex-col items-center gap-4 p-5 text-center sm:flex-row sm:items-center sm:text-left">
           {avatarForDisplay ? (
-            <img src={avatarForDisplay} alt="Profile" className="profile-avatar-image h-24 w-24 rounded-2xl border border-white/10 object-cover sm:h-28 sm:w-28" />
+            <img src={avatarForDisplay} alt="Profile" className="profile-avatar-image" />
           ) : (
-            <div className="profile-avatar-large flex h-24 w-24 items-center justify-center rounded-2xl bg-violet-600 text-2xl font-bold text-white sm:h-28 sm:w-28">{initials}</div>
+            <div className="profile-avatar-large">{initials}</div>
           )}
           <div className="space-y-1">
-            <h2 className="profile-name text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">{profile?.full_name || profile?.name || 'MarketScope User'}</h2>
-            <p className="profile-email text-sm text-slate-300">{profile?.email || 'No email available'}</p>
-            <span className="profile-badge mt-2 inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-violet-200">Active Analyst</span>
+            <h2 className="profile-name">{profile?.full_name || profile?.name || 'MarketScope User'}</h2>
+            <p className="profile-email">{profile?.email || 'No email available'}</p>
+            <span className="profile-badge mt-2">Active Analyst</span>
           </div>
         </div>
 
         <div className="profile-stats-grid grid gap-4 sm:grid-cols-3">
-          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
-            <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Total Businesses Analyzed</span>
-            <strong className="profile-stat-number text-3xl font-semibold text-slate-50">{historyStats.total}</strong>
+          <div className="data-card profile-stat-card profile-stat-panel flex flex-col gap-2 p-4">
+            <span className="settings-label">Total Businesses Analyzed</span>
+            <strong className="profile-stat-number">{historyStats.total}</strong>
           </div>
-          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
-            <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Most Successful</span>
-            <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.best?.business_type || 'â€”'}</strong>
-            <span className="history-meta text-sm text-slate-400">Score {historyStats.best?.viability_score ?? 'â€”'}</span>
+          <div className="data-card profile-stat-card profile-stat-panel flex flex-col gap-2 p-4">
+            <span className="settings-label">Most Successful</span>
+            <strong className="profile-stat-number profile-stat-number-sm">{historyStats.best?.business_type || '-'}</strong>
+            <span className="history-meta">Score {historyStats.best?.viability_score ?? '-'}</span>
           </div>
-          <div className="data-card profile-stat-card flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
-            <span className="settings-label text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Most Poor</span>
-            <strong className="profile-stat-number text-xl font-semibold text-slate-50">{historyStats.worst?.business_type || 'â€”'}</strong>
-            <span className="history-meta text-sm text-slate-400">Score {historyStats.worst?.viability_score ?? 'â€”'}</span>
+          <div className="data-card profile-stat-card profile-stat-panel flex flex-col gap-2 p-4">
+            <span className="settings-label">Most Poor</span>
+            <strong className="profile-stat-number profile-stat-number-sm">{historyStats.worst?.business_type || '-'}</strong>
+            <span className="history-meta">Score {historyStats.worst?.viability_score ?? '-'}</span>
           </div>
         </div>
 
-        <div className="settings-list mt-6 grid gap-4">
+        <div className="settings-list profile-settings-list mt-6 grid gap-4">
           <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">User ID</span>
-              <span className="settings-value">{userId || 'â€”'}</span>
+              <span className="settings-value">{userId || '-'}</span>
             </div>
           </div>
 
@@ -217,7 +217,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, full_name: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.full_name || profile?.name || 'â€”'}</span>
+                <span className="settings-value">{profile?.full_name || profile?.name || '-'}</span>
               )}
             </div>
           </div>
@@ -233,7 +233,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, email: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.email || 'â€”'}</span>
+                <span className="settings-value">{profile?.email || '-'}</span>
               )}
             </div>
           </div>
@@ -249,7 +249,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, cellphone_number: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.cellphone_number || 'â€”'}</span>
+                <span className="settings-value">{profile?.cellphone_number || '-'}</span>
               )}
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, address: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.address || 'â€”'}</span>
+                <span className="settings-value">{profile?.address || '-'}</span>
               )}
             </div>
           </div>
@@ -281,7 +281,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, birthday: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.birthday ? new Date(profile.birthday).toLocaleDateString() : 'â€”'}</span>
+                <span className="settings-value">{profile?.birthday ? new Date(profile.birthday).toLocaleDateString() : '-'}</span>
               )}
             </div>
           </div>
@@ -299,7 +299,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, age: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.age ?? 'â€”'}</span>
+                <span className="settings-value">{profile?.age ?? '-'}</span>
               )}
             </div>
           </div>
@@ -337,7 +337,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, startup_capital: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.startup_capital ? `PHP ${Number(profile.startup_capital).toLocaleString()}` : 'â€”'}</span>
+                <span className="settings-value">{profile?.startup_capital ? `PHP ${Number(profile.startup_capital).toLocaleString()}` : '-'}</span>
               )}
             </div>
           </div>
@@ -357,7 +357,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   <option value="high">High</option>
                 </select>
               ) : (
-                <span className="settings-value">{profile?.risk_tolerance || 'â€”'}</span>
+                <span className="settings-value">{profile?.risk_tolerance || '-'}</span>
               )}
             </div>
           </div>
@@ -379,7 +379,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   <option value="warehouse">Warehouse</option>
                 </select>
               ) : (
-                <span className="settings-value">{profile?.preferred_setup || 'â€”'}</span>
+                <span className="settings-value">{profile?.preferred_setup || '-'}</span>
               )}
             </div>
           </div>
@@ -398,7 +398,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   <option value="full-time">Full-time</option>
                 </select>
               ) : (
-                <span className="settings-value">{profile?.time_commitment || 'â€”'}</span>
+                <span className="settings-value">{profile?.time_commitment || '-'}</span>
               )}
             </div>
           </div>
@@ -416,7 +416,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   onChange={(e) => setFormValues((current) => ({ ...current, target_payback_months: e.target.value }))}
                 />
               ) : (
-                <span className="settings-value">{profile?.target_payback_months ? `${profile.target_payback_months} months` : 'â€”'}</span>
+                <span className="settings-value">{profile?.target_payback_months ? `${profile.target_payback_months} months` : '-'}</span>
               )}
             </div>
           </div>
@@ -452,18 +452,18 @@ export default function Profile({ user, onProfileUpdate }) {
                   />
                   <button
                     type="button"
-                    className="upload-trigger profile-upload-trigger inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10"
+                    className="upload-trigger profile-upload-trigger inline-flex items-center justify-center"
                     onClick={() => profileAvatarInputRef.current?.click()}
                     onMouseDown={(event) => event.preventDefault()}
                   >
                     <span>{formValues.avatar_url ? 'Change image' : 'Upload image'}</span>
                   </button>
-                  <span className="settings-value profile-upload-status text-sm text-slate-400">
+                  <span className="settings-value profile-upload-status">
                     {formValues.avatar_url ? 'Image selected' : 'No image selected'}
                   </span>
                 </>
               ) : (
-                <span className="settings-value profile-url-value text-sm text-slate-300">{profile?.avatar_url ? 'Uploaded image' : 'â€”'}</span>
+                <span className="settings-value profile-url-value">{profile?.avatar_url ? 'Uploaded image' : '-'}</span>
               )}
             </div>
           </div>
@@ -477,11 +477,11 @@ export default function Profile({ user, onProfileUpdate }) {
         </div>
 
       <div className="profile-actions mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <button className="edit-btn inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10" onClick={handleEditToggle}>
+        <button className="edit-btn profile-action-btn inline-flex items-center justify-center" onClick={handleEditToggle}>
           {editing ? 'Cancel Edit' : 'Edit'}
         </button>
         {editing && (
-          <button className="primary-btn inline-flex w-full items-center justify-center rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto" onClick={handleSave} disabled={saving}>
+          <button className="primary-btn profile-action-save inline-flex w-full items-center justify-center sm:w-auto" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save'}
           </button>
         )}

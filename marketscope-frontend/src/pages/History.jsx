@@ -245,16 +245,16 @@ export default function History({ user, onOpenReport }) {
       {loading && <div className="data-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300 shadow-sm">Loading history...</div>}
 
       {!loading && !hasHistory && (
-        <div className="history-empty-state flex items-center gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
-          <div className="history-empty-icon flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-200" aria-hidden="true">
+        <div className="history-empty-state">
+          <div className="history-empty-icon" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 11l3 3L22 4"></path>
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
             </svg>
           </div>
           <div>
-            <p className="history-empty-title text-lg font-semibold text-slate-50">No saved analyses yet</p>
-            <p className="history-empty-subtitle mt-1 text-sm leading-6 text-slate-300">Run a site analysis from the map and your results will appear here automatically.</p>
+            <p className="history-empty-title">No saved analyses yet</p>
+            <p className="history-empty-subtitle">Run a site analysis from the map and your results will appear here automatically.</p>
           </div>
         </div>
       )}

@@ -63,12 +63,19 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
   };
 
   const openRecommendationReport = (item) => {
-    if (!onRunAnalysis || !item.citywide_hotspots?.length) return;
+    if (!onRunAnalysis) return;
+
+    const hotspot = Array.isArray(item.citywide_hotspots) && item.citywide_hotspots.length > 0 ? item.citywide_hotspots[0] : null;
+    const fallbackCoords = item.pre_scanned_location || item.full_report?.target_coords || null;
+
+    const coordsSource = hotspot?.coords || fallbackCoords;
+    if (!coordsSource) return;
+
     setAnalyzingBusinessKey(item.business_key);
     
     const coords = {
-      lat: item.citywide_hotspots[0].coords?.lat || 0,
-      lng: item.citywide_hotspots[0].coords?.lng || item.citywide_hotspots[0].coords?.lon || 0
+      lat: Number(coordsSource.lat || coordsSource.latitude || 0),
+      lng: Number(coordsSource.lng || coordsSource.lon || coordsSource.longitude || 0)
     };
     
     // Extract business keys from item.business_key (e.g., "coffee" or "coffee+bakery")
@@ -115,7 +122,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
         )}
 
         {!loading && !error && !hasRecommendations && (
-          <div className="history-empty-state flex items-center gap-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+          <div className="history-empty-state">
             <div className="history-empty-icon" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 12h18" />
@@ -124,7 +131,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
             </div>
             <div>
               <p className="history-empty-title">No trend recommendations yet</p>
-              <p className="history-empty-subtitle mt-1">Complete your profile and run more analyses to improve recommendation quality.</p>
+              <p className="history-empty-subtitle">Complete your profile and run more analyses to improve recommendation quality.</p>
             </div>
           </div>
         )}
@@ -140,6 +147,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
               const hasUpsides = Array.isArray(item?.upsides) && item.upsides.length > 0;
               const hasDownsides = Array.isArray(item?.downsides) && item.downsides.length > 0;
               const hasSpaceContext = hasHotspots && item.citywide_hotspots[0]?.space_context;
+              const canRunAnalysis = Boolean(onRunAnalysis && (hasHotspots || item.pre_scanned_location || item.full_report?.target_coords));
 
               return (
                 <div key={item.business_key} className="data-card trends-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
@@ -269,7 +277,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
                     type="button"
                     className="edit-btn trends-analyze-btn mt-3 inline-flex w-full items-center justify-center rounded-lg border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => openRecommendationReport(item)}
-                    disabled={analyzingBusinessKey === item.business_key}
+                    disabled={!canRunAnalysis || analyzingBusinessKey === item.business_key}
                   >
                     {analyzingBusinessKey === item.business_key ? 'Running Analysis...' : 'Run Suitability Analysis'}
                   </button>
