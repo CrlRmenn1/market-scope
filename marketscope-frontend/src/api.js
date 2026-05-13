@@ -1,6 +1,6 @@
 const ENV_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').trim();
 const LOCAL_API_BASE_URL = 'http://localhost:8000';
-const RENDER_API_BASE_URL = 'https://market-scope.onrender.com';
+const RENDER_API_BASE_URL = 'https://market-scope-phcj.onrender.com';
 
 const inferApiBaseUrl = () => {
   if (ENV_API_BASE_URL) return ENV_API_BASE_URL;
