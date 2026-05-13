@@ -118,6 +118,15 @@ async def connect_with_retry(max_retries=3, initial_delay=2):
                 raise
 
 
+def trigger_trend_warmup_after_login(radius: int = 340):
+    """Start trend warmup in the background after auth succeeds."""
+    Thread(
+        target=warm_citywide_scan_snapshot_async,
+        kwargs={"radius": radius},
+        daemon=True,
+    ).start()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -130,7 +139,6 @@ async def lifespan(app: FastAPI):
     app.state.db_pool = await connect_with_retry()
     preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
-    warm_citywide_scan_snapshot_async(radius=340)
     stop_event = Event()
     auto_refresh_thread = Thread(
         target=_trend_snapshot_auto_refresh_loop,
@@ -322,7 +330,9 @@ async def register(user: RegisterUser):
 @app.post("/login")
 async def login(user: LoginUser):
     try:
-        return await auth_login_user(app.state.db_pool, user)
+        response = await auth_login_user(app.state.db_pool, user)
+        trigger_trend_warmup_after_login(radius=340)
+        return response
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
