@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
+import { parseCoordinatePairText } from '../utils/coordinates';
 
 const defaultMsmeForm = {
   name: '',
@@ -176,6 +177,19 @@ export default function AdminPanel({ adminSession }) {
   const resetMessages = () => {
     setErrorMessage('');
     setSuccessMessage('');
+  };
+
+  const handleCoordinatePaste = (setter) => (event) => {
+    const clipboardText = event.clipboardData?.getData('text');
+    const parsed = parseCoordinatePairText(clipboardText);
+    if (!parsed) return;
+
+    event.preventDefault();
+    setter((current) => ({
+      ...current,
+      latitude: String(parsed.latitude),
+      longitude: String(parsed.longitude)
+    }));
   };
 
   const loadCustomMsmes = async () => {
@@ -675,11 +689,11 @@ export default function AdminPanel({ adminSession }) {
               <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Latitude <span className="required-indicator">*</span></label>
-                  <input required type="number" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} />
+                  <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} placeholder="7.310967506654152, 125.6853653454886" />
                 </div>
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Longitude <span className="required-indicator">*</span></label>
-                  <input required type="number" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} />
+                  <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} />
                 </div>
               </div>
 

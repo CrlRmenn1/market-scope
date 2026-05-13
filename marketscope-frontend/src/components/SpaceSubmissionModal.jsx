@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
+import { parseCoordinatePairText } from '../utils/coordinates';
 
 const BUSINESS_TYPE_OPTIONS = [
   { value: '', label: 'Not specific' },
@@ -61,6 +62,19 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
 
   const handleFieldChange = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleCoordinatePaste = () => (event) => {
+    const clipboardText = event.clipboardData?.getData('text');
+    const parsed = parseCoordinatePairText(clipboardText);
+    if (!parsed) return;
+
+    event.preventDefault();
+    setForm((current) => ({
+      ...current,
+      latitude: String(parsed.latitude),
+      longitude: String(parsed.longitude),
+    }));
   };
 
   const handleSubmit = async () => {
@@ -228,11 +242,11 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                   <div className="history-tools-grid" style={{ marginBottom: 12 }}>
                     <div className="input-group" style={{ marginBottom: 0 }}>
                       <label className="input-label">Latitude <span className="required-indicator">*</span></label>
-                      <input className="history-search-input" type="number" step="any" required value={form.latitude} onChange={(event) => handleFieldChange('latitude', event.target.value)} placeholder="7.30750" />
+                      <input className="history-search-input" type="text" inputMode="decimal" step="any" required value={form.latitude} onChange={(event) => handleFieldChange('latitude', event.target.value)} onPaste={handleCoordinatePaste('latitude')} placeholder="7.30750 or 7.310967506654152, 125.6853653454886" />
                     </div>
                     <div className="input-group" style={{ marginBottom: 0 }}>
                       <label className="input-label">Longitude <span className="required-indicator">*</span></label>
-                      <input className="history-search-input" type="number" step="any" required value={form.longitude} onChange={(event) => handleFieldChange('longitude', event.target.value)} placeholder="125.68110" />
+                      <input className="history-search-input" type="text" inputMode="decimal" step="any" required value={form.longitude} onChange={(event) => handleFieldChange('longitude', event.target.value)} onPaste={handleCoordinatePaste('longitude')} placeholder="125.68110" />
                     </div>
                   </div>
 
