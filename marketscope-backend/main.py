@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from threading import Event, Lock, Thread
 from email.message import EmailMessage
 import asyncpg
+import asyncio
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 import bcrypt
@@ -82,20 +83,51 @@ def utc_now_iso_z():
 DB_CONFIG = get_database_config()
 
 
+def log_db_config_debug():
+    """Log database config for debugging (without password)."""
+    safe_config = {k: v for k, v in DB_CONFIG.items() if k != "password"}
+    print(f"[DB Config] {safe_config}", flush=True)
+
+
+async def connect_with_retry(max_retries=3, initial_delay=2):
+    """Create asyncpg pool with retry logic for Render deployments."""
+    import time
+    
+    log_db_config_debug()
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"[DB Connect] Attempt {attempt + 1}/{max_retries}...", flush=True)
+            pool = await asyncpg.create_pool(
+                user=DB_CONFIG["user"],
+                password=DB_CONFIG["password"],
+                database=DB_CONFIG["dbname"],
+                host=DB_CONFIG["host"],
+                port=int(DB_CONFIG["port"]),
+                min_size=2,
+                max_size=10,
+                timeout=DB_CONFIG.get("connect_timeout", 8),
+            )
+            print("[DB Connect] ✓ Pool created successfully", flush=True)
+            return pool
+        except Exception as e:
+            print(f"[DB Connect] ✗ Attempt {attempt + 1} failed: {e}", flush=True)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(initial_delay * (attempt + 1))
+            else:
+                raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_app_tables(DB_CONFIG)
-    # Create asyncpg pool and attach to app state
-    app.state.db_pool = await asyncpg.create_pool(
-        user=DB_CONFIG["user"],
-        password=DB_CONFIG["password"],
-        database=DB_CONFIG["dbname"],
-        host=DB_CONFIG["host"],
-        port=int(DB_CONFIG["port"]),
-        min_size=2,
-        max_size=10,
-        timeout=DB_CONFIG.get("connect_timeout", 8),
-    )
+    try:
+        create_app_tables(DB_CONFIG)
+    except Exception as e:
+        print(f"[DB Schema] Error creating tables: {e}", flush=True)
+        # Continue startup even if table creation fails
+    
+    # Create asyncpg pool with retry logic
+    app.state.db_pool = await connect_with_retry()
     preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
     warm_citywide_scan_snapshot_async(radius=340)

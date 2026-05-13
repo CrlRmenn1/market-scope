@@ -38,41 +38,63 @@ def get_startup_db_config(base_config):
 
 
 def create_app_tables(db_config):
-    conn = psycopg2.connect(**get_startup_db_config(db_config))
-    cursor = conn.cursor()
-    ensure_users_table(cursor)
-    user_pk_column = get_users_primary_key_column(cursor)
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS analysis_history (
-            history_id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(%s) ON DELETE CASCADE,
-            business_type VARCHAR(255) NOT NULL,
-            viability_score INTEGER NOT NULL,
-            target_lat DOUBLE PRECISION NOT NULL,
-            target_lon DOUBLE PRECISION NOT NULL,
-            radius_used INTEGER NOT NULL,
-            insight TEXT,
-            competitors_found INTEGER,
-            competitor_locations JSONB,
-            scan_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """ % user_pk_column
-    )
+    """Create app tables with retry logic for Render deployments."""
+    import time
+    max_retries = 3
+    initial_delay = 1
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"[DB Schema] Attempt {attempt + 1}/{max_retries} to create tables...", flush=True)
+            conn = psycopg2.connect(**get_startup_db_config(db_config))
+            cursor = conn.cursor()
+            ensure_users_table(cursor)
+            user_pk_column = get_users_primary_key_column(cursor)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS analysis_history (
+                    history_id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(%s) ON DELETE CASCADE,
+                    business_type VARCHAR(255) NOT NULL,
+                    viability_score INTEGER NOT NULL,
+                    target_lat DOUBLE PRECISION NOT NULL,
+                    target_lon DOUBLE PRECISION NOT NULL,
+                    radius_used INTEGER NOT NULL,
+                    insight TEXT,
+                    competitors_found INTEGER,
+                    competitor_locations JSONB,
+                    scan_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """ % user_pk_column
+            )
 
-    ensure_history_table_columns(cursor)
-    ensure_users_profile_columns(cursor)
-    ensure_custom_msme_table(cursor)
-    ensure_admin_users_table(cursor)
-    ensure_user_space_submissions_table(cursor, user_pk_column)
-    ensure_admin_space_submissions_table(cursor)
-    ensure_password_reset_codes_table(cursor, user_pk_column)
-    ensure_trend_scan_snapshots_table(cursor)
-    ensure_default_admin_user(cursor)
+            ensure_history_table_columns(cursor)
+            ensure_users_profile_columns(cursor)
+            ensure_custom_msme_table(cursor)
+            ensure_admin_users_table(cursor)
+            ensure_user_space_submissions_table(cursor, user_pk_column)
+            ensure_admin_space_submissions_table(cursor)
+            ensure_password_reset_codes_table(cursor, user_pk_column)
+            ensure_trend_scan_snapshots_table(cursor)
+            ensure_default_admin_user(cursor)
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+            conn.commit()
+            cursor.close()
+            conn.close()
+            print("[DB Schema] ✓ Tables created successfully", flush=True)
+            return  # Success
+        except psycopg2.OperationalError as e:
+            print(f"[DB Schema] ✗ Connection error on attempt {attempt + 1}: {e}", flush=True)
+            if attempt < max_retries - 1:
+                wait_time = initial_delay * (2 ** attempt)
+                print(f"[DB Schema] Retrying in {wait_time}s...", flush=True)
+                time.sleep(wait_time)
+            else:
+                print(f"[DB Schema] Failed to create tables after {max_retries} attempts", flush=True)
+                raise
+        except Exception as e:
+            print(f"[DB Schema] ✗ Unexpected error on attempt {attempt + 1}: {e}", flush=True)
+            raise
 
 
 def ensure_users_table(cursor):
