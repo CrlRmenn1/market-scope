@@ -1635,6 +1635,10 @@ def load_citywide_scan_snapshot_from_db(radius: int):
         conn.close()
         if row and row["snapshot_payload"]:
             payload = row["snapshot_payload"]
+            if isinstance(payload, (dict, list)):
+                return payload
+            if isinstance(payload, (bytes, bytearray, memoryview)):
+                return json.loads(bytes(payload).decode("utf-8"))
             if isinstance(payload, str):
                 return json.loads(payload)
             return payload
