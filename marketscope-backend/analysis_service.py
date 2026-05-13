@@ -190,17 +190,17 @@ def recommend_trends(user_profile, global_trends):
     """
     recommendations = []
 
+    startup_capital = user_profile.get("startup_capital") or 0
+    risk_tolerance = str(user_profile.get("risk_tolerance") or "medium").strip().lower()
+    preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
+    target_payback_months = user_profile.get("target_payback_months") or 0
+
     for business, requirements in TREND_BUSINESS_REQUIREMENTS.items():
         capital_min = requirements["capital_min"]
         capital_max = requirements["capital_max"]
         risk = requirements["risk"]
         setup = requirements["setup"]
         payback_months = requirements["payback_months"]
-
-        startup_capital = user_profile.get("startup_capital", 0)
-        risk_tolerance = user_profile.get("risk_tolerance", "medium").lower()
-        preferred_setup = user_profile.get("preferred_setup", "").lower()
-        target_payback_months = user_profile.get("target_payback_months", 0)
 
         # Check if the business matches the user's profile
         if startup_capital < capital_min or startup_capital > capital_max:
