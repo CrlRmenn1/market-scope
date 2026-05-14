@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiUrl } from '../api';
+import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
 
 // Fix for Vite + Leaflet image bug
 delete L.Icon.Default.prototype._getIconUrl;
@@ -54,70 +55,56 @@ const getHazardStyle = (hazardVar) => {
   };
 };
 
-export default function Home({ onMapTap }) {
+export default function Home({ onMapTap, userId }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
   const hazardGeoJsonLayerRef = useRef(null);
-  const spaceMarkerLayerGroup = useRef(null);
-  const spaceHoverTimers = useRef(new Map());
   const selectedMarkerRef = useRef(null);
+  const competitorLayerGroup = useRef(null);
+  const competitorCircleRef = useRef(null);
+  const previewRequestIdRef = useRef(0);
   const [selectedCoord, setSelectedCoord] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('normal');
   const mapViewModeRef = useRef('normal');
   const [outOfBounds, setOutOfBounds] = useState(false);
+  const [previewBusinessType, setPreviewBusinessType] = useState('');
+  const [previewRadius, setPreviewRadius] = useState(500);
+  const [competitorLocations, setCompetitorLocations] = useState([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewMessage, setPreviewMessage] = useState('Drop a pin, then choose an MSME and radius to preview competitors.');
+  const [previewError, setPreviewError] = useState('');
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
 
-  const getSpaceMarkerTone = (marker) => {
-    const sourceType = String(marker?.source_type || '').toLowerCase();
-    const guarantee = String(marker?.guarantee_level || '').toLowerCase();
-
-    if (sourceType === 'user') return 'user-guaranteed';
-    if (guarantee === 'guaranteed') return 'admin-guaranteed';
-    return 'admin-potential';
-  };
-
-  const createSpaceMarkerIcon = (marker) => {
-    const tone = getSpaceMarkerTone(marker);
-    const glyph = tone === 'user-guaranteed' ? 'U' : tone === 'admin-guaranteed' ? 'A' : 'P';
-    const badge = tone === 'admin-potential' ? '?' : 'OK';
+  const createCompetitorIcon = (name) => {
+    const initials = String(name || 'C').trim().slice(0, 1).toUpperCase();
 
     return L.divIcon({
-      className: 'space-marker-icon-wrapper',
+      className: 'competitor-marker-icon-wrapper',
       html: `
-        <div class="space-marker space-marker--${tone}">
-          <span class="space-marker__glyph">${glyph}</span>
-          <span class="space-marker__badge">${badge}</span>
+        <div class="competitor-marker">
+          <span class="competitor-marker__pulse"></span>
+          <span class="competitor-marker__core">${initials}</span>
         </div>
       `,
-      iconSize: [34, 34],
-      iconAnchor: [17, 32],
-      tooltipAnchor: [0, -26],
+      iconSize: [32, 32],
+      iconAnchor: [16, 30],
+      tooltipAnchor: [0, -22]
     });
-  };
-
-  const buildMarkerBrief = (marker) => {
-    const listingMode = String(marker?.listing_mode || '').toLowerCase();
-    const modeLabel = listingMode === 'buy' ? 'For Sale' : 'For Rent';
-    const sourceLabel = marker?.source_type === 'user' ? 'User Guaranteed' : marker?.guarantee_level === 'guaranteed' ? 'Admin Guaranteed' : 'Admin Potential';
-    const priceMin = Number(marker?.price_min || 0);
-    const priceMax = Number(marker?.price_max || 0);
-    let priceLabel = 'Price not set';
-
-    if (priceMin > 0 && priceMax > 0) {
-      priceLabel = `PHP ${priceMin.toLocaleString()} - PHP ${priceMax.toLocaleString()}`;
-    } else if (priceMin > 0) {
-      priceLabel = `From PHP ${priceMin.toLocaleString()}`;
-    } else if (priceMax > 0) {
-      priceLabel = `Up to PHP ${priceMax.toLocaleString()}`;
-    }
-
-    const title = marker?.title || 'Space listing';
-    return `<strong>${title}</strong><br/>${modeLabel} | ${sourceLabel}<br/>${priceLabel}`;
   };
 
   const isWithinBounds = (lat, lng) => {
     return lat >= PANABO_BOUNDS.south && lat <= PANABO_BOUNDS.north &&
            lng >= PANABO_BOUNDS.west && lng <= PANABO_BOUNDS.east;
+  };
+
+  const getDistanceMeters = (lat1, lon1, lat2, lon2) => {
+    const earthRadius = 6371000;
+    const toRadians = (value) => (value * Math.PI) / 180;
+    const deltaLat = toRadians(lat2 - lat1);
+    const deltaLon = toRadians(lon2 - lon1);
+    const a = Math.sin(deltaLat / 2) ** 2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(deltaLon / 2) ** 2;
+    return 2 * earthRadius * Math.asin(Math.sqrt(a));
   };
 
   useEffect(() => {
@@ -127,6 +114,9 @@ export default function Home({ onMapTap }) {
         zoom: 15,
         zoomControl: false
       });
+
+      mapInstance.current.createPane('previewPane');
+      mapInstance.current.getPane('previewPane').style.zIndex = 450;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
@@ -150,66 +140,7 @@ export default function Home({ onMapTap }) {
       }).addTo(mapInstance.current);
 
       hazardLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
-      spaceMarkerLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
-
-      fetch(apiUrl('/spaces/map-markers'))
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error('Unable to load map space markers');
-          }
-          return response.json();
-        })
-        .then((data) => {
-          if (!spaceMarkerLayerGroup.current || !mapInstance.current) return;
-          const markers = Array.isArray(data?.markers) ? data.markers : [];
-
-          markers.forEach((item) => {
-            const lat = Number(item?.latitude);
-            const lng = Number(item?.longitude);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-            const marker = L.marker([lat, lng], { icon: createSpaceMarkerIcon(item) }).addTo(spaceMarkerLayerGroup.current);
-            marker.bindTooltip(buildMarkerBrief(item), {
-              className: 'space-brief-tooltip',
-              direction: 'top',
-              sticky: false,
-              opacity: 1,
-            });
-
-            marker.on('mouseover', () => {
-              const timer = window.setTimeout(() => {
-                marker.openTooltip();
-              }, 1500);
-              spaceHoverTimers.current.set(marker._leaflet_id, timer);
-            });
-
-            marker.on('mouseout', () => {
-              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
-              if (timer) {
-                window.clearTimeout(timer);
-                spaceHoverTimers.current.delete(marker._leaflet_id);
-              }
-              marker.closeTooltip();
-            });
-
-            marker.on('click', () => {
-              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
-              if (timer) {
-                window.clearTimeout(timer);
-                spaceHoverTimers.current.delete(marker._leaflet_id);
-              }
-              const coords = { lat, lng };
-              setSelectedCoord(coords);
-              mapInstance.current.panTo([lat, lng]);
-              onMapTap(coords, {
-                prefillBusinessType: item?.business_type || '',
-              });
-            });
-          });
-        })
-        .catch(() => {
-          // Keep map usable even if marker feed is temporarily unavailable.
-        });
+      competitorLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
 
       fetch('/panabo_hazard_5yr.geojson')
         .then((response) => {
@@ -234,9 +165,9 @@ export default function Home({ onMapTap }) {
               });
             }
           });
-
-          hazardGeoJsonLayerRef.current = layer;
-
+              setCompetitorLocations([]);
+              setPreviewError('');
+              setPreviewMessage(previewBusinessType ? 'Adjust the radius or choose another MSME to preview competitors.' : 'Choose an MSME and radius to preview competitors.');
           if (mapViewModeRef.current === 'flood') {
             layer.addTo(hazardLayerGroup.current);
           }
@@ -255,6 +186,14 @@ export default function Home({ onMapTap }) {
         }
 
         setSelectedCoord(e.latlng);
+        setPreviewRadius(500);
+        if (competitorLayerGroup.current) {
+          competitorLayerGroup.current.clearLayers();
+        }
+        if (competitorCircleRef.current) {
+          competitorCircleRef.current.remove();
+          competitorCircleRef.current = null;
+        }
         mapInstance.current.panTo(e.latlng);
       });
     }
@@ -265,13 +204,15 @@ export default function Home({ onMapTap }) {
         selectedMarkerRef.current = null;
       }
 
-      if (spaceMarkerLayerGroup.current) {
-        spaceMarkerLayerGroup.current.clearLayers();
-        spaceMarkerLayerGroup.current = null;
+      if (competitorLayerGroup.current) {
+        competitorLayerGroup.current.clearLayers();
+        competitorLayerGroup.current = null;
       }
 
-      spaceHoverTimers.current.forEach((timer) => window.clearTimeout(timer));
-      spaceHoverTimers.current.clear();
+      if (competitorCircleRef.current) {
+        competitorCircleRef.current.remove();
+        competitorCircleRef.current = null;
+      }
 
       hazardLayerGroup.current = null;
       hazardGeoJsonLayerRef.current = null;
@@ -334,6 +275,121 @@ export default function Home({ onMapTap }) {
     };
   }, [selectedCoord]);
 
+  useEffect(() => {
+    if (!mapInstance.current || !selectedCoord) return;
+
+    if (competitorCircleRef.current) {
+      competitorCircleRef.current.remove();
+      competitorCircleRef.current = null;
+    }
+
+    competitorCircleRef.current = L.circle([selectedCoord.lat, selectedCoord.lng], {
+      radius: previewRadius,
+      pane: 'previewPane',
+      color: '#ffffff',
+      weight: 4,
+      opacity: 1,
+      fillColor: '#a855f7',
+      fillOpacity: 0.14,
+      dashArray: '10 8'
+    }).addTo(mapInstance.current);
+
+    return () => {
+      if (competitorCircleRef.current) {
+        competitorCircleRef.current.remove();
+        competitorCircleRef.current = null;
+      }
+    };
+  }, [selectedCoord, previewRadius]);
+
+  useEffect(() => {
+    if (!mapInstance.current || !competitorLayerGroup.current || !selectedCoord) return;
+
+    competitorLayerGroup.current.clearLayers();
+
+    if (!previewBusinessType) {
+      setPreviewLoading(false);
+      setPreviewMessage('Choose an MSME and radius to preview competitors.');
+      setCompetitorLocations([]);
+      return;
+    }
+
+    let isActive = true;
+    const requestId = ++previewRequestIdRef.current;
+
+    const runPreview = async () => {
+      setPreviewLoading(true);
+      setPreviewError('');
+      setPreviewMessage('Scanning nearby competitors...');
+
+      try {
+        const response = await fetch(apiUrl('/analyze'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: selectedCoord.lat,
+            lon: selectedCoord.lng,
+            business_type: previewBusinessType,
+            radius: previewRadius,
+            user_id: userId || null
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.detail || 'Unable to preview competitors');
+        }
+        if (!isActive || requestId !== previewRequestIdRef.current) return;
+
+        const competitors = Array.isArray(data?.competitor_locations)
+          ? data.competitor_locations.filter((item) => {
+              const lat = Number(item?.lat);
+              const lon = Number(item?.lon);
+              if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+              return getDistanceMeters(selectedCoord.lat, selectedCoord.lng, lat, lon) <= previewRadius;
+            })
+          : [];
+        setCompetitorLocations(competitors);
+        setPreviewMessage(competitors.length > 0 ? `Found ${competitors.length} nearby competitors.` : 'No competitors found in this radius.');
+      } catch (error) {
+        if (!isActive || requestId !== previewRequestIdRef.current) return;
+        setCompetitorLocations([]);
+        setPreviewError(error.message || 'Unable to preview competitors.');
+        setPreviewMessage('Unable to preview competitors.');
+      } finally {
+        if (isActive && requestId === previewRequestIdRef.current) {
+          setPreviewLoading(false);
+        }
+      }
+    };
+
+    runPreview();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedCoord, previewBusinessType, previewRadius, userId]);
+
+  useEffect(() => {
+    if (!mapInstance.current || !competitorLayerGroup.current) return;
+
+    competitorLayerGroup.current.clearLayers();
+
+    competitorLocations.forEach((item) => {
+      const lat = Number(item?.lat);
+      const lng = Number(item?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      const marker = L.marker([lat, lng], { icon: createCompetitorIcon(item?.name), pane: 'previewPane' }).addTo(competitorLayerGroup.current);
+      marker.bindTooltip(item?.name || 'Competitor', {
+        className: 'competitor-name-tooltip',
+        direction: 'top',
+        sticky: false,
+        opacity: 1
+      });
+    });
+  }, [competitorLocations]);
+
   return (
     <div className={`home-container relative page-enter ${mapViewMode}-mode`} data-map-mode={mapViewMode}>
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }} />
@@ -341,6 +397,94 @@ export default function Home({ onMapTap }) {
       {outOfBounds && (
         <div className="out-of-bounds-warning">
           Click within Panabo City boundary only
+        </div>
+      )}
+
+      {selectedCoord && (
+        <div
+          className={`map-quick-panel data-card ${previewCollapsed ? 'is-collapsed' : ''}`}
+          onClick={() => previewCollapsed && setPreviewCollapsed(false)}
+          style={{ cursor: previewCollapsed ? 'pointer' : 'default' }}
+        >
+          <div className="map-quick-panel__top">
+            {previewCollapsed ? (
+              <div className="map-quick-panel__compact-view">
+                <p className="map-quick-panel__coords">{selectedCoord.lat.toFixed(5)}, {selectedCoord.lng.toFixed(5)}</p>
+                {previewBusinessType && (
+                  <p className="map-quick-panel__msme-label">
+                    {BUSINESS_TYPE_OPTIONS.find((opt) => opt.value === previewBusinessType)?.label || previewBusinessType}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <h3 className="section-heading" style={{ marginBottom: 4 }}>Competitor Preview</h3>
+                <p className="map-quick-panel__coords">{selectedCoord.lat.toFixed(5)}, {selectedCoord.lng.toFixed(5)}</p>
+              </div>
+            )}
+            <button
+              type="button"
+              className="map-quick-panel__toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewCollapsed((current) => !current);
+              }}
+              aria-label={previewCollapsed ? 'Expand preview panel' : 'Collapse preview panel'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d={previewCollapsed ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          {!previewCollapsed && (
+            <>
+              <div className="input-group">
+                <label className="input-label">Select MSME</label>
+                <select className="styled-select" value={previewBusinessType} onChange={(event) => setPreviewBusinessType(event.target.value)}>
+                  <option value="">Choose an MSME...</option>
+                  {BUSINESS_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Radius</label>
+                <input
+                  type="range"
+                  min="100"
+                  max="1500"
+                  step="50"
+                  value={previewRadius}
+                  onChange={(event) => setPreviewRadius(Number(event.target.value))}
+                  className="radius-slider"
+                />
+                <div className="radius-slider-meta">
+                  <span>100m</span>
+                  <b>{previewRadius}m</b>
+                  <span>1500m</span>
+                </div>
+              </div>
+
+              <div className="map-quick-panel__summary">
+                {previewLoading ? 'Scanning nearby competitors...' : previewMessage}
+              </div>
+
+              {previewError && <div className="error-alert" style={{ marginTop: 0 }}>{previewError}</div>}
+
+              <div className="map-quick-panel__actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={!previewBusinessType || previewLoading}
+                  onClick={() => onMapTap(selectedCoord, { prefillBusinessType: previewBusinessType, prefillRadius: previewRadius })}
+                >
+                  Open Full Report
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -380,6 +524,12 @@ export default function Home({ onMapTap }) {
             <span className="legend-color space-admin-potential"></span>
             <span className="legend-text">Admin Potential Space</span>
           </div>
+          {selectedCoord && competitorLocations.length > 0 && (
+            <div className="legend-item">
+              <span className="legend-color competitor-preview"></span>
+              <span className="legend-text">Preview Competitors</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -400,19 +550,6 @@ export default function Home({ onMapTap }) {
         </button>
       </div>
 
-      {selectedCoord && (
-        <div className="map-action-bar">
-          <button
-            className="primary-btn map-analyze-btn"
-            onClick={() => onMapTap(selectedCoord)}
-          >
-            <svg className="analyze-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-            <span className="analyze-btn-text">Lock on this location</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }

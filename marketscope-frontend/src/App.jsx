@@ -31,6 +31,7 @@ export default function App() {
   const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [sheetInitialBusinessType, setSheetInitialBusinessType] = useState('');
+  const [sheetInitialRadius, setSheetInitialRadius] = useState(500);
   const [reportData, setReportData] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -168,6 +169,7 @@ export default function App() {
   const handleMapTap = (coords, options = {}) => {
     setSelectedCoords(coords);
     setSheetInitialBusinessType(options?.prefillBusinessType || '');
+    setSheetInitialRadius(Number(options?.prefillRadius || 500));
     setShowBottomSheet(true);
   };
 
@@ -231,6 +233,7 @@ export default function App() {
           setActiveTab('home');
           handleCloseReport();
           setShowBottomSheet(false);
+          setSheetInitialRadius(500);
         }}
         userName={session.full_name || session.name}
         userAvatarUrl={session.avatar_url}
@@ -239,7 +242,7 @@ export default function App() {
 
       <main className={`${appContentClass} ${reportData ? 'overflow-hidden' : ''}`}>
         {activeTab === 'home' && (
-          <Home onMapTap={handleMapTap} theme={theme} />
+          <Home onMapTap={handleMapTap} theme={theme} userId={session.user_id || session.id} />
         )}
         
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
@@ -264,10 +267,12 @@ export default function App() {
             onClose={() => {
               setShowBottomSheet(false);
               setSheetInitialBusinessType('');
+              setSheetInitialRadius(500);
             }} 
             onViewReport={handleViewReport}
             userId={session.user_id || session.id}
             initialBusinessType={sheetInitialBusinessType}
+            initialRadius={sheetInitialRadius}
           />
         )}
 

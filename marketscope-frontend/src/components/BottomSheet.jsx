@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { apiUrl } from '../api';
+import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
 
-export default function BottomSheet({ onClose, coords, onViewReport, userId, initialBusinessType = '' }) {
+export default function BottomSheet({ onClose, coords, onViewReport, userId, initialBusinessType = '', initialRadius = 500 }) {
   const [step, setStep] = useState(initialBusinessType ? 2 : 1);
   const [businessType, setBusinessType] = useState(initialBusinessType || '');
-  const [selectedRadius, setSelectedRadius] = useState(340);
+  const [selectedRadius, setSelectedRadius] = useState(initialRadius || 500);
   const [apiData, setApiData] = useState(null);
   const [analysisModeIndex, setAnalysisModeIndex] = useState(0);
-  const radiusOptions = [340, 500, 750];
   const analysisModes = [
     'Zoning Validation',
     'Hazard Impact',
@@ -57,6 +57,12 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
   }, [initialBusinessType]);
 
   useEffect(() => {
+    if (Number.isFinite(Number(initialRadius))) {
+      setSelectedRadius(Number(initialRadius));
+    }
+  }, [initialRadius]);
+
+  useEffect(() => {
     let intervalId;
     if (step === 3) {
       intervalId = window.setInterval(() => {
@@ -86,36 +92,28 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
               <div className="input-group">
                 <label className="input-label">Industry Category</label>
                 <select className="styled-select" value={businessType} onChange={(e) => setBusinessType(e.target.value)}>
-  <option value="" disabled>Choose a category...</option>
-  <option value="coffee">Coffee Shops / Cafes</option>
-  <option value="print">Print / Copy Centers</option>
-  <option value="laundry">Laundry Shops</option>
-  <option value="carwash">Car Washes</option>
-  <option value="kiosk">Food Kiosks / Stalls</option>
-  <option value="water">Water Refilling Stations</option>
-  <option value="bakery">Bakeries</option>
-  <option value="pharmacy">Small Pharmacies</option>
-  <option value="barber">Barbershops / Salons</option>
-  <option value="moto">Motorcycle Repair Shops</option>
-  <option value="internet">Internet Cafes</option>
-  <option value="meat">Meat Shops</option>
-  <option value="hardware">Hardware / Construction Supplies</option>
-</select>
+                  <option value="" disabled>Choose a category...</option>
+                  {BUSINESS_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="input-group">
                 <label className="input-label">Scan Radius</label>
-                <div className="radius-option-grid">
-                  {radiusOptions.map((radius) => (
-                    <button
-                      key={radius}
-                      type="button"
-                      className={`radius-option-btn ${selectedRadius === radius ? 'active' : ''}`}
-                      onClick={() => setSelectedRadius(radius)}
-                    >
-                      {radius}m
-                    </button>
-                  ))}
+                <input
+                  type="range"
+                  min="100"
+                  max="1500"
+                  step="50"
+                  value={selectedRadius}
+                  onChange={(event) => setSelectedRadius(Number(event.target.value))}
+                  className="radius-slider"
+                />
+                <div className="radius-slider-meta">
+                  <span>100m</span>
+                  <b>{selectedRadius}m</b>
+                  <span>1500m</span>
                 </div>
               </div>
 
