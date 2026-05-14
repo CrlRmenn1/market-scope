@@ -166,9 +166,10 @@ export default function Home({ onMapTap, userId }) {
               });
             }
           });
-              setCompetitorLocations([]);
-              setPreviewError('');
-              setPreviewMessage(previewBusinessType ? 'Adjust the radius or choose another MSME to preview competitors.' : 'Choose an MSME and radius to preview competitors.');
+          hazardGeoJsonLayerRef.current = layer;
+          setCompetitorLocations([]);
+          setPreviewError('');
+          setPreviewMessage(previewBusinessType ? 'Adjust the radius or choose another MSME to preview competitors.' : 'Choose an MSME and radius to preview competitors.');
           if (mapViewModeRef.current === 'flood') {
             layer.addTo(hazardLayerGroup.current);
           }
