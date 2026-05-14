@@ -721,6 +721,10 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   animation: slideUpFade 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+.map-quick-panel.location-updated {
+  animation: locPulse 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 .map-quick-panel.is-collapsed {
   width: 260px;
   padding: 12px 14px;
@@ -877,11 +881,11 @@ html[data-theme="light"] .map-quick-panel {
     max-width: calc(100vw - 24px);
     z-index: 3000;
     border-radius: 18px;
-    max-height: 70vh;
+    max-height: 50vh;
   }
 
   .map-quick-panel:not(.is-collapsed) {
-    max-height: 65vh;
+    max-height: 48vh;
     overflow-y: auto;
     overflow-x: hidden;
   }
@@ -918,6 +922,18 @@ html[data-theme="light"] .map-quick-panel {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes locPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

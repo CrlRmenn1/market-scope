@@ -75,6 +75,7 @@ export default function Home({ onMapTap, userId }) {
   const [previewMessage, setPreviewMessage] = useState('Drop a pin, then choose an MSME and radius to preview competitors.');
   const [previewError, setPreviewError] = useState('');
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [locationUpdated, setLocationUpdated] = useState(false);
 
   const createCompetitorIcon = (name) => {
     const initials = String(name || 'C').trim().slice(0, 1).toUpperCase();
@@ -186,7 +187,7 @@ export default function Home({ onMapTap, userId }) {
         }
 
         setSelectedCoord(e.latlng);
-        setPreviewRadius(500);
+        setLocationUpdated(true);
         if (competitorLayerGroup.current) {
           competitorLayerGroup.current.clearLayers();
         }
@@ -390,6 +391,12 @@ export default function Home({ onMapTap, userId }) {
     });
   }, [competitorLocations]);
 
+  useEffect(() => {
+    if (!locationUpdated) return;
+    const timer = setTimeout(() => setLocationUpdated(false), 400);
+    return () => clearTimeout(timer);
+  }, [locationUpdated]);
+
   return (
     <div className={`home-container relative page-enter ${mapViewMode}-mode`} data-map-mode={mapViewMode}>
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }} />
@@ -402,7 +409,7 @@ export default function Home({ onMapTap, userId }) {
 
       {selectedCoord && (
         <div
-          className={`map-quick-panel data-card ${previewCollapsed ? 'is-collapsed' : ''}`}
+          className={`map-quick-panel data-card ${previewCollapsed ? 'is-collapsed' : ''} ${locationUpdated ? 'location-updated' : ''}`}
           onClick={() => previewCollapsed && setPreviewCollapsed(false)}
           style={{ cursor: previewCollapsed ? 'pointer' : 'default' }}
         >
