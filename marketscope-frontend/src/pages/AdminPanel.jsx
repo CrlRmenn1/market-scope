@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
 import { parseCoordinatePairText } from '../utils/coordinates';
+import MapPicker from '../components/MapPicker';
 
 const defaultMsmeForm = {
   name: '',
@@ -133,6 +134,7 @@ export default function AdminPanel({ adminSession }) {
   const [spaceLoading, setSpaceLoading] = useState(true);
   const [spaceFilterStatus, setSpaceFilterStatus] = useState('pending');
   const [adminSpaceForm, setAdminSpaceForm] = useState(defaultAdminSpaceForm);
+  const [showAdminMapPicker, setShowAdminMapPicker] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -190,6 +192,32 @@ export default function AdminPanel({ adminSession }) {
       latitude: String(parsed.latitude),
       longitude: String(parsed.longitude)
     }));
+  };
+
+  const requestAdminGeolocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMessage('Geolocation not supported in this browser.');
+      setShowAdminMapPicker(true);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setAdminSpaceForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+        setErrorMessage('');
+      },
+      (err) => {
+        setErrorMessage('Unable to get location. Please allow location access or pin on map.');
+        setShowAdminMapPicker(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleAdminMapSelect = ({ latitude, longitude }) => {
+    setAdminSpaceForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+    setShowAdminMapPicker(false);
   };
 
   const loadCustomMsmes = async () => {
@@ -686,7 +714,7 @@ export default function AdminPanel({ adminSession }) {
                 </div>
               </div>
 
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                  <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
                 <div className="input-group" style={{ marginBottom: 0 }}>
                   <label>Latitude <span className="required-indicator">*</span></label>
                   <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} placeholder="7.310967506654152, 125.6853653454886" />
@@ -696,6 +724,11 @@ export default function AdminPanel({ adminSession }) {
                   <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} />
                 </div>
               </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <button type="button" className="secondary-btn" onClick={requestAdminGeolocation}>Use my location</button>
+                    <button type="button" className="secondary-btn" onClick={() => setShowAdminMapPicker(true)}>Pin on map</button>
+                  </div>
+                  {showAdminMapPicker && <MapPicker onSelect={handleAdminMapSelect} onClose={() => setShowAdminMapPicker(false)} />}
 
               <div className="input-group">
                 <label>Property Type</label>

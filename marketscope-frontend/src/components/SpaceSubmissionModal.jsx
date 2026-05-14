@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
 import { parseCoordinatePairText } from '../utils/coordinates';
+import MapPicker from './MapPicker';
 
 const BUSINESS_TYPE_OPTIONS = [
   { value: '', label: 'Not specific' },
@@ -40,6 +41,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const steps = ['Listing Basics', 'Location & Price', 'Contact & Notes'];
 
@@ -75,6 +77,32 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
       latitude: String(parsed.latitude),
       longitude: String(parsed.longitude),
     }));
+  };
+
+  const requestGeolocation = async () => {
+    if (!navigator.geolocation) {
+      setErrorMessage('Geolocation is not supported in this browser.');
+      setShowMapPicker(true);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+        setErrorMessage('');
+      },
+      (err) => {
+        setErrorMessage('Unable to get location. Please allow location access or pin on map.');
+        setShowMapPicker(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleMapSelect = ({ latitude, longitude }) => {
+    setForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+    setShowMapPicker(false);
   };
 
   const handleSubmit = async () => {
@@ -249,6 +277,13 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                       <input className="history-search-input" type="text" inputMode="decimal" step="any" required value={form.longitude} onChange={(event) => handleFieldChange('longitude', event.target.value)} onPaste={handleCoordinatePaste('longitude')} placeholder="125.68110" />
                     </div>
                   </div>
+
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <button type="button" className="secondary-btn" onClick={requestGeolocation}>Use my location</button>
+                    <button type="button" className="secondary-btn" onClick={() => setShowMapPicker(true)}>Pin on map</button>
+                  </div>
+
+                  {showMapPicker && <MapPicker onSelect={handleMapSelect} onClose={() => setShowMapPicker(false)} />}
 
                   <div className="input-group">
                     <label className="input-label">Address</label>
