@@ -135,6 +135,7 @@ export default function AdminPanel({ adminSession }) {
   const [spaceFilterStatus, setSpaceFilterStatus] = useState('pending');
   const [adminSpaceForm, setAdminSpaceForm] = useState(defaultAdminSpaceForm);
   const [showAdminMapPicker, setShowAdminMapPicker] = useState(false);
+  const [showMsmeMapPicker, setShowMsmeMapPicker] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -218,6 +219,32 @@ export default function AdminPanel({ adminSession }) {
   const handleAdminMapSelect = ({ latitude, longitude }) => {
     setAdminSpaceForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
     setShowAdminMapPicker(false);
+  };
+
+  const requestMsmeGeolocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMessage('Geolocation not supported in this browser.');
+      setShowMsmeMapPicker(true);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setMsmeForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+        setErrorMessage('');
+      },
+      (err) => {
+        setErrorMessage('Unable to get location. Please allow location access or pin on map.');
+        setShowMsmeMapPicker(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleMsmeMapSelect = ({ latitude, longitude }) => {
+    setMsmeForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+    setShowMsmeMapPicker(false);
   };
 
   const loadCustomMsmes = async () => {
@@ -545,6 +572,12 @@ export default function AdminPanel({ adminSession }) {
                 <label>Longitude</label>
                 <input value={msmeForm.longitude} onChange={(e) => setMsmeForm((c) => ({ ...c, longitude: e.target.value }))} />
               </div>
+              <div style={{ display: 'flex', gap: 12, margin: '10px 0 14px', justifyContent: 'center' }}>
+                <button type="button" className="map-action-btn" onClick={requestMsmeGeolocation}>Use my location</button>
+                <button type="button" className="map-action-btn" onClick={() => setShowMsmeMapPicker(true)}>Pin on map</button>
+              </div>
+              {showMsmeMapPicker && <MapPicker onSelect={handleMsmeMapSelect} onClose={() => setShowMsmeMapPicker(false)} />}
+
               <button type="submit" className="primary-btn">{editingMsmeId ? 'Update MSME' : 'Create MSME'}</button>
               {editingMsmeId && (
                 <button
@@ -724,9 +757,13 @@ export default function AdminPanel({ adminSession }) {
                   <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} />
                 </div>
               </div>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                    <button type="button" className="secondary-btn" onClick={requestAdminGeolocation}>Use my location</button>
-                    <button type="button" className="secondary-btn" onClick={() => setShowAdminMapPicker(true)}>Pin on map</button>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 10, justifyContent: 'center' }}>
+                    <button type="button" className="map-action-btn" onClick={requestAdminGeolocation}>
+                      <span>Use my location</span>
+                    </button>
+                    <button type="button" className="map-action-btn" onClick={() => setShowAdminMapPicker(true)}>
+                      <span>Pin on map</span>
+                    </button>
                   </div>
                   {showAdminMapPicker && <MapPicker onSelect={handleAdminMapSelect} onClose={() => setShowAdminMapPicker(false)} />}
 

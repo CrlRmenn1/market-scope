@@ -278,9 +278,13 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                    <button type="button" className="secondary-btn" onClick={requestGeolocation}>Use my location</button>
-                    <button type="button" className="secondary-btn" onClick={() => setShowMapPicker(true)}>Pin on map</button>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 10, justifyContent: 'center' }}>
+                    <button type="button" className="map-action-btn" onClick={requestGeolocation}>
+                      <span>Use my location</span>
+                    </button>
+                    <button type="button" className="map-action-btn" onClick={() => setShowMapPicker(true)}>
+                      <span>Pin on map</span>
+                    </button>
                   </div>
 
                   {showMapPicker && <MapPicker onSelect={handleMapSelect} onClose={() => setShowMapPicker(false)} />}
