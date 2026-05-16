@@ -283,6 +283,7 @@ class UserSpaceSubmissionRequest(BaseModel):
     price_max: int | None = None
     contact_info: str | None = None
     notes: str | None = None
+    photo_urls: list[str] | None = None
 
 
 class AdminSpaceSubmissionRequest(BaseModel):
@@ -300,6 +301,7 @@ class AdminSpaceSubmissionRequest(BaseModel):
     source_note: str | None = None
     contact_info: str | None = None
     notes: str | None = None
+    photo_urls: list[str] | None = None
     verified_at: date | None = None
     expires_at: date | None = None
     is_active: bool = True
@@ -1363,6 +1365,7 @@ def fetch_active_space_markers_for_analysis():
             price_max,
             contact_info,
             notes,
+            photo_urls,
             created_at,
             reviewed_at,
             'user'::text AS source_type
@@ -1389,6 +1392,7 @@ def fetch_active_space_markers_for_analysis():
             contact_info,
             notes,
             confidence_score,
+            photo_urls,
             created_at,
             verified_at,
             expires_at,
@@ -1421,6 +1425,7 @@ def fetch_active_space_markers_for_analysis():
             "price_max": row.get("price_max"),
             "contact_info": row.get("contact_info"),
             "notes": row.get("notes"),
+            "photo_urls": row.get("photo_urls") or [],
             "confidence_score": 100,
             "verified_at": row.get("reviewed_at") or row.get("created_at"),
             "expires_at": None,
@@ -1442,6 +1447,7 @@ def fetch_active_space_markers_for_analysis():
             "price_max": row.get("price_max"),
             "contact_info": row.get("contact_info"),
             "notes": row.get("notes"),
+            "photo_urls": row.get("photo_urls") or [],
             "confidence_score": row.get("confidence_score"),
             "verified_at": row.get("verified_at") or row.get("created_at"),
             "expires_at": row.get("expires_at"),
@@ -1878,9 +1884,10 @@ def create_user_space_submission(payload: UserSpaceSubmissionRequest):
                 price_max,
                 contact_info,
                 notes,
+                photo_urls,
                 status
             )
-            VALUES (%s, %s, %s, 'guaranteed', %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+            VALUES (%s, %s, %s, 'guaranteed', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
             RETURNING *
             """,
             (
@@ -1896,6 +1903,7 @@ def create_user_space_submission(payload: UserSpaceSubmissionRequest):
                 payload.price_max,
                 (payload.contact_info or None),
                 (payload.notes or None),
+                Json(payload.photo_urls or []),
             )
         )
         created = cursor.fetchone()
@@ -2049,12 +2057,13 @@ def admin_create_admin_space_submission(
                 source_note,
                 contact_info,
                 notes,
+                photo_urls,
                 verified_at,
                 expires_at,
                 is_active,
                 created_by_admin_email
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -2072,6 +2081,7 @@ def admin_create_admin_space_submission(
                 (payload.source_note or None),
                 (payload.contact_info or None),
                 (payload.notes or None),
+                Json(payload.photo_urls or []),
                 payload.verified_at,
                 payload.expires_at,
                 payload.is_active,

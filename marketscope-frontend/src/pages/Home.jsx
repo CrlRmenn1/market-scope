@@ -60,11 +60,14 @@ export default function Home({ onMapTap, userId }) {
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
   const hazardGeoJsonLayerRef = useRef(null);
+  const spaceMarkerLayerGroup = useRef(null);
+  const spaceHoverTimers = useRef(new Map());
   const selectedMarkerRef = useRef(null);
   const competitorLayerGroup = useRef(null);
   const competitorCircleRef = useRef(null);
   const previewRequestIdRef = useRef(0);
   const [selectedCoord, setSelectedCoord] = useState(null);
+  const [selectedSpaceMarker, setSelectedSpaceMarker] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('normal');
   const mapViewModeRef = useRef('normal');
   const [outOfBounds, setOutOfBounds] = useState(false);
@@ -76,6 +79,34 @@ export default function Home({ onMapTap, userId }) {
   const [previewError, setPreviewError] = useState('');
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
+  const [selectedSpacePhotoIndex, setSelectedSpacePhotoIndex] = useState(0);
+
+  const normalizePhotoUrls = (marker) => {
+    const rawPhotos = Array.isArray(marker?.photo_urls) ? marker.photo_urls : [];
+    return rawPhotos.filter(Boolean).slice(0, 4);
+  };
+
+  const selectedSpacePhotos = normalizePhotoUrls(selectedSpaceMarker);
+  const selectedSpacePhotoUrl = selectedSpacePhotos[selectedSpacePhotoIndex] || selectedSpacePhotos[0] || '';
+
+  const formatSpacePrice = (marker) => {
+    const priceMin = Number(marker?.price_min || 0);
+    const priceMax = Number(marker?.price_max || 0);
+
+    if (priceMin > 0 && priceMax > 0) {
+      return `PHP ${priceMin.toLocaleString()} - PHP ${priceMax.toLocaleString()}`;
+    }
+
+    if (priceMin > 0) {
+      return `From PHP ${priceMin.toLocaleString()}`;
+    }
+
+    if (priceMax > 0) {
+      return `Up to PHP ${priceMax.toLocaleString()}`;
+    }
+
+    return 'Price not set';
+  };
 
   const createCompetitorIcon = (name) => {
     const initials = String(name || 'C').trim().slice(0, 1).toUpperCase();
@@ -92,6 +123,54 @@ export default function Home({ onMapTap, userId }) {
       iconAnchor: [16, 30],
       tooltipAnchor: [0, -22]
     });
+  };
+
+  const getSpaceMarkerTone = (marker) => {
+    const sourceType = String(marker?.source_type || '').toLowerCase();
+    const guarantee = String(marker?.guarantee_level || '').toLowerCase();
+
+    if (sourceType === 'user') return 'user-guaranteed';
+    if (guarantee === 'guaranteed') return 'admin-guaranteed';
+    return 'admin-potential';
+  };
+
+  const createSpaceMarkerIcon = (marker) => {
+    const tone = getSpaceMarkerTone(marker);
+    const glyph = tone === 'user-guaranteed' ? 'U' : tone === 'admin-guaranteed' ? 'A' : 'P';
+    const badge = tone === 'admin-potential' ? '?' : 'OK';
+
+    return L.divIcon({
+      className: 'space-marker-icon-wrapper',
+      html: `
+        <div class="space-marker space-marker--${tone}">
+          <span class="space-marker__glyph">${glyph}</span>
+          <span class="space-marker__badge">${badge}</span>
+        </div>
+      `,
+      iconSize: [34, 34],
+      iconAnchor: [17, 32],
+      tooltipAnchor: [0, -26]
+    });
+  };
+
+  const buildMarkerBrief = (marker) => {
+    const listingMode = String(marker?.listing_mode || '').toLowerCase();
+    const modeLabel = listingMode === 'buy' ? 'For Sale' : 'For Rent';
+    const sourceLabel = marker?.source_type === 'user' ? 'User Guaranteed' : marker?.guarantee_level === 'guaranteed' ? 'Admin Guaranteed' : 'Admin Potential';
+    const priceMin = Number(marker?.price_min || 0);
+    const priceMax = Number(marker?.price_max || 0);
+    let priceLabel = 'Price not set';
+
+    if (priceMin > 0 && priceMax > 0) {
+      priceLabel = `PHP ${priceMin.toLocaleString()} - PHP ${priceMax.toLocaleString()}`;
+    } else if (priceMin > 0) {
+      priceLabel = `From PHP ${priceMin.toLocaleString()}`;
+    } else if (priceMax > 0) {
+      priceLabel = `Up to PHP ${priceMax.toLocaleString()}`;
+    }
+
+    const title = marker?.title || 'Space listing';
+    return `<strong>${title}</strong><br/>${modeLabel} | ${sourceLabel}<br/>${priceLabel}`;
   };
 
   const isWithinBounds = (lat, lng) => {
@@ -141,7 +220,71 @@ export default function Home({ onMapTap, userId }) {
       }).addTo(mapInstance.current);
 
       hazardLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
+      spaceMarkerLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
       competitorLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
+
+      fetch(apiUrl('/spaces/map-markers'))
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Unable to load map space markers');
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (!spaceMarkerLayerGroup.current || !mapInstance.current) return;
+
+          const markers = Array.isArray(data?.markers) ? data.markers : [];
+
+          markers.forEach((item) => {
+            const lat = Number(item?.latitude);
+            const lng = Number(item?.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+            const marker = L.marker([lat, lng], { icon: createSpaceMarkerIcon(item) }).addTo(spaceMarkerLayerGroup.current);
+            marker.bindTooltip(buildMarkerBrief(item), {
+              className: 'space-brief-tooltip',
+              direction: 'top',
+              sticky: false,
+              opacity: 1
+            });
+
+            marker.on('mouseover', () => {
+              const timer = window.setTimeout(() => {
+                marker.openTooltip();
+              }, 1500);
+              spaceHoverTimers.current.set(marker._leaflet_id, timer);
+            });
+
+            marker.on('mouseout', () => {
+              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
+              if (timer) {
+                window.clearTimeout(timer);
+                spaceHoverTimers.current.delete(marker._leaflet_id);
+              }
+              marker.closeTooltip();
+            });
+
+            marker.on('click', () => {
+              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
+              if (timer) {
+                window.clearTimeout(timer);
+                spaceHoverTimers.current.delete(marker._leaflet_id);
+              }
+              const coords = { lat, lng };
+              setSelectedCoord(coords);
+              setSelectedSpaceMarker({
+                ...item,
+                latitude: lat,
+                longitude: lng,
+                photo_urls: normalizePhotoUrls(item)
+              });
+              mapInstance.current.panTo([lat, lng]);
+            });
+          });
+        })
+        .catch(() => {
+          // Keep map usable even if marker feed is temporarily unavailable.
+        });
 
       fetch('/panabo_hazard_5yr.geojson')
         .then((response) => {
@@ -188,6 +331,7 @@ export default function Home({ onMapTap, userId }) {
         }
 
         setSelectedCoord(e.latlng);
+        setSelectedSpaceMarker(null);
         setLocationUpdated(true);
         if (competitorLayerGroup.current) {
           competitorLayerGroup.current.clearLayers();
@@ -205,6 +349,14 @@ export default function Home({ onMapTap, userId }) {
         selectedMarkerRef.current.remove();
         selectedMarkerRef.current = null;
       }
+
+      if (spaceMarkerLayerGroup.current) {
+        spaceMarkerLayerGroup.current.clearLayers();
+        spaceMarkerLayerGroup.current = null;
+      }
+
+      spaceHoverTimers.current.forEach((timer) => window.clearTimeout(timer));
+      spaceHoverTimers.current.clear();
 
       if (competitorLayerGroup.current) {
         competitorLayerGroup.current.clearLayers();
@@ -239,6 +391,10 @@ export default function Home({ onMapTap, userId }) {
       hazardLayerGroup.current.removeLayer(layer);
     }
   }, [mapViewMode]);
+
+  useEffect(() => {
+    setSelectedSpacePhotoIndex(0);
+  }, [selectedSpaceMarker]);
 
   useEffect(() => {
     if (!mapInstance.current) return;
@@ -373,6 +529,12 @@ export default function Home({ onMapTap, userId }) {
   }, [selectedCoord, previewBusinessType, previewRadius, userId]);
 
   useEffect(() => {
+    if (!selectedSpaceMarker) return;
+    const timer = setTimeout(() => setLocationUpdated(false), 120);
+    return () => clearTimeout(timer);
+  }, [selectedSpaceMarker]);
+
+  useEffect(() => {
     if (!mapInstance.current || !competitorLayerGroup.current) return;
 
     competitorLayerGroup.current.clearLayers();
@@ -405,6 +567,84 @@ export default function Home({ onMapTap, userId }) {
       {outOfBounds && (
         <div className="out-of-bounds-warning">
           Click within Panabo City boundary only
+        </div>
+      )}
+
+      {selectedSpaceMarker && selectedCoord && (
+        <div className="space-detail-overlay" onClick={() => setSelectedSpaceMarker(null)} role="presentation">
+          <div className="space-detail-card" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Space details">
+            <button type="button" className="space-detail-close" onClick={() => setSelectedSpaceMarker(null)} aria-label="Close space details">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18"></path><path d="M6 6L18 18"></path></svg>
+            </button>
+
+            <div className="space-detail-scroll">
+              <div className="space-detail-media">
+                {selectedSpacePhotos.length > 0 ? (
+                  <div className="space-detail-photo-shell">
+                    <div className="space-detail-photo-stage">
+                      <img src={selectedSpacePhotoUrl} alt={`${selectedSpaceMarker.title || 'Space'} photo ${selectedSpacePhotoIndex + 1}`} />
+                    </div>
+                    <div className="space-detail-photo-strip" role="list" aria-label="Space photos">
+                      {selectedSpacePhotos.map((photoUrl, index) => (
+                        <button
+                          key={`${photoUrl}-${index}`}
+                          type="button"
+                          className={`space-detail-photo-thumb ${selectedSpacePhotoIndex === index ? 'is-active' : ''}`}
+                          onClick={() => setSelectedSpacePhotoIndex(index)}
+                          aria-label={`View photo ${index + 1}`}
+                        >
+                          <img src={photoUrl} alt={`${selectedSpaceMarker.title || 'Space'} thumbnail ${index + 1}`} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-detail-photo-empty">No photos uploaded</div>
+                )}
+              </div>
+
+              <div className="space-detail-body">
+                <div className="space-detail-header">
+                  <div>
+                    <p className="space-detail-kicker">{selectedSpaceMarker.listing_mode === 'buy' ? 'For Sale' : 'For Rent'}</p>
+                    <h3>{selectedSpaceMarker.title || 'Space listing'}</h3>
+                  </div>
+                  <span className={`space-detail-chip space-detail-chip--${getSpaceMarkerTone(selectedSpaceMarker)}`}>
+                    {selectedSpaceMarker.source_type === 'user' ? 'User' : 'Admin'}
+                  </span>
+                </div>
+
+                <div className="space-detail-grid">
+                  <div><span>Property</span><strong>{selectedSpaceMarker.property_type || 'Not specified'}</strong></div>
+                  <div><span>Category</span><strong>{selectedSpaceMarker.business_type || 'Not specified'}</strong></div>
+                  <div><span>Coordinates</span><strong>{Number(selectedSpaceMarker.latitude).toFixed(5)}, {Number(selectedSpaceMarker.longitude).toFixed(5)}</strong></div>
+                  <div><span>Price</span><strong>{formatSpacePrice(selectedSpaceMarker)}</strong></div>
+                </div>
+
+                <div className="space-detail-list">
+                  <p><span>Address:</span> {selectedSpaceMarker.address_text || 'Not provided'}</p>
+                  <p><span>Contact:</span> {selectedSpaceMarker.contact_info || 'Not provided'}</p>
+                  <p><span>Notes:</span> {selectedSpaceMarker.notes || 'No notes added.'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-detail-actions">
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  onMapTap({ lat: Number(selectedSpaceMarker.latitude), lng: Number(selectedSpaceMarker.longitude) }, {
+                    prefillBusinessType: selectedSpaceMarker.business_type || '',
+                    prefillRadius: previewRadius
+                  });
+                  setSelectedSpaceMarker(null);
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

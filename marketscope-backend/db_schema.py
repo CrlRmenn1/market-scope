@@ -164,6 +164,7 @@ def ensure_user_space_submissions_table(cursor, user_pk_column):
             price_max INTEGER,
             contact_info TEXT,
             notes TEXT,
+            photo_urls JSONB,
             status VARCHAR(20) NOT NULL DEFAULT 'pending',
             review_note TEXT,
             reviewed_by_admin_email TEXT,
@@ -173,6 +174,7 @@ def ensure_user_space_submissions_table(cursor, user_pk_column):
         )
         """ % user_pk_column
     )
+    cursor.execute("ALTER TABLE user_space_submissions ADD COLUMN IF NOT EXISTS photo_urls JSONB")
 
 
 def ensure_admin_space_submissions_table(cursor):
@@ -194,6 +196,7 @@ def ensure_admin_space_submissions_table(cursor):
             source_note TEXT,
             contact_info TEXT,
             notes TEXT,
+            photo_urls JSONB,
             verified_at DATE,
             expires_at DATE,
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -203,6 +206,7 @@ def ensure_admin_space_submissions_table(cursor):
         )
         """
     )
+    cursor.execute("ALTER TABLE admin_space_submissions ADD COLUMN IF NOT EXISTS photo_urls JSONB")
 
 
 def ensure_admin_users_table(cursor):

@@ -25,6 +25,7 @@ const defaultAdminSpaceForm = {
   source_note: '',
   contact_info: '',
   notes: '',
+  photo_urls: [],
   verified_at: '',
   expires_at: '',
   is_active: true
@@ -134,6 +135,7 @@ export default function AdminPanel({ adminSession }) {
   const [spaceLoading, setSpaceLoading] = useState(true);
   const [spaceFilterStatus, setSpaceFilterStatus] = useState('pending');
   const [adminSpaceForm, setAdminSpaceForm] = useState(defaultAdminSpaceForm);
+  const [selectedAdminPhotoIndex, setSelectedAdminPhotoIndex] = useState(0);
   const [showAdminMapPicker, setShowAdminMapPicker] = useState(false);
   const [showMsmeMapPicker, setShowMsmeMapPicker] = useState(false);
 
@@ -316,6 +318,52 @@ export default function AdminPanel({ adminSession }) {
     }
   }, [spaceFilterStatus, activeTab]);
 
+  useEffect(() => {
+    const photoCount = adminSpaceForm.photo_urls?.length || 0;
+
+    if (photoCount === 0) {
+      setSelectedAdminPhotoIndex(0);
+      return;
+    }
+
+    setSelectedAdminPhotoIndex((current) => Math.min(current, photoCount - 1));
+  }, [adminSpaceForm.photo_urls]);
+
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read photo file.'));
+    reader.readAsDataURL(file);
+  });
+
+  const handleAdminPhotoUpload = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    const remainingSlots = Math.max(0, 4 - (adminSpaceForm.photo_urls?.length || 0));
+    const selectedFiles = files.slice(0, remainingSlots);
+
+    try {
+      const encodedPhotos = await Promise.all(selectedFiles.map((file) => readFileAsDataUrl(file)));
+      setAdminSpaceForm((current) => ({
+        ...current,
+        photo_urls: [...(current.photo_urls || []), ...encodedPhotos].slice(0, 4)
+      }));
+      setErrorMessage('');
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to add photos.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const removeAdminPhotoAtIndex = (index) => {
+    setAdminSpaceForm((current) => ({
+      ...current,
+      photo_urls: (current.photo_urls || []).filter((_, currentIndex) => currentIndex !== index)
+    }));
+  };
+
   const submitMsme = async (event) => {
     event.preventDefault();
     resetMessages();
@@ -474,6 +522,7 @@ export default function AdminPanel({ adminSession }) {
       source_note: adminSpaceForm.source_note.trim() || null,
       contact_info: adminSpaceForm.contact_info.trim() || null,
       notes: adminSpaceForm.notes.trim() || null,
+      photo_urls: adminSpaceForm.photo_urls || [],
       verified_at: adminSpaceForm.verified_at || null,
       expires_at: adminSpaceForm.expires_at || null,
       is_active: Boolean(adminSpaceForm.is_active)
@@ -500,6 +549,7 @@ export default function AdminPanel({ adminSession }) {
 
       setSuccessMessage('Admin space submission created.');
       setAdminSpaceForm(defaultAdminSpaceForm);
+      setSelectedAdminPhotoIndex(0);
       await loadSpaces(spaceFilterStatus);
     } catch (error) {
       setErrorMessage(error.message || 'Unable to save admin space submission');
@@ -801,6 +851,33 @@ export default function AdminPanel({ adminSession }) {
               <div className="input-group">
                 <label>Notes</label>
                 <textarea value={adminSpaceForm.notes} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, notes: e.target.value }))} rows={3} />
+              </div>
+
+              <div className="input-group">
+                <label>Photos for Preview</label>
+                <input type="file" accept="image/*" multiple onChange={handleAdminPhotoUpload} />
+                <p className="form-hint">Upload up to 4 photos. Tap a thumbnail to review it.</p>
+                {adminSpaceForm.photo_urls?.length > 0 && (
+                  <div className="photo-review-shell">
+                    <div className="photo-review-strip" role="list" aria-label="Admin uploaded photos">
+                      {adminSpaceForm.photo_urls.map((photoUrl, index) => (
+                        <div key={`${photoUrl}-${index}`} className={`photo-review-thumb ${selectedAdminPhotoIndex === index ? 'is-active' : ''}`} role="listitem">
+                          <button
+                            type="button"
+                            className="photo-review-thumb-select"
+                            onClick={() => setSelectedAdminPhotoIndex(index)}
+                            aria-label={`Review admin photo ${index + 1}`}
+                          >
+                            <img src={photoUrl} alt={`Admin thumbnail ${index + 1}`} />
+                          </button>
+                          <button type="button" className="photo-preview-remove" onClick={() => removeAdminPhotoAtIndex(index)} aria-label={`Remove admin photo ${index + 1}`}>
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="admin-tools-grid" style={{ marginBottom: 12 }}>

@@ -31,12 +31,14 @@ const defaultForm = {
   price_min: '',
   price_max: '',
   contact_info: '',
-  notes: ''
+  notes: '',
+  photo_urls: []
 };
 
 export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState(defaultForm);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -55,6 +57,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     if (!isOpen) {
       setStepIndex(0);
       setForm(defaultForm);
+      setSelectedPhotoIndex(0);
       setSubmitting(false);
       setErrorMessage('');
       setSuccessMessage('');
@@ -62,8 +65,54 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    const photoCount = form.photo_urls?.length || 0;
+
+    if (photoCount === 0) {
+      setSelectedPhotoIndex(0);
+      return;
+    }
+
+    setSelectedPhotoIndex((current) => Math.min(current, photoCount - 1));
+  }, [form.photo_urls]);
+
   const handleFieldChange = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read photo file.'));
+    reader.readAsDataURL(file);
+  });
+
+  const handlePhotoUpload = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    const remainingSlots = Math.max(0, 4 - (form.photo_urls?.length || 0));
+    const selectedFiles = files.slice(0, remainingSlots);
+
+    try {
+      const encodedPhotos = await Promise.all(selectedFiles.map((file) => readFileAsDataUrl(file)));
+      setForm((current) => ({
+        ...current,
+        photo_urls: [...(current.photo_urls || []), ...encodedPhotos].slice(0, 4)
+      }));
+      setErrorMessage('');
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to add photos.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const removePhotoAtIndex = (index) => {
+    setForm((current) => ({
+      ...current,
+      photo_urls: (current.photo_urls || []).filter((_, currentIndex) => currentIndex !== index)
+    }));
   };
 
   const handleCoordinatePaste = () => (event) => {
@@ -149,7 +198,8 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
           price_min: form.price_min === '' ? null : Number(form.price_min),
           price_max: form.price_max === '' ? null : Number(form.price_max),
           contact_info: form.contact_info.trim() || null,
-          notes: form.notes.trim() || null
+          notes: form.notes.trim() || null,
+          photo_urls: form.photo_urls || []
         })
       });
 
@@ -222,8 +272,9 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
           <h2 className="sheet-title">Submit Space Listing</h2>
           <p className="sheet-subtitle">Send a guaranteed listing to admin review for map publishing.</p>
 
-          {!isSubmitted ? (
-            <>
+          <div className="space-submission-body">
+            {!isSubmitted ? (
+              <>
               <div className="onboarding-progress" style={{ marginBottom: 14 }}>
                 {steps.map((step, index) => (
                   <div key={step} className={`onboarding-dot ${index === stepIndex ? 'active' : ''}`} />
@@ -261,6 +312,33 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                         <option key={option.value || 'none'} value={option.value}>{option.label}</option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label">Photos for Preview</label>
+                    <input className="history-search-input" type="file" accept="image/*" multiple onChange={handlePhotoUpload} />
+                    <p className="form-hint">Upload up to 4 photos. They will be shown on the map popup.</p>
+                    {form.photo_urls?.length > 0 && (
+                      <div className="photo-review-shell">
+                        <div className="photo-review-strip" role="list" aria-label="Uploaded photos">
+                          {form.photo_urls.map((photoUrl, index) => (
+                            <div key={`${photoUrl}-${index}`} className={`photo-review-thumb ${selectedPhotoIndex === index ? 'is-active' : ''}`} role="listitem">
+                              <button
+                                type="button"
+                                className="photo-review-thumb-select"
+                                onClick={() => setSelectedPhotoIndex(index)}
+                                aria-label={`Review photo ${index + 1}`}
+                              >
+                                <img src={photoUrl} alt={`Uploaded thumbnail ${index + 1}`} />
+                              </button>
+                              <button type="button" className="photo-preview-remove" onClick={() => removePhotoAtIndex(index)} aria-label={`Remove photo ${index + 1}`}>
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -305,6 +383,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                     </div>
                   </div>
                 </div>
+
               )}
 
               {stepIndex === 2 && (
@@ -326,42 +405,45 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
                   </div>
                 </div>
               )}
+              </>
+            ) : (
+              <div className="space-submit-success-state fade-in">
+                <div className="space-submit-success-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg>
+                </div>
+                <h3 className="sheet-title" style={{ marginBottom: 8 }}>Submission Received</h3>
+                <p className="sheet-subtitle" style={{ marginBottom: 12 }}>{successMessage}</p>
+                <div className="admin-success-alert mt-3" style={{ marginBottom: 18 }}>
+                  Your listing is now in the admin queue for review and publishing.
+                </div>
+                <button type="button" className="primary-btn" onClick={onClose}>Done</button>
+              </div>
+            )}
+          </div>
 
-              <div className="history-actions-row mt-4" style={{ gap: 12 }}>
-                {stepIndex > 0 && (
-                  <button type="button" className="secondary-btn wizard-back-btn" style={{ marginTop: 0 }} onClick={() => setStepIndex((current) => Math.max(0, current - 1))}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
-                    <span>Back</span>
-                  </button>
-                )}
+          {!isSubmitted && (
+            <div className="history-actions-row mt-4 space-submission-actions" style={{ gap: 12 }}>
+              {stepIndex > 0 && (
+                <button type="button" className="secondary-btn wizard-back-btn" style={{ marginTop: 0 }} onClick={() => setStepIndex((current) => Math.max(0, current - 1))}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+                  <span>Back</span>
+                </button>
+              )}
 
-                {stepIndex < steps.length - 1 ? (
-                  <button
-                    type="button"
-                    className="primary-btn"
-                    disabled={!canProceedFromCurrentStep()}
-                    onClick={handleNext}
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <button type="button" className="primary-btn" disabled={!canSubmit || submitting} onClick={handleSubmit}>
-                    {submitting ? 'Submitting...' : 'Submit to Admin'}
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="space-submit-success-state fade-in">
-              <div className="space-submit-success-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"></path></svg>
-              </div>
-              <h3 className="sheet-title" style={{ marginBottom: 8 }}>Submission Received</h3>
-              <p className="sheet-subtitle" style={{ marginBottom: 12 }}>{successMessage}</p>
-              <div className="admin-success-alert mt-3" style={{ marginBottom: 18 }}>
-                Your listing is now in the admin queue for review and publishing.
-              </div>
-              <button type="button" className="primary-btn" onClick={onClose}>Done</button>
+              {stepIndex < steps.length - 1 ? (
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={!canProceedFromCurrentStep()}
+                  onClick={handleNext}
+                >
+                  Next
+                </button>
+              ) : (
+                <button type="button" className="primary-btn" disabled={!canSubmit || submitting} onClick={handleSubmit}>
+                  {submitting ? 'Submitting...' : 'Submit to Admin'}
+                </button>
+              )}
             </div>
           )}
         </div>
