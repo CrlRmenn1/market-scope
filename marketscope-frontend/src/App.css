@@ -4204,6 +4204,21 @@ html[data-theme="light"] .trends-score-badge.low {
   background: rgba(168,85,247,0.08);
 }
 
+/* Ensure map quick panel select stays dark even in light theme */
+.map-quick-panel .styled-select,
+.map-quick-panel .styled-select:focus {
+  background: #0b0b0d !important;
+  color: #111827 !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+.map-quick-panel .styled-select option,
+.map-quick-panel .styled-select option:checked,
+.map-quick-panel .styled-select option[selected] {
+  background: #0b0b0d !important;
+  color: #111827 !important;
+}
+
 .onboarding-description {
   color: var(--text-muted);
   font-size: 0.92rem;

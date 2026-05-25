@@ -13,6 +13,26 @@ import OnboardingModal from './components/OnboardingModal';
 import SpaceSubmissionModal from './components/SpaceSubmissionModal';
 import './App.css';
 
+const REQUIRED_TREND_FIELDS = [
+  'primary_business',
+  'startup_capital',
+  'risk_tolerance',
+  'preferred_setup',
+  'time_commitment',
+  'target_payback_months'
+];
+
+const normalizePreferenceValue = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  return value;
+};
+
+const getMissingTrendPreferenceFields = (user) => REQUIRED_TREND_FIELDS.filter((field) => normalizePreferenceValue(user?.[field]) === null);
+
 export default function App() {
   const validTabs = ['home', 'trends', 'profile', 'history'];
   const OPEN_REPORT_KEY = 'marketscope_open_report';
@@ -36,6 +56,7 @@ export default function App() {
   const [justLoggedOut, setJustLoggedOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSpaceSubmissionModal, setShowSpaceSubmissionModal] = useState(false);
+  const [missingTrendPreferences, setMissingTrendPreferences] = useState([]);
 
   const saveOpenReport = (data, coords) => {
     localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
@@ -89,6 +110,19 @@ export default function App() {
     setShowOnboarding(!suppressOnboarding);
   }, [session]);
 
+  useEffect(() => {
+    if (!session) {
+      setMissingTrendPreferences([]);
+      return;
+    }
+
+    const sessionMissing = Array.isArray(session.missing_trend_preferences)
+      ? session.missing_trend_preferences
+      : getMissingTrendPreferenceFields(session);
+
+    setMissingTrendPreferences(sessionMissing);
+  }, [session]);
+
   const handleCloseOnboarding = (doNotShowAgain = false) => {
     if (doNotShowAgain) {
       localStorage.setItem(ONBOARDING_SUPPRESS_KEY, '1');
@@ -119,17 +153,31 @@ export default function App() {
     localStorage.setItem('marketscope_active_tab', activeTab);
   }, [activeTab, session]);
 
-  const handleLoginSuccess = (userData) => {
+  const handleLoginSuccess = (userData, authMeta = null) => {
+    const serverMissing = Array.isArray(authMeta?.missing_trend_preferences)
+      ? authMeta.missing_trend_preferences
+      : getMissingTrendPreferenceFields(userData);
+
     const nextSession = {
       ...userData,
       name: userData.full_name || userData.name || userData.email,
+      trend_preferences_completed: serverMissing.length === 0,
+      missing_trend_preferences: serverMissing,
     };
+
     localStorage.setItem('marketscope_session', JSON.stringify(nextSession));
     setSession(nextSession);
   };
 
   const handleProfileUpdate = (updatedUser) => {
-    const nextSession = { ...session, ...updatedUser, name: updatedUser.full_name || updatedUser.name };
+    const nextMissing = getMissingTrendPreferenceFields(updatedUser);
+    const nextSession = {
+      ...session,
+      ...updatedUser,
+      name: updatedUser.full_name || updatedUser.name,
+      trend_preferences_completed: nextMissing.length === 0,
+      missing_trend_preferences: nextMissing,
+    };
     localStorage.setItem('marketscope_session', JSON.stringify(nextSession));
     setSession(nextSession);
   };
@@ -247,11 +295,18 @@ export default function App() {
         
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
 
-        {activeTab === 'trends' && <Trends user={session} onRunAnalysis={(coords, businessType) => {
-          setSelectedCoords(coords);
-          setSheetInitialBusinessType(businessType);
-          setShowBottomSheet(true);
-        }} />}
+        {activeTab === 'trends' && (
+          <Trends
+            user={session}
+            missingTrendPreferences={missingTrendPreferences}
+            onPreferencesSaved={handleProfileUpdate}
+            onRunAnalysis={(coords, businessType) => {
+              setSelectedCoords(coords);
+              setSheetInitialBusinessType(businessType);
+              setShowBottomSheet(true);
+            }}
+          />
+        )}
 
         {activeTab === 'history' && <History user={session} onOpenReport={(payload) => {
           const coords = payload.target_coords || null;

@@ -40,6 +40,7 @@ from db_schema import (
 )
 from auth_service import (
     forgot_password as auth_forgot_password,
+    get_missing_trend_preferences,
     login_user as auth_login_user,
     register_user as auth_register_user,
     reset_password as auth_reset_password,
@@ -476,6 +477,16 @@ async def get_user_trend_recommendations(user_id: int, limit: int = 5):
 
         if not user_profile:
             raise HTTPException(status_code=404, detail="User not found")
+
+        missing_trend_preferences = get_missing_trend_preferences(user_profile)
+        if missing_trend_preferences:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Please complete your trend preferences first.",
+                    "missing_fields": missing_trend_preferences,
+                },
+            )
 
         async with pool.acquire() as conn:
             global_trend_snapshot = await fetch_history_trend_snapshot_async(conn)

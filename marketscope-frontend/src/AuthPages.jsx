@@ -2,6 +2,56 @@ import React, { useRef, useState, useEffect } from 'react';
 import './Auth.css';
 import { apiUrl } from './api';
 
+const PRIMARY_BUSINESS_OPTIONS = [
+  { value: 'coffee', label: 'Coffee Shops / Cafes' },
+  { value: 'print', label: 'Print / Copy Centers' },
+  { value: 'laundry', label: 'Laundry Shops' },
+  { value: 'carwash', label: 'Car Washes' },
+  { value: 'kiosk', label: 'Food Kiosks / Stalls' },
+  { value: 'water', label: 'Water Refilling Stations' },
+  { value: 'bakery', label: 'Bakeries' },
+  { value: 'pharmacy', label: 'Small Pharmacies' },
+  { value: 'barber', label: 'Barbershops / Salons' },
+  { value: 'moto', label: 'Motorcycle Repair Shops' },
+  { value: 'internet', label: 'Internet Cafes' },
+  { value: 'meat', label: 'Meat Shops' },
+  { value: 'hardware', label: 'Hardware / Construction Supplies' }
+];
+
+const formatDateYmd = (dateObj) => {
+  const year = dateObj.getFullYear();
+  const month = `${dateObj.getMonth() + 1}`.padStart(2, '0');
+  const day = `${dateObj.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const computeAgeFromBirthday = (birthdayValue) => {
+  if (!birthdayValue) return null;
+  const birthDate = new Date(birthdayValue);
+  if (Number.isNaN(birthDate.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  const dayDiff = today.getDate() - birthDate.getDate();
+
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+    age -= 1;
+  }
+
+  return Math.max(0, Math.min(120, age));
+};
+
+const computeBirthdayFromAge = (ageValue) => {
+  const parsedAge = Number(ageValue);
+  if (!Number.isFinite(parsedAge)) return '';
+  const normalizedAge = Math.max(0, Math.min(120, Math.floor(parsedAge)));
+
+  const today = new Date();
+  const inferredBirthday = new Date(today.getFullYear() - normalizedAge, today.getMonth(), today.getDate());
+  return formatDateYmd(inferredBirthday);
+};
+
 export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
   const AUTH_VIEW_KEY = 'marketscope_auth_view';
   const getInitialAuthView = () => {
@@ -35,6 +85,9 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const [registerAvatarDataUrl, setRegisterAvatarDataUrl] = useState('');
   const [registerAvatarFileName, setRegisterAvatarFileName] = useState('');
   const [isAvatarReading, setIsAvatarReading] = useState(false);
+  const [registerPrimaryBusiness, setRegisterPrimaryBusiness] = useState('');
+  const [registerBirthday, setRegisterBirthday] = useState('');
+  const [registerAge, setRegisterAge] = useState('');
   const registerAvatarInputRef = useRef(null);
   const authContainerRef = useRef(null);
   const authFormWrapperRef = useRef(null);
@@ -232,7 +285,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         } else {
           localStorage.removeItem('marketscope_login_remembered');
         }
-        onLoginSuccess(userData.user);
+        onLoginSuccess(userData.user, userData);
         return;
       }
 
@@ -285,14 +338,14 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     const email = e.target.email.value;
     const address = e.target.address.value;
     const cellphoneNumber = e.target.cellphone_number.value;
-    const primaryBusiness = e.target.primary_business.value;
-    const birthday = e.target.birthday.value;
-    const ageInput = e.target.age.value;
+    const primaryBusiness = registerPrimaryBusiness;
+    const birthday = registerBirthday;
+    const ageInput = registerAge;
     const pwd = e.target.password.value;
     const confirm = e.target.confirm.value;
 
     const computedAge = birthday
-      ? Math.max(0, new Date().getFullYear() - new Date(birthday).getFullYear())
+      ? computeAgeFromBirthday(birthday)
       : null;
     const parsedAge = ageInput ? Number(ageInput) : computedAge;
 
@@ -321,12 +374,39 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
       const data = await response.json();
       
       if (!response.ok) throw new Error(data.detail || 'Registration failed');
-      onLoginSuccess(data.user);
+      onLoginSuccess(data.user, data);
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRegisterBirthdayChange = (event) => {
+    const nextBirthday = event.target.value;
+    setRegisterBirthday(nextBirthday);
+
+    if (!nextBirthday) return;
+    const computedAge = computeAgeFromBirthday(nextBirthday);
+    setRegisterAge(computedAge === null ? '' : String(computedAge));
+  };
+
+  const handleRegisterAgeChange = (event) => {
+    const rawValue = event.target.value;
+    if (rawValue === '') {
+      setRegisterAge('');
+      return;
+    }
+
+    const digitsOnly = rawValue.replace(/[^0-9]/g, '');
+    if (digitsOnly === '') {
+      setRegisterAge('');
+      return;
+    }
+
+    const boundedAge = Math.max(0, Math.min(120, Number(digitsOnly)));
+    setRegisterAge(String(boundedAge));
+    setRegisterBirthday(computeBirthdayFromAge(boundedAge));
   };
 
   const handleResetPassword = async (e) => {
@@ -596,18 +676,46 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
         <div className="input-group">
           <label className={authLabelClass}>Primary Business Interest</label>
-          <input className={authInputClass} type="text" name="primary_business" placeholder="e.g., Pharmacy / Food Kiosk" />
+          <select
+            className={authInputClass}
+            name="primary_business"
+            value={registerPrimaryBusiness}
+            onChange={(event) => setRegisterPrimaryBusiness(event.target.value)}
+            required
+          >
+            <option value="">Select MSME type</option>
+            {PRIMARY_BUSINESS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
         </div>
 
         <div className="input-group">
           <label className={authLabelClass}>Birthday</label>
           <div className="field-hint" id="birthday-hint">Tap the field to open the calendar</div>
-          <input className={authInputClass} type="date" name="birthday" aria-describedby="birthday-hint" title="Tap to choose your birthday" />
+          <input
+            className={authInputClass}
+            type="date"
+            name="birthday"
+            value={registerBirthday}
+            onChange={handleRegisterBirthdayChange}
+            aria-describedby="birthday-hint"
+            title="Tap to choose your birthday"
+          />
         </div>
 
         <div className="input-group">
           <label className={authLabelClass}>Age</label>
-          <input className={authInputClass} type="number" name="age" min="0" max="120" placeholder="Optional if birthday is set" />
+          <input
+            className={authInputClass}
+            type="number"
+            name="age"
+            min="0"
+            max="120"
+            value={registerAge}
+            onChange={handleRegisterAgeChange}
+            placeholder="Optional if birthday is set"
+          />
         </div>
 
         <div className="input-group">

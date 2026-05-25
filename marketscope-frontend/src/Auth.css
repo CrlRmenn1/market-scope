@@ -201,6 +201,123 @@
   line-height: 1.5;
 }
 
+/* Registration form select: ensure readable text color (white) */
+.auth-form-wrapper select,
+.auth-form-wrapper select option {
+  color: #fff !important;
+}
+
+/* Stronger rule: force dark background and white text for the Primary Business select and its option list */
+.auth-form-wrapper .input-group select[name="primary_business"],
+.auth-form-wrapper .input-group select[name="primary_business"] option,
+.auth-form-wrapper .input-group select[name="primary_business"]::-ms-expand {
+  background: #0b0b0d !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+/* Generic fallback: any select inside auth form uses dark background */
+.auth-form-wrapper .input-group select,
+.auth-form-wrapper .input-group select option {
+  background: #0b0b0d !important;
+  color: #fff !important;
+}
+
+/* Enforce white text and dark background for required/setup fields; accent-focus matches theme */
+.auth-form-wrapper .input-group input,
+.auth-form-wrapper .input-group select,
+.auth-form-wrapper .input-group textarea {
+  color: #fff !important;
+  background: var(--bg-sheet) !important;
+  border-color: var(--border-color) !important;
+}
+
+.auth-form-wrapper .input-group input::placeholder,
+.auth-form-wrapper .input-group select::placeholder,
+.auth-form-wrapper .input-group textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Trend Preferences Gate: force selects and option list to dark theme */
+/* Trend Preferences Gate selects follow active theme variables */
+html:not([data-theme="light"]) .trend-pref-modal select,
+html:not([data-theme="light"]) .trend-pref-modal select option {
+  background: var(--bg-sheet) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+html[data-theme="light"] .trend-pref-modal select,
+html[data-theme="light"] .trend-pref-modal select option {
+  background: var(--bg-sheet) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Ensure the empty placeholder option is readable in dark theme */
+html:not([data-theme="light"]) .trend-pref-modal select option[value=""],
+html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
+  color: var(--text-main) !important;
+}
+
+/* Focus state uses theme accent */
+.trend-pref-modal select:focus {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 10px 30px rgba(168,85,247,0.12) !important;
+}
+
+/* Modal card: dark grey background and purple-accent border/shadow */
+.trend-pref-modal > div {
+  background: var(--bg-sheet) !important;
+  border: 1px solid rgba(168,85,247,0.12) !important;
+  box-shadow: 0 28px 70px rgba(6, 4, 12, 0.6) !important;
+}
+
+/* Overlay backdrop: use dark grey with subtle purple tint and stronger blur (override Tailwind class) */
+.trend-pref-modal {
+  background: linear-gradient(rgba(11,11,13,0.72), rgba(11,11,13,0.72)) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* Modal action buttons: purple-tinted instead of bluish/white */
+.trend-pref-modal .rounded-lg.bg-white\/5,
+.trend-pref-modal .rounded-lg.border-white\/15.bg-white\/5 {
+  background: rgba(168,85,247,0.06) !important;
+  border-color: rgba(168,85,247,0.16) !important;
+  color: var(--text-main) !important;
+}
+
+.trend-pref-modal .rounded-lg.bg-white\/5:hover {
+  background: rgba(168,85,247,0.1) !important;
+}
+
+/* Keep primary Done button in purple gradient matching theme */
+.trend-pref-modal .bg-violet-600 {
+  background: linear-gradient(90deg, var(--accent), #7a2fd1) !important;
+}
+
+/* Required fields highlight with theme accent */
+.auth-form-wrapper .input-group input:required,
+.auth-form-wrapper .input-group select:required,
+.auth-form-wrapper .input-group textarea:required {
+  box-shadow: none;
+}
+
+.auth-form-wrapper .input-group input:focus,
+.auth-form-wrapper .input-group select:focus,
+.auth-form-wrapper .input-group textarea:focus {
+  outline: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 8px 30px rgba(168,85,247,0.12) !important;
+}
+
+/* Small tweak: when label shows required state, tint small border */
+.auth-form-wrapper .input-group.required label {
+  color: var(--text-main);
+}
+
 /* On Mobile, give the landing page the cool grid background */
 @media (max-width: 1023px) {
   .auth-container {

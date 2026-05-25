@@ -11,6 +11,34 @@ from db_schema import (
 )
 
 
+REQUIRED_TREND_PREFERENCE_FIELDS = (
+    "primary_business",
+    "startup_capital",
+    "risk_tolerance",
+    "preferred_setup",
+    "time_commitment",
+    "target_payback_months",
+)
+
+
+def _normalize_preference_value(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+    return value
+
+
+def get_missing_trend_preferences(user_payload):
+    missing = []
+    for field_name in REQUIRED_TREND_PREFERENCE_FIELDS:
+        value = _normalize_preference_value(user_payload.get(field_name))
+        if value is None:
+            missing.append(field_name)
+    return missing
+
+
 async def register_user(pool, payload):
     async with pool.acquire() as conn:
         user_pk_column = await get_users_primary_key_column_async(conn)
@@ -55,26 +83,31 @@ async def register_user(pool, payload):
             payload.target_payback_months,
         )
 
+    user_payload = {
+        "id": new_user[0],
+        "user_id": new_user[0],
+        "name": new_user[1],
+        "email": new_user[2],
+        "created_at": new_user[3],
+        "address": new_user[4],
+        "cellphone_number": new_user[5],
+        "avatar_url": new_user[6],
+        "age": new_user[7],
+        "birthday": new_user[8],
+        "primary_business": new_user[9],
+        "startup_capital": new_user[10],
+        "risk_tolerance": new_user[11],
+        "preferred_setup": new_user[12],
+        "time_commitment": new_user[13],
+        "target_payback_months": new_user[14],
+    }
+    missing_preferences = get_missing_trend_preferences(user_payload)
+
     return {
         "status": "success",
-        "user": {
-            "id": new_user[0],
-            "user_id": new_user[0],
-            "name": new_user[1],
-            "email": new_user[2],
-            "created_at": new_user[3],
-            "address": new_user[4],
-            "cellphone_number": new_user[5],
-            "avatar_url": new_user[6],
-            "age": new_user[7],
-            "birthday": new_user[8],
-            "primary_business": new_user[9],
-            "startup_capital": new_user[10],
-            "risk_tolerance": new_user[11],
-            "preferred_setup": new_user[12],
-            "time_commitment": new_user[13],
-            "target_payback_months": new_user[14],
-        },
+        "user": user_payload,
+        "trend_preferences_completed": len(missing_preferences) == 0,
+        "missing_trend_preferences": missing_preferences,
     }
 
 
@@ -100,26 +133,31 @@ async def login_user(pool, payload):
     if not db_user or not bcrypt.checkpw(payload.password.encode("utf-8"), db_user["password_hash"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    user_payload = {
+        "id": db_user["user_id"],
+        "user_id": db_user["user_id"],
+        "name": db_user["full_name"],
+        "email": db_user["email"],
+        "created_at": db_user["created_at"],
+        "address": db_user.get("address"),
+        "cellphone_number": db_user.get("cellphone_number"),
+        "avatar_url": db_user.get("avatar_url"),
+        "age": db_user.get("age"),
+        "birthday": db_user.get("birthday"),
+        "primary_business": db_user.get("primary_business"),
+        "startup_capital": db_user.get("startup_capital"),
+        "risk_tolerance": db_user.get("risk_tolerance"),
+        "preferred_setup": db_user.get("preferred_setup"),
+        "time_commitment": db_user.get("time_commitment"),
+        "target_payback_months": db_user.get("target_payback_months"),
+    }
+    missing_preferences = get_missing_trend_preferences(user_payload)
+
     return {
         "status": "success",
-        "user": {
-            "id": db_user["user_id"],
-            "user_id": db_user["user_id"],
-            "name": db_user["full_name"],
-            "email": db_user["email"],
-            "created_at": db_user["created_at"],
-            "address": db_user.get("address"),
-            "cellphone_number": db_user.get("cellphone_number"),
-            "avatar_url": db_user.get("avatar_url"),
-            "age": db_user.get("age"),
-            "birthday": db_user.get("birthday"),
-            "primary_business": db_user.get("primary_business"),
-            "startup_capital": db_user.get("startup_capital"),
-            "risk_tolerance": db_user.get("risk_tolerance"),
-            "preferred_setup": db_user.get("preferred_setup"),
-            "time_commitment": db_user.get("time_commitment"),
-            "target_payback_months": db_user.get("target_payback_months"),
-        },
+        "user": user_payload,
+        "trend_preferences_completed": len(missing_preferences) == 0,
+        "missing_trend_preferences": missing_preferences,
     }
 
 

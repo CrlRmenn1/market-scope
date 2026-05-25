@@ -1,5 +1,26 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
+import TrendPreferencesGate from '../components/TrendPreferencesGate';
+
+const REQUIRED_TREND_FIELDS = [
+  'primary_business',
+  'startup_capital',
+  'risk_tolerance',
+  'preferred_setup',
+  'time_commitment',
+  'target_payback_months'
+];
+
+const normalizePreferenceValue = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  return value;
+};
+
+const getMissingTrendPreferenceFields = (user) => REQUIRED_TREND_FIELDS.filter((field) => normalizePreferenceValue(user?.[field]) === null);
 
 const getScoreTone = (score) => {
   if (score >= 75) return 'high';
@@ -29,7 +50,7 @@ const getScoringLabel = (key) => {
   return labels[key] || key.replace(/_/g, ' ');
 };
 
-export default function Trends({ user, onOpenReport, onRunAnalysis }) {
+export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrendPreferences, onPreferencesSaved }) {
   const userId = user?.user_id || user?.id;
   const [loading, setLoading] = useState(Boolean(userId));
   const [error, setError] = useState('');
@@ -38,6 +59,16 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
   const [expandedBusinessKey, setExpandedBusinessKey] = useState(null);
   const [expandedScoringKey, setExpandedScoringKey] = useState(null);
   const [analyzingBusinessKey, setAnalyzingBusinessKey] = useState(null);
+  const [showPreferenceGate, setShowPreferenceGate] = useState(false);
+
+  const activeMissingPreferences = useMemo(() => {
+    if (Array.isArray(missingTrendPreferences)) {
+      return missingTrendPreferences;
+    }
+    return getMissingTrendPreferenceFields(user);
+  }, [missingTrendPreferences, user]);
+
+  const hasMissingPreferences = activeMissingPreferences.length > 0;
 
   const fetchRecommendations = async () => {
     if (!userId) return;
@@ -49,7 +80,14 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.detail || 'Unable to load trend recommendations.');
+        const detail = data?.detail;
+        if (typeof detail === 'string') {
+          throw new Error(detail);
+        }
+        if (detail?.message && Array.isArray(detail?.missing_fields) && detail.missing_fields.length > 0) {
+          throw new Error(`${detail.message} Missing: ${detail.missing_fields.join(', ')}`);
+        }
+        throw new Error('Unable to load trend recommendations.');
       }
 
       setSummary(data?.summary || null);
@@ -86,9 +124,21 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
   };
 
   useEffect(() => {
+    if (!userId) return;
+
+    if (hasMissingPreferences) {
+      setShowPreferenceGate(true);
+      setLoading(false);
+      setError('');
+      setSummary(null);
+      setRecommendations([]);
+      return;
+    }
+
+    setShowPreferenceGate(false);
     fetchRecommendations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, hasMissingPreferences]);
 
   const hasRecommendations = useMemo(() => recommendations.length > 0, [recommendations]);
 
@@ -133,6 +183,20 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
               <p className="history-empty-title">No trend recommendations yet</p>
               <p className="history-empty-subtitle">Complete your profile and run more analyses to improve recommendation quality.</p>
             </div>
+          </div>
+        )}
+
+        {!loading && hasMissingPreferences && (
+          <div className="data-card rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-100 shadow-sm">
+            <p className="font-semibold">Trend preferences are not complete yet.</p>
+            <p className="mt-1 text-amber-100/90">Complete your preferences to generate trend recommendations for your profile.</p>
+            <button
+              type="button"
+              className="mt-3 inline-flex items-center justify-center rounded-lg border border-amber-200/40 bg-white/5 px-4 py-2 text-sm font-semibold text-amber-50 transition hover:bg-white/10"
+              onClick={() => setShowPreferenceGate(true)}
+            >
+              Complete Preferences
+            </button>
           </div>
         )}
 
@@ -287,6 +351,18 @@ export default function Trends({ user, onOpenReport, onRunAnalysis }) {
           </div>
         )}
       </div>
+
+      {hasMissingPreferences && showPreferenceGate && (
+        <TrendPreferencesGate
+          user={user}
+          missingFields={activeMissingPreferences}
+          onSaved={(updatedUser) => {
+            onPreferencesSaved?.(updatedUser);
+            setShowPreferenceGate(false);
+          }}
+          onLater={() => setShowPreferenceGate(false)}
+        />
+      )}
     </div>
   );
 }
