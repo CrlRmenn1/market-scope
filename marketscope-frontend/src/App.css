@@ -4168,6 +4168,42 @@ html[data-theme="light"] .trends-score-badge.low {
   .onboarding-hero-right { flex: none; }
 }
 
+/* Styled select (map quick panel) - dark theme */
+.styled-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-sheet);
+  color: var(--text-main);
+  font-size: 0.95rem;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.styled-select:focus {
+  outline: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+}
+
+/* Options dropdown background (dark) */
+.styled-select option {
+  background: var(--bg-sheet);
+  color: var(--text-main);
+}
+
+/* For browsers that render native popup list, ensure selected/hovered states are readable */
+.styled-select option:checked,
+.styled-select option[selected] {
+  background: rgba(168,85,247,0.12);
+  color: var(--text-main);
+}
+
+.styled-select option:hover {
+  background: rgba(168,85,247,0.08);
+}
+
 .onboarding-description {
   color: var(--text-muted);
   font-size: 0.92rem;
