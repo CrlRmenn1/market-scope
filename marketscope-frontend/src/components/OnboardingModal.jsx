@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 const steps = [
   {
     title: 'Welcome to MarketScope',
-    description: 'This quick guide will help you run your first location scan in under one minute.',
+    description: 'MarketScope analyzes business-location viability using map, risk, demand, and competitor signals.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
@@ -13,8 +13,8 @@ const steps = [
     )
   },
   {
-    title: '1. Drop a Pin on the Map',
-    description: 'On the Map tab, tap any location or available space inside Panabo city boundary, then press Lock on this location.',
+    title: '1. Sign In and Complete Profile Setup',
+    description: 'After login, fill the required profile fields (business interest, capital, risk, setup, time commitment, and payback). This is required before using trends and analysis.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 2c-3.31 0-6 2.69-6 6 0 4.2 4.64 9.14 5.89 10.41a1.5 1.5 0 0 0 2.12 0C13.36 17.14 18 12.2 18 8c0-3.31-2.69-6-6-6z" />
@@ -23,8 +23,18 @@ const steps = [
     )
   },
   {
-    title: '2. Run Your Analysis',
-    description: 'Choose your business type and radius, then tap Analyze. You will get zoning, hazard, saturation, and demand scores.',
+    title: '2. Choose a Location and Business Type',
+    description: 'Go to Home, select a map point, choose the business type, and set your scan radius.',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+        <path d="M20 21a8 8 0 0 0-16 0" />
+      </svg>
+    )
+  },
+  {
+    title: '3. Run Analysis',
+    description: 'Tap Analyze to generate your viability score and factor breakdown (zoning, hazard, demand, saturation).',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M3 3v18h18" />
@@ -37,8 +47,8 @@ const steps = [
     )
   },
   {
-    title: '3. Review and Save Results',
-    description: 'Open the report to view full details, then revisit your saved scans from the History tab anytime.',
+    title: '4. Review and Save Results',
+    description: 'Open the report for insights and recommendations. Your scan is saved in History so you can compare later.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -89,13 +99,26 @@ export default function OnboardingModal({ isOpen, onClose }) {
 
           <div className="onboarding-icon-wrap">{step.icon}</div>
           <p className="onboarding-step-label">Quick Start Guide</p>
-          {stepIndex === 0 && (
-            <p className="onboarding-purpose">
-              We analyze business location viability using zoning, flood risk, demand, and competitor signals. Our aim is to help Panabo MSMEs choose safer, higher-potential spots faster.
-            </p>
+
+          {stepIndex === 0 ? (
+            <>
+              <h3 id="onboarding-title" className="onboarding-title">Welcome to MarketScope</h3>
+              <p className="onboarding-hero-sub">
+                MarketScope removes guesswork from choosing business locations by combining map data, hazard risk, demand signals, and competitor presence into one clear, actionable scan.
+              </p>
+
+              <ul className="onboarding-benefits">
+                <li><strong>Evidence-based:</strong> combines geospatial, hazard, and market signals.</li>
+                <li><strong>Actionable:</strong> gives a numeric viability score and quick recommendations.</li>
+                <li><strong>Compare & Save:</strong> store scans in History to track changes over time.</li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <h3 id="onboarding-title" className="onboarding-title">{step.title}</h3>
+              <p className="onboarding-description">{step.description}</p>
+            </>
           )}
-          <h3 id="onboarding-title" className="onboarding-title">{step.title}</h3>
-          <p className="onboarding-description">{step.description}</p>
         </div>
 
         <label className="onboarding-checkbox-row">

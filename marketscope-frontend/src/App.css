@@ -4100,6 +4100,74 @@ html[data-theme="light"] .trends-score-badge.low {
   line-height: 1.5;
 }
 
+/* Rich onboarding hero layout (step 0) */
+.onboarding-hero {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.onboarding-hero-left {
+  flex: 1 1 60%;
+}
+
+.onboarding-hero-right {
+  flex: 0 0 36%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-hero-sub {
+  margin: 8px 0 12px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.onboarding-benefits {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.onboarding-benefits li {
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.onboarding-small-title {
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 6px 0;
+  font-size: 0.86rem;
+}
+
+.onboarding-steps-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.onboarding-mini-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.02);
+}
+
+.mini-icon svg { width: 20px; height: 20px; }
+.mini-title { font-weight: 700; font-size: 0.88rem; color: var(--text-main); }
+.mini-desc { font-size: 0.82rem; color: var(--text-muted); }
+
+@media (max-width: 560px) {
+  .onboarding-hero { flex-direction: column; }
+  .onboarding-hero-right { flex: none; }
+}
+
 .onboarding-description {
   color: var(--text-muted);
   font-size: 0.92rem;
