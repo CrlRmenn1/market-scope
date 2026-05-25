@@ -29,6 +29,7 @@ from db_schema import (
     ensure_admin_space_submissions_table,
     ensure_admin_users_table,
     ensure_custom_msme_table,
+    ensure_verified_local_features_table,
     ensure_user_space_submissions_table,
     generate_reset_code,
     get_analysis_history_pk_column,
@@ -51,6 +52,12 @@ from user_service import (
     get_user_profile as user_get_profile,
     update_user_profile as user_update_profile,
 )
+from reporting import (
+    build_structured_report,
+    render_report_html,
+    try_render_pdf_bytes,
+    generate_narrative_with_fallback,
+)
 from settings import get_allowed_origins, get_database_config
 
 try:
@@ -60,10 +67,11 @@ except Exception:
 
 try:
     from shapely.geometry import Point, box
-    from shapely.ops import unary_union
+    from shapely.ops import nearest_points, unary_union
 except Exception:
     Point = None
     box = None
+    nearest_points = None
     unary_union = None
 
 # ==========================================
@@ -139,6 +147,7 @@ async def lifespan(app: FastAPI):
     app.state.db_pool = await connect_with_retry()
     preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
+    preload_pbf_spatial_context_cache()
     stop_event = Event()
     auto_refresh_thread = Thread(
         target=_trend_snapshot_auto_refresh_loop,
@@ -148,7 +157,9 @@ async def lifespan(app: FastAPI):
     auto_refresh_thread.start()
     yield
     stop_event.set()
-    await app.state.db_pool.close()
+    db_pool = getattr(app.state, "db_pool", None)
+    if db_pool is not None:
+        await db_pool.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -252,6 +263,24 @@ class AdminCreateMsme(BaseModel):
 
 class AdminUpdateMsme(AdminCreateMsme):
     pass
+
+
+class AdminVerifiedLocalFeatureRequest(BaseModel):
+    feature_kind: str
+    name: str
+    latitude: float
+    longitude: float
+    business_type: str | None = None
+    feature_subtype: str | None = None
+    road_class: str | None = None
+    power: int | None = None
+    building_type: str | None = None
+    landuse: str | None = None
+    area_m2: float | None = None
+    confidence_score: int = 100
+    source_note: str | None = None
+    verified_at: date | None = None
+    is_active: bool = True
 
 
 class AdminUpdateUser(BaseModel):
@@ -481,7 +510,8 @@ async def get_user_trend_recommendations(user_id: int, limit: int = 5):
         recommendations.sort(key=lambda item: item.get("opportunity_score", 0), reverse=True)
 
         citywide_snapshot = get_citywide_scan_snapshot(radius=340)
-        citywide_businesses = citywide_snapshot.get("businesses") or {}
+        citywide_snapshot_obj = citywide_snapshot if isinstance(citywide_snapshot, dict) else {}
+        citywide_businesses = citywide_snapshot_obj.get("businesses") or {}
 
         for item in recommendations:
             business_key = item.get("business_key")
@@ -586,8 +616,8 @@ async def get_user_trend_recommendations(user_id: int, limit: int = 5):
                 "preference_business_matches": sorted(list(preference_business_keys)),
                 "trend_recommendation_keys": trend_recommendation_keys,
                 "scan_engine": "citywide-standalone",
-                "citywide_scan_generated_at": citywide_snapshot.get("generated_at"),
-                "citywide_scan_points": citywide_snapshot.get("candidate_count"),
+                "citywide_scan_generated_at": citywide_snapshot_obj.get("generated_at"),
+                "citywide_scan_points": citywide_snapshot_obj.get("candidate_count"),
             },
             "recommendations": enriched_recommendations,
         }
@@ -607,11 +637,71 @@ PBF_CACHE_LOADED = False
 PBF_CACHE_LOCK = Lock()
 PBF_LAYERS = ["points", "multipolygons", "lines", "multilinestrings"]
 PBF_SEARCH_COLUMNS = ["amenity", "shop", "healthcare"]
+PBF_ROAD_CONTEXT_GDF = None
+PBF_BUILDING_CONTEXT_GDF = None
+PBF_SPATIAL_CONTEXT_LOADED = False
+PBF_SPATIAL_CONTEXT_LOCK = Lock()
 
 ZONING_LAYERS = {
     "commercial_proper": (7.3000, 7.3150, 125.6700, 125.6900),
     "industrial_anflo": (7.2800, 7.2950, 125.6500, 125.6700)
 }
+
+VERIFIED_LOCAL_FEATURE_KINDS = {"msme", "anchor", "road", "building"}
+
+
+def _source_confidence_multiplier(source_name, confidence_score=None):
+    normalized_source = normalize_osm_value(source_name)
+    if normalized_source in {"verified_local", "verified", "manual_verified"}:
+        base = 1.55
+    elif normalized_source in {"custom_msme", "manual", "admin"}:
+        base = 1.30
+    else:
+        base = 1.0
+
+    confidence_value = to_finite_number(confidence_score)
+    if confidence_value is None:
+        return base
+
+    confidence_scale = 0.75 + (max(0.0, min(100.0, confidence_value)) / 100.0) * 0.5
+    return base * confidence_scale
+
+
+def fetch_verified_local_features(feature_kind=None, business_type=None, active_only=True):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_verified_local_features_table(cursor)
+
+        query = [
+            "SELECT id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at",
+            "FROM verified_local_features",
+            "WHERE 1 = 1",
+        ]
+        params = []
+
+        if feature_kind:
+            normalized_kind = normalize_osm_value(feature_kind)
+            if normalized_kind in VERIFIED_LOCAL_FEATURE_KINDS:
+                query.append("AND feature_kind = %s")
+                params.append(normalized_kind)
+
+        if business_type:
+            query.append("AND LOWER(TRIM(COALESCE(business_type, ''))) = %s")
+            params.append(normalize_osm_value(business_type))
+
+        if active_only:
+            query.append("AND is_active = TRUE")
+
+        query.append("ORDER BY updated_at DESC, created_at DESC, id DESC")
+        cursor.execute("\n".join(query), params)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"Verified local feature fetch error: {e}")
+        return []
 
 # Davao del Norte 5-year flood return period hazard zones
 # Extracted from official NOAH/DENR flood hazard shapefile (DavaoDelNorte_Flood_5year.shp)
@@ -650,7 +740,7 @@ TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND
 TREND_SCAN_REFRESH_IN_FLIGHT = set()
 
 
-def _parse_utc_iso_z(value: str):
+def _parse_utc_iso_z(value: str | None):
     raw = str(value or "").strip()
     if not raw:
         return None
@@ -666,8 +756,9 @@ def _parse_utc_iso_z(value: str):
         return None
 
 
-def _is_snapshot_stale(payload: dict, threshold_seconds: int) -> bool:
-    generated_at = _parse_utc_iso_z((payload or {}).get("generated_at"))
+def _is_snapshot_stale(payload: dict | list | None, threshold_seconds: int) -> bool:
+    generated_raw = (payload or {}).get("generated_at") if isinstance(payload, dict) else None
+    generated_at = _parse_utc_iso_z(generated_raw if isinstance(generated_raw, str) else None)
     if generated_at is None:
         return True
 
@@ -871,6 +962,204 @@ SME_DATABASE = {
     "hardware": {"key": "shop", "val": "hardware", "fear": 7, "need": 8, "name": "Hardware/Construction Supplies", "osm_tags": [("shop", "hardware"), ("shop", "doityourself"), ("shop", "trade")]}
 }
 
+MSME_CATEGORY_PROFILES = {
+    "coffee": {
+        "display_name": "Coffee Shops",
+        "osm_tags": [("amenity", "cafe"), ("shop", "coffee")],
+        "competition_sensitivity": 1.38,
+        "competition_weight": 0.47,
+        "road_weight": 0.20,
+        "anchor_weight": 0.19,
+        "building_weight": 0.14,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 700.0,
+        "anchor_scale_m": 300.0,
+        "anchor_target_power": 40.0,
+        "building_radius_scale_m": 360.0,
+    },
+    "print": {
+        "display_name": "Print/Copy Centers",
+        "osm_tags": [("shop", "copyshop"), ("shop", "stationery"), ("shop", "books")],
+        "competition_sensitivity": 1.12,
+        "competition_weight": 0.42,
+        "road_weight": 0.23,
+        "anchor_weight": 0.18,
+        "building_weight": 0.17,
+        "preferred_road_classes": ["tertiary", "secondary", "primary"],
+        "required_road_classes": ["tertiary", "secondary", "primary"],
+        "road_distance_soft_cap_m": 820.0,
+        "anchor_scale_m": 340.0,
+        "anchor_target_power": 34.0,
+        "building_radius_scale_m": 420.0,
+    },
+    "laundry": {
+        "display_name": "Laundry Shops",
+        "osm_tags": [("shop", "laundry"), ("shop", "dry_cleaning")],
+        "competition_sensitivity": 1.18,
+        "competition_weight": 0.43,
+        "road_weight": 0.20,
+        "anchor_weight": 0.19,
+        "building_weight": 0.18,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 780.0,
+        "anchor_scale_m": 320.0,
+        "anchor_target_power": 36.0,
+        "building_radius_scale_m": 420.0,
+    },
+    "carwash": {
+        "display_name": "Car Washes",
+        "osm_tags": [("amenity", "car_wash"), ("shop", "car_repair")],
+        "competition_sensitivity": 1.10,
+        "competition_weight": 0.39,
+        "road_weight": 0.28,
+        "anchor_weight": 0.16,
+        "building_weight": 0.17,
+        "preferred_road_classes": ["trunk", "primary", "secondary"],
+        "required_road_classes": ["trunk", "primary", "secondary"],
+        "road_distance_soft_cap_m": 920.0,
+        "anchor_scale_m": 360.0,
+        "anchor_target_power": 38.0,
+        "building_radius_scale_m": 450.0,
+    },
+    "kiosk": {
+        "display_name": "Food Kiosks/Stalls",
+        "osm_tags": [("amenity", "fast_food"), ("amenity", "food_court"), ("shop", "kiosk")],
+        "competition_sensitivity": 1.34,
+        "competition_weight": 0.44,
+        "road_weight": 0.18,
+        "anchor_weight": 0.22,
+        "building_weight": 0.16,
+        "preferred_road_classes": ["primary", "secondary", "tertiary"],
+        "required_road_classes": ["primary", "secondary", "tertiary"],
+        "road_distance_soft_cap_m": 650.0,
+        "anchor_scale_m": 280.0,
+        "anchor_target_power": 42.0,
+        "building_radius_scale_m": 340.0,
+    },
+    "water": {
+        "display_name": "Water Refilling Stations",
+        "osm_tags": [("shop", "water"), ("amenity", "drinking_water"), ("amenity", "water_point")],
+        "competition_sensitivity": 0.98,
+        "competition_weight": 0.36,
+        "road_weight": 0.22,
+        "anchor_weight": 0.18,
+        "building_weight": 0.24,
+        "preferred_road_classes": ["residential", "service", "tertiary", "secondary"],
+        "required_road_classes": ["residential", "service", "tertiary", "secondary"],
+        "road_distance_soft_cap_m": 860.0,
+        "anchor_scale_m": 360.0,
+        "anchor_target_power": 30.0,
+        "building_radius_scale_m": 460.0,
+    },
+    "bakery": {
+        "display_name": "Bakeries",
+        "osm_tags": [("shop", "bakery"), ("shop", "pastry")],
+        "competition_sensitivity": 1.28,
+        "competition_weight": 0.44,
+        "road_weight": 0.20,
+        "anchor_weight": 0.19,
+        "building_weight": 0.17,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 760.0,
+        "anchor_scale_m": 320.0,
+        "anchor_target_power": 38.0,
+        "building_radius_scale_m": 380.0,
+    },
+    "pharmacy": {
+        "display_name": "Small Pharmacies",
+        "osm_tags": [("amenity", "pharmacy"), ("shop", "chemist")],
+        "competition_sensitivity": 1.22,
+        "competition_weight": 0.43,
+        "road_weight": 0.21,
+        "anchor_weight": 0.22,
+        "building_weight": 0.14,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 720.0,
+        "anchor_scale_m": 300.0,
+        "anchor_target_power": 40.0,
+        "building_radius_scale_m": 340.0,
+    },
+    "barber": {
+        "display_name": "Barbershops/Salons",
+        "osm_tags": [("shop", "hairdresser"), ("shop", "beauty")],
+        "competition_sensitivity": 1.24,
+        "competition_weight": 0.45,
+        "road_weight": 0.19,
+        "anchor_weight": 0.20,
+        "building_weight": 0.16,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 760.0,
+        "anchor_scale_m": 320.0,
+        "anchor_target_power": 39.0,
+        "building_radius_scale_m": 360.0,
+    },
+    "moto": {
+        "display_name": "Motorcycle Repair Shops",
+        "osm_tags": [("shop", "motorcycle"), ("shop", "motorcycle_repair"), ("shop", "car_repair")],
+        "competition_sensitivity": 1.06,
+        "competition_weight": 0.40,
+        "road_weight": 0.30,
+        "anchor_weight": 0.14,
+        "building_weight": 0.16,
+        "preferred_road_classes": ["trunk", "primary", "secondary"],
+        "required_road_classes": ["trunk", "primary", "secondary"],
+        "road_distance_soft_cap_m": 980.0,
+        "anchor_scale_m": 380.0,
+        "anchor_target_power": 32.0,
+        "building_radius_scale_m": 430.0,
+    },
+    "internet": {
+        "display_name": "Internet Cafes",
+        "osm_tags": [("amenity", "internet_cafe"), ("amenity", "cafe")],
+        "competition_sensitivity": 1.15,
+        "competition_weight": 0.41,
+        "road_weight": 0.21,
+        "anchor_weight": 0.20,
+        "building_weight": 0.18,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 760.0,
+        "anchor_scale_m": 330.0,
+        "anchor_target_power": 34.0,
+        "building_radius_scale_m": 400.0,
+    },
+    "meat": {
+        "display_name": "Meat Shops",
+        "osm_tags": [("shop", "butcher"), ("shop", "deli")],
+        "competition_sensitivity": 1.20,
+        "competition_weight": 0.42,
+        "road_weight": 0.20,
+        "anchor_weight": 0.20,
+        "building_weight": 0.18,
+        "preferred_road_classes": ["secondary", "tertiary", "primary"],
+        "required_road_classes": ["secondary", "tertiary", "primary"],
+        "road_distance_soft_cap_m": 740.0,
+        "anchor_scale_m": 300.0,
+        "anchor_target_power": 35.0,
+        "building_radius_scale_m": 360.0,
+    },
+    "hardware": {
+        "display_name": "Hardware/Construction Supplies",
+        "osm_tags": [("shop", "hardware"), ("shop", "doityourself"), ("shop", "trade")],
+        "competition_sensitivity": 1.04,
+        "competition_weight": 0.40,
+        "road_weight": 0.30,
+        "anchor_weight": 0.14,
+        "building_weight": 0.16,
+        "preferred_road_classes": ["trunk", "primary", "secondary"],
+        "required_road_classes": ["trunk", "primary", "secondary"],
+        "road_distance_soft_cap_m": 1000.0,
+        "anchor_scale_m": 420.0,
+        "anchor_target_power": 30.0,
+        "building_radius_scale_m": 460.0,
+    },
+}
+
 SME_PROFILE_BY_NAME = {
     str(profile.get("name") or "").strip().lower(): key
     for key, profile in SME_DATABASE.items()
@@ -896,6 +1185,39 @@ PBF_NAME_KEYWORD_FALLBACK = {
 COMMERCIAL_AMENITY_VALUES = {
     "cafe", "restaurant", "fast_food", "food_court", "pharmacy", "bank", "fuel", "marketplace",
     "car_wash", "clinic", "hospital", "internet_cafe", "bar", "pub", "biergarten"
+}
+
+ROAD_CLASS_BASE_SCORES = {
+    "motorway": 25,
+    "trunk": 24,
+    "primary": 23,
+    "secondary": 21,
+    "tertiary": 18,
+    "unclassified": 15,
+    "living_street": 13,
+    "residential": 11,
+    "service": 8,
+    "track": 6,
+    "path": 4,
+    "footway": 3,
+    "cycleway": 4,
+    "pedestrian": 5,
+}
+
+DEFAULT_MSME_ANALYSIS_PROFILE = {
+    "display_name": "MSME",
+    "osm_tags": [("shop", "convenience")],
+    "competition_sensitivity": 1.0,
+    "competition_weight": 0.42,
+    "road_weight": 0.23,
+    "anchor_weight": 0.20,
+    "building_weight": 0.15,
+    "preferred_road_classes": ["primary", "secondary", "tertiary"],
+    "required_road_classes": ["primary", "secondary", "tertiary"],
+    "road_distance_soft_cap_m": 850.0,
+    "anchor_scale_m": 320.0,
+    "anchor_target_power": 36.0,
+    "building_radius_scale_m": 420.0,
 }
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -933,6 +1255,722 @@ def to_finite_number(value):
     if math.isfinite(parsed):
         return parsed
     return None
+
+
+def _clamp_score(value, minimum=0, maximum=25):
+    try:
+        numeric = float(value)
+    except Exception:
+        numeric = minimum
+    return max(minimum, min(maximum, numeric))
+
+
+def _normalize_road_class(value):
+    normalized = normalize_osm_value(value)
+    if normalized is None:
+        return None
+
+    normalized = normalized.replace("-", "_")
+    normalized = normalized.replace(" ", "_")
+    normalized = normalized.replace("__", "_")
+
+    if normalized.endswith("_link"):
+        normalized = normalized[:-5]
+
+    if normalized in ROAD_CLASS_BASE_SCORES:
+        return normalized
+
+    if normalized in {"road", "street", "lane"}:
+        return "unclassified"
+    if normalized in {"main", "main_road", "major_road"}:
+        return "primary"
+    return None
+
+
+def _approx_polygon_area_m2(geometry):
+    if geometry is None or geometry.is_empty:
+        return 0.0
+
+    try:
+        area_degrees = float(getattr(geometry, "area", 0.0) or 0.0)
+        centroid_lat = float(geometry.centroid.y)
+        meters_per_deg_lat = 111132.92
+        meters_per_deg_lon = 111412.84 * math.cos(math.radians(centroid_lat))
+        return abs(area_degrees) * abs(meters_per_deg_lat) * max(1.0, abs(meters_per_deg_lon))
+    except Exception:
+        return 0.0
+
+
+def _feature_weight_from_building_row(row):
+    building_value = normalize_osm_value(row.get("building"))
+    landuse_value = normalize_osm_value(row.get("landuse"))
+    amenity_value = normalize_osm_value(row.get("amenity"))
+    shop_value = normalize_osm_value(row.get("shop"))
+    office_value = normalize_osm_value(row.get("office"))
+
+    weight = 1.0
+
+    if building_value in {"commercial", "retail", "industrial", "public", "university", "hospital", "school", "office"}:
+        weight *= 1.20
+    elif building_value in {"house", "residential", "apartments", "roof"}:
+        weight *= 0.86
+
+    if landuse_value in {"commercial", "retail"}:
+        weight *= 1.28
+    elif landuse_value == "industrial":
+        weight *= 1.14
+    elif landuse_value == "residential":
+        weight *= 0.88
+
+    if amenity_value in {"marketplace", "hospital", "school", "college", "university", "fuel", "parking", "restaurant", "fast_food", "cafe"}:
+        weight *= 1.12
+
+    if shop_value:
+        weight *= 1.10
+
+    if office_value:
+        weight *= 1.05
+
+    return weight
+
+
+def preload_pbf_spatial_context_cache():
+    global PBF_ROAD_CONTEXT_GDF, PBF_BUILDING_CONTEXT_GDF, PBF_SPATIAL_CONTEXT_LOADED
+
+    if PBF_SPATIAL_CONTEXT_LOADED:
+        return
+
+    if gpd is None:
+        PBF_ROAD_CONTEXT_GDF = None
+        PBF_BUILDING_CONTEXT_GDF = None
+        PBF_SPATIAL_CONTEXT_LOADED = True
+        print("PBF spatial context cache skipped: geopandas is unavailable")
+        return
+
+    with PBF_SPATIAL_CONTEXT_LOCK:
+        if PBF_SPATIAL_CONTEXT_LOADED:
+            return
+
+        if not PBF_PATH.exists():
+            PBF_ROAD_CONTEXT_GDF = None
+            PBF_BUILDING_CONTEXT_GDF = None
+            PBF_SPATIAL_CONTEXT_LOADED = True
+            print(f"PBF spatial context cache skipped: file not found at {PBF_PATH}")
+            return
+
+        road_gdf = None
+        building_gdf = None
+
+        try:
+            road_gdf = gpd.read_file(str(PBF_PATH), layer="lines", engine="pyogrio")
+        except Exception as exc:
+            print(f"PBF road context read skipped: {exc}")
+
+        if road_gdf is not None and not road_gdf.empty and "geometry" in road_gdf.columns and "highway" in road_gdf.columns:
+            road_gdf = road_gdf[road_gdf["geometry"].notna() & road_gdf["highway"].notna()].copy()
+            road_gdf["road_class"] = road_gdf["highway"].apply(_normalize_road_class)
+            road_gdf = road_gdf[road_gdf["road_class"].notna()].copy()
+            road_gdf["road_base_score"] = road_gdf["road_class"].map(ROAD_CLASS_BASE_SCORES).fillna(10)
+            PBF_ROAD_CONTEXT_GDF = road_gdf[["name", "highway", "road_class", "road_base_score", "geometry"]].copy()
+        else:
+            PBF_ROAD_CONTEXT_GDF = None
+
+        try:
+            building_gdf = gpd.read_file(str(PBF_PATH), layer="multipolygons", engine="pyogrio")
+        except Exception as exc:
+            print(f"PBF building context read skipped: {exc}")
+
+        if building_gdf is not None and not building_gdf.empty and "geometry" in building_gdf.columns:
+            context_columns = [col for col in ["name", "building", "landuse", "amenity", "shop", "office", "geometry"] if col in building_gdf.columns]
+            building_gdf = building_gdf[context_columns].copy()
+            context_mask = False
+            for col in ["building", "landuse", "amenity", "shop", "office"]:
+                if col in building_gdf.columns:
+                    context_mask = context_mask | building_gdf[col].notna()
+            building_gdf = building_gdf[context_mask & building_gdf["geometry"].notna()].copy()
+            if not building_gdf.empty:
+                building_gdf["feature_weight"] = building_gdf.apply(_feature_weight_from_building_row, axis=1)
+                PBF_BUILDING_CONTEXT_GDF = building_gdf[["name", "building", "landuse", "amenity", "shop", "office", "feature_weight", "geometry"]].copy()
+            else:
+                PBF_BUILDING_CONTEXT_GDF = None
+        else:
+            PBF_BUILDING_CONTEXT_GDF = None
+
+        PBF_SPATIAL_CONTEXT_LOADED = True
+        print(
+            "PBF spatial context loaded: "
+            f"roads={0 if PBF_ROAD_CONTEXT_GDF is None else len(PBF_ROAD_CONTEXT_GDF)}, "
+            f"buildings={0 if PBF_BUILDING_CONTEXT_GDF is None else len(PBF_BUILDING_CONTEXT_GDF)}"
+        )
+
+
+def _get_analysis_profile(business_type: str | None):
+    profile_key = normalize_osm_value(business_type)
+    if not profile_key:
+        return DEFAULT_MSME_ANALYSIS_PROFILE
+    return MSME_CATEGORY_PROFILES.get(profile_key, DEFAULT_MSME_ANALYSIS_PROFILE)
+
+
+def _query_context_candidates(gdf, lat, lon, radius_meters, fallback_multiplier=1.35):
+    if gdf is None or Point is None or box is None:
+        return None
+
+    search_radius = max(150.0, float(radius_meters) * float(fallback_multiplier))
+    lon_delta = search_radius / max(1.0, 111320.0 * max(0.2, math.cos(math.radians(lat))))
+    lat_delta = search_radius / 111132.0
+    search_box = box(lon - lon_delta, lat - lat_delta, lon + lon_delta, lat + lat_delta)
+
+    if getattr(gdf, "sindex", None) is not None:
+        try:
+            candidate_index = list(gdf.sindex.intersection(search_box.bounds))
+            if candidate_index:
+                return gdf.iloc[candidate_index]
+        except Exception:
+            pass
+
+    return gdf
+
+
+def _score_competitor_density(lat, lon, competitors, radius_meters, profile):
+    weighted_pressure = 0.0
+    nearby_competitors = []
+    decay_scale = max(1.0, float(radius_meters) * 0.42)
+
+    for competitor in competitors:
+        competitor_lat = to_finite_number(competitor.get("lat"))
+        competitor_lon = to_finite_number(competitor.get("lon"))
+        if competitor_lat is None or competitor_lon is None:
+            continue
+
+        distance_m = calculate_distance(lat, lon, competitor_lat, competitor_lon)
+        if distance_m > radius_meters:
+            continue
+
+        distance_decay = 1.0 / (1.0 + (distance_m / decay_scale))
+        radial_band = 1.0 if distance_m <= radius_meters * 0.33 else 0.72 if distance_m <= radius_meters * 0.66 else 0.48
+        source_name = str(competitor.get("name") or "").strip()
+        source_weight = 1.15 if source_name else 1.0
+        source_weight *= _source_confidence_multiplier(competitor.get("source"), competitor.get("confidence_score"))
+
+        weighted_pressure += distance_decay * radial_band * source_weight
+        nearby_competitors.append({
+            "lat": competitor_lat,
+            "lon": competitor_lon,
+            "name": source_name or None,
+            "distance_m": round(distance_m, 2),
+            "source": competitor.get("source") or "osm",
+        })
+
+    competition_intensity = math.log1p(weighted_pressure * float(profile.get("competition_sensitivity") or 1.0))
+    score = _clamp_score(25 - (competition_intensity * 7.0), 0, 25)
+
+    if score >= 20:
+        status = "Light Competition"
+    elif score >= 15:
+        status = "Manageable Competition"
+    elif score >= 10:
+        status = "Noticeable Competition"
+    elif score >= 5:
+        status = "Heavy Competition"
+    else:
+        status = "Highly Saturated"
+
+    details = (
+        f"Weighted competitor pressure within {radius_meters} meters is {weighted_pressure:.2f}. "
+        f"The engine dampens distant points with radial decay and multi-band weighting before converting the pressure to a 0-25 inverse-density score."
+    )
+
+    return {
+        "score": round(score),
+        "status": status,
+        "details": details,
+        "weighted_pressure": round(weighted_pressure, 3),
+        "competitor_count": len(nearby_competitors),
+        "nearby_competitors": nearby_competitors,
+    }
+
+
+def _score_road_access(lat, lon, radius_meters, profile, verified_roads=None):
+    verified_roads = verified_roads or []
+
+    best_verified = None
+    soft_cap = float(profile.get("road_distance_soft_cap_m") or 850.0)
+    preferred_classes = set(profile.get("preferred_road_classes") or [])
+    required_classes = set(profile.get("required_road_classes") or [])
+
+    for road in verified_roads:
+        road_lat = to_finite_number(road.get("latitude"))
+        road_lon = to_finite_number(road.get("longitude"))
+        if road_lat is None or road_lon is None:
+            continue
+
+        distance_m = calculate_distance(lat, lon, road_lat, road_lon)
+        if distance_m > radius_meters:
+            continue
+
+        road_class = normalize_osm_value(road.get("road_class") or road.get("feature_subtype"))
+        road_name = str(road.get("name") or "").strip() or None
+        road_base_score = float(ROAD_CLASS_BASE_SCORES.get(road_class or "", 10))
+        distance_factor = max(0.34, 1.0 - (distance_m / max(1.0, soft_cap)))
+        score = road_base_score * distance_factor * _source_confidence_multiplier("verified_local", road.get("confidence_score"))
+
+        if road_class in preferred_classes:
+            score += 2.5
+        elif road_class in required_classes:
+            score += 1.0
+        else:
+            score -= 2.0
+
+        if distance_m <= 120:
+            score += 1.5
+        elif distance_m <= 300:
+            score += 0.75
+        elif distance_m > soft_cap:
+            score -= 1.5
+
+        score = round(_clamp_score(score, 0, 25))
+
+        if best_verified is None or score > best_verified["score"] or (score == best_verified["score"] and distance_m < best_verified["distance_m"]):
+            best_verified = {
+                "score": score,
+                "road_class": road_class,
+                "road_name": road_name,
+                "distance_m": distance_m,
+            }
+
+    if best_verified is not None:
+        if best_verified["score"] >= 20:
+            status = "Excellent Road Access"
+        elif best_verified["score"] >= 15:
+            status = "Good Road Access"
+        elif best_verified["score"] >= 10:
+            status = "Moderate Road Access"
+        elif best_verified["score"] >= 5:
+            status = "Limited Road Access"
+        else:
+            status = "Poor Road Access"
+
+        road_label = best_verified["road_class"] or "verified local road"
+        details = (
+            f"A manually verified road record was found approximately {best_verified['distance_m']:.1f} meters away. "
+            f"Its class is {road_label}, and the score uses the verified local source hierarchy before falling back to OSM geometry."
+        )
+
+        return {
+            "score": best_verified["score"],
+            "status": status,
+            "details": details,
+            "road_class": best_verified["road_class"],
+            "road_name": best_verified["road_name"],
+            "distance_m": round(best_verified["distance_m"], 2),
+        }
+
+    if PBF_ROAD_CONTEXT_GDF is None or Point is None:
+        return {
+            "score": 12,
+            "status": "Road Context Unavailable",
+            "details": "Road geometry context could not be loaded, so the engine used a neutral accessibility fallback.",
+            "road_class": None,
+            "road_name": None,
+            "distance_m": None,
+        }
+
+    candidates = _query_context_candidates(PBF_ROAD_CONTEXT_GDF, lat, lon, radius_meters, fallback_multiplier=1.8)
+    if candidates is None or candidates.empty:
+        return {
+            "score": 12,
+            "status": "Road Context Unavailable",
+            "details": "No road candidates were found in the scan window, so the engine used a neutral accessibility fallback.",
+            "road_class": None,
+            "road_name": None,
+            "distance_m": None,
+        }
+
+    origin = Point(lon, lat)
+    best_candidate = None
+    best_distance = None
+
+    for _, row in candidates.iterrows():
+        geometry = row.geometry
+        if geometry is None or geometry.is_empty:
+            continue
+
+        try:
+            nearest_point = nearest_points(origin, geometry)[1] if nearest_points is not None else geometry.representative_point()
+            distance_m = calculate_distance(lat, lon, nearest_point.y, nearest_point.x)
+        except Exception:
+            continue
+
+        if best_distance is None or distance_m < best_distance:
+            best_distance = distance_m
+            best_candidate = row
+
+    if best_candidate is None or best_distance is None:
+        return {
+            "score": 12,
+            "status": "Road Context Unavailable",
+            "details": "The scan could not determine a stable nearest road geometry, so the engine used a neutral accessibility fallback.",
+            "road_class": None,
+            "road_name": None,
+            "distance_m": None,
+        }
+
+    road_class = normalize_osm_value(best_candidate.get("road_class"))
+    road_name = str(best_candidate.get("name") or "").strip() or None
+    road_base_score_value = None
+    try:
+        road_base_score_value = best_candidate["road_base_score"]
+    except Exception:
+        road_base_score_value = None
+    road_base_score = float(road_base_score_value or ROAD_CLASS_BASE_SCORES.get(road_class or "", 10))
+    distance_factor = max(0.34, 1.0 - (best_distance / max(1.0, soft_cap)))
+
+    score = road_base_score * distance_factor
+    preferred_classes = set(profile.get("preferred_road_classes") or [])
+    required_classes = set(profile.get("required_road_classes") or [])
+
+    if road_class in preferred_classes:
+        score += 2.5
+    elif road_class in required_classes:
+        score += 1.0
+    else:
+        score -= 2.5
+
+    if best_distance <= 120:
+        score += 1.5
+    elif best_distance <= 300:
+        score += 0.75
+    elif best_distance > soft_cap:
+        score -= 1.5
+
+    score = round(_clamp_score(score, 0, 25))
+
+    if score >= 20:
+        status = "Excellent Road Access"
+    elif score >= 15:
+        status = "Good Road Access"
+    elif score >= 10:
+        status = "Moderate Road Access"
+    elif score >= 5:
+        status = "Limited Road Access"
+    else:
+        status = "Poor Road Access"
+
+    road_label = road_class or "unknown"
+    details = (
+        f"The nearest road is {road_name or 'an unnamed road'} classified as {road_label}. "
+        f"It is approximately {best_distance:.1f} meters away, and the accessibility score is dampened by distance plus category road preference rules."
+    )
+
+    return {
+        "score": score,
+        "status": status,
+        "details": details,
+        "road_class": road_class,
+        "road_name": road_name,
+        "distance_m": round(best_distance, 2),
+    }
+
+
+def _score_anchor_proximity(lat, lon, radius_meters, profile, verified_anchors=None):
+    weighted_anchor_power = 0.0
+    nearby_anchors = []
+    scale = max(1.0, float(profile.get("anchor_scale_m") or 320.0))
+
+    anchor_sources = list(verified_anchors or []) + list(PANABO_ANCHORS)
+
+    for anchor in anchor_sources:
+        anchor_lat = to_finite_number(anchor.get("lat"))
+        anchor_lon = to_finite_number(anchor.get("lon"))
+        if anchor_lat is None or anchor_lon is None:
+            continue
+
+        distance_m = calculate_distance(lat, lon, anchor_lat, anchor_lon)
+        if distance_m > radius_meters:
+            continue
+
+        power = float(anchor.get("power") or 0.0)
+        distance_decay = 1.0 / (1.0 + (distance_m / scale))
+        weighted_anchor_power += power * distance_decay * _source_confidence_multiplier(anchor.get("source"), anchor.get("confidence_score"))
+        nearby_anchors.append({
+            "name": anchor.get("name"),
+            "distance_m": round(distance_m, 2),
+            "power": power,
+            "source": anchor.get("source") or "osm",
+        })
+
+    target_power = float(profile.get("anchor_target_power") or 36.0)
+    demand_ratio = (weighted_anchor_power / max(1.0, target_power)) * 25.0
+    score = round(_clamp_score(demand_ratio, 0, 25))
+
+    if score >= 20:
+        status = "Strong Traffic Generators"
+    elif score >= 15:
+        status = "Moderate Traffic Generators"
+    elif score >= 10:
+        status = "Mixed Traffic Support"
+    elif score >= 5:
+        status = "Weak Traffic Support"
+    else:
+        status = "Low Visibility"
+
+    details = (
+        f"The engine sums nearby anchor power using inverse-distance decay and normalizes the result against a category target of {target_power:.1f}. "
+        f"Weighted anchor power inside the radius is {weighted_anchor_power:.2f}."
+    )
+
+    return {
+        "score": score,
+        "status": status,
+        "details": details,
+        "weighted_anchor_power": round(weighted_anchor_power, 3),
+        "anchors_found": [item.get("name") for item in nearby_anchors if item.get("name")],
+        "nearby_anchors": nearby_anchors,
+    }
+
+
+def _score_building_density(lat, lon, radius_meters, profile, verified_buildings=None):
+    weighted_intensity = 0.0
+    matched_features = []
+    scale = max(1.0, float(profile.get("building_radius_scale_m") or radius_meters or 420.0))
+
+    for building in verified_buildings or []:
+        building_lat = to_finite_number(building.get("latitude"))
+        building_lon = to_finite_number(building.get("longitude"))
+        if building_lat is None or building_lon is None:
+            continue
+
+        distance_m = calculate_distance(lat, lon, building_lat, building_lon)
+        if distance_m > radius_meters:
+            continue
+
+        distance_decay = 1.0 / (1.0 + (distance_m / scale))
+        feature_weight = float(building.get("feature_weight") or 1.0)
+        area_m2 = to_finite_number(building.get("area_m2")) or 0.0
+        area_bonus = 1.0 + min(2.0, area_m2 / 2500.0) * 0.2
+        feature_weight *= _source_confidence_multiplier("verified_local", building.get("confidence_score"))
+
+        weighted_intensity += feature_weight * distance_decay * area_bonus
+        matched_features.append({
+            "name": building.get("name"),
+            "distance_m": round(distance_m, 2),
+            "feature_weight": round(feature_weight, 2),
+            "area_m2": round(area_m2, 2),
+            "source": building.get("source") or "verified_local",
+        })
+
+    if PBF_BUILDING_CONTEXT_GDF is not None and Point is not None:
+        candidates = _query_context_candidates(PBF_BUILDING_CONTEXT_GDF, lat, lon, radius_meters, fallback_multiplier=1.55)
+    else:
+        candidates = None
+
+    if candidates is None or candidates.empty:
+        if not matched_features:
+            return {
+                "score": 12,
+                "status": "Building Context Unavailable",
+                "details": "Building footprint context could not be loaded, so the engine used a neutral built-form fallback.",
+                "weighted_intensity": 0.0,
+                "matched_features": [],
+            }
+    else:
+        for _, row in candidates.iterrows():
+            geometry = row.geometry
+            if geometry is None or geometry.is_empty:
+                continue
+
+            try:
+                feature_point = geometry.representative_point() if hasattr(geometry, "representative_point") else geometry.centroid
+                distance_m = calculate_distance(lat, lon, feature_point.y, feature_point.x)
+            except Exception:
+                continue
+
+            if distance_m > radius_meters:
+                continue
+
+            distance_decay = 1.0 / (1.0 + (distance_m / scale))
+            feature_weight = float(row.get("feature_weight") or 1.0)
+            area_m2 = _approx_polygon_area_m2(geometry)
+            area_bonus = 1.0 + min(2.0, area_m2 / 2500.0) * 0.18
+
+            weighted_intensity += feature_weight * distance_decay * area_bonus
+            matched_features.append({
+                "name": row.get("name"),
+                "distance_m": round(distance_m, 2),
+                "feature_weight": round(feature_weight, 2),
+                "area_m2": round(area_m2, 2),
+                "source": "osm",
+            })
+
+    density_score = math.log1p(weighted_intensity * float(profile.get("building_weight") or 0.15)) * 8.5
+    score = round(_clamp_score(density_score, 0, 25))
+
+    if score >= 20:
+        status = "Dense Built Environment"
+    elif score >= 15:
+        status = "Moderately Built-Up"
+    elif score >= 10:
+        status = "Balanced Built Form"
+    elif score >= 5:
+        status = "Sparse Built Form"
+    else:
+        status = "Very Sparse Built Form"
+
+    details = (
+        f"The engine measures built-form intensity from nearby building footprints, land-use polygons, and amenity clusters within {radius_meters} meters. "
+        f"Weighted built intensity is {weighted_intensity:.2f}, then converted to a 0-25 density proxy.")
+
+    return {
+        "score": score,
+        "status": status,
+        "details": details,
+        "weighted_intensity": round(weighted_intensity, 3),
+        "matched_features": matched_features,
+    }
+
+
+def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
+    profile_key = normalize_osm_value(business_type)
+    profile_key_safe = profile_key or ""
+    profile = MSME_CATEGORY_PROFILES.get(profile_key_safe, DEFAULT_MSME_ANALYSIS_PROFILE)
+    osm_tags = profile.get("osm_tags") or SME_DATABASE.get(profile_key_safe, {}).get("osm_tags") or [("shop", "convenience")]
+
+    competitors_list = []
+    competitor_dedupe = set()
+    verified_competitors = []
+    verified_roads = []
+    verified_anchors = []
+    verified_buildings = []
+
+    try:
+        verified_competitors = fetch_verified_local_features("msme", business_type=business_type)
+        verified_roads = fetch_verified_local_features("road")
+        verified_anchors = fetch_verified_local_features("anchor")
+        verified_buildings = fetch_verified_local_features("building")
+
+        for shop in verified_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                {
+                    "lat": shop.get("latitude"),
+                    "lon": shop.get("longitude"),
+                    "name": shop.get("name"),
+                    "source": "verified_local",
+                    "confidence_score": shop.get("confidence_score"),
+                },
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+    except Exception as exc:
+        print(f"Verified local feature scan error: {exc}")
+
+    try:
+        cached_competitors = []
+        for _, tag_value in osm_tags:
+            competitors = get_cached_pbf_competitors(tag_value)
+            cached_competitors.extend(competitors)
+
+        for competitor in cached_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+    except Exception as exc:
+        print(f"Spatial competitor scan error: {exc}")
+
+    custom_competitors = []
+    try:
+        custom_competitors = fetch_custom_msmes(business_type)
+        for shop in custom_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                {"lat": shop.get("latitude"), "lon": shop.get("longitude"), "name": shop.get("name"), "source": "custom_msme"},
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+    except Exception as exc:
+        print(f"Custom MSME competitor scan error: {exc}")
+
+    if not competitors_list:
+        for competitor in get_name_keyword_pbf_competitors(business_type):
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+
+    competition_density = _score_competitor_density(lat, lon, competitors_list, radius_meters, profile)
+    road_access = _score_road_access(lat, lon, radius_meters, profile, verified_roads=verified_roads)
+    anchor_proximity = _score_anchor_proximity(lat, lon, radius_meters, profile, verified_anchors=verified_anchors)
+    building_density = _score_building_density(lat, lon, radius_meters, profile, verified_buildings=verified_buildings)
+
+    saturation_raw = (
+        (competition_density["score"] * float(profile.get("competition_weight") or 0.42))
+        + (road_access["score"] * float(profile.get("road_weight") or 0.23))
+        + (anchor_proximity["score"] * float(profile.get("anchor_weight") or 0.20))
+        + (building_density["score"] * float(profile.get("building_weight") or 0.15))
+    )
+    weight_total = (
+        float(profile.get("competition_weight") or 0.42)
+        + float(profile.get("road_weight") or 0.23)
+        + float(profile.get("anchor_weight") or 0.20)
+        + float(profile.get("building_weight") or 0.15)
+    )
+    saturation_score = round(_clamp_score(saturation_raw / max(0.01, weight_total), 0, 25))
+
+    if saturation_score >= 20:
+        saturation_status = "Market Gap Available"
+    elif saturation_score >= 15:
+        saturation_status = "Low Competition"
+    elif saturation_score >= 10:
+        saturation_status = "Moderate Competition"
+    elif saturation_score >= 5:
+        saturation_status = "High Competition"
+    else:
+        saturation_status = "Oversaturated"
+
+    saturation_details = (
+        f"The composite market saturation score blends competitor density, road access, traffic-generator proximity, and built-form intensity for {profile.get('display_name')}. "
+        f"Weights used for this category are competition={float(profile.get('competition_weight') or 0.42):.2f}, road={float(profile.get('road_weight') or 0.23):.2f}, anchor={float(profile.get('anchor_weight') or 0.20):.2f}, building={float(profile.get('building_weight') or 0.15):.2f}. "
+        f"Raw component scores are competition {competition_density['score']}, road {road_access['score']}, anchor {anchor_proximity['score']}, and building {building_density['score']}."
+    )
+
+    return {
+        "profile": profile,
+        "competitors": competitors_list,
+        "custom_competitors": custom_competitors,
+        "competition_density": competition_density,
+        "road_access": road_access,
+        "anchor_proximity": anchor_proximity,
+        "building_density": building_density,
+        "saturation": {
+            "score": saturation_score,
+            "status": saturation_status,
+            "description": f"Composite market saturation for {profile.get('display_name')}",
+            "details": saturation_details,
+        },
+        "component_scores": {
+            "competition_density": competition_density["score"],
+            "road_access": road_access["score"],
+            "anchor_proximity": anchor_proximity["score"],
+            "building_density": building_density["score"],
+        },
+    }
 
 
 def preload_pbf_competitor_cache():
@@ -1011,7 +2049,8 @@ def get_name_keyword_pbf_competitors(business_type):
     if not PBF_CACHE_LOADED:
         preload_pbf_competitor_cache()
 
-    keywords = PBF_NAME_KEYWORD_FALLBACK.get(normalize_osm_value(business_type), [])
+    business_key = normalize_osm_value(business_type) or ""
+    keywords = PBF_NAME_KEYWORD_FALLBACK.get(business_key, [])
     if not keywords:
         return []
 
@@ -1081,10 +2120,13 @@ def _append_competitor_if_within_radius(competitors_list, dedupe_keys, source_it
         return
 
     dedupe_keys.add(dedupe_key)
+    source_name = str(source_item.get("source") or "osm").strip().lower() if isinstance(source_item, dict) else "osm"
     competitors_list.append({
         "lat": p_lat,
         "lon": p_lon,
-        "name": normalized_name or default_name
+        "name": normalized_name or default_name,
+        "source": source_name,
+        "confidence_score": source_item.get("confidence_score") if isinstance(source_item, dict) else None
     })
 
 
@@ -1496,7 +2538,7 @@ def resolve_space_context_for_coords(lat: float, lon: float, space_markers=None,
         "confidence_score": best_match.get("confidence_score"),
         "verified_at": best_match.get("verified_at"),
         "expires_at": best_match.get("expires_at"),
-        "distance_meters": int(round(best_distance)),
+        "distance_meters": int(round(best_distance if best_distance is not None else 0.0)),
     }
 
 
@@ -1777,7 +2819,7 @@ def get_citywide_scan_snapshot(radius: int = 340):
                         args=(cache_key, int(radius)),
                         daemon=True,
                     ).start()
-        return db_payload
+        return db_payload if isinstance(db_payload, dict) else {}
 
     # No cache and no DB entry: trigger background scan
     if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
@@ -1812,7 +2854,8 @@ def _trend_snapshot_auto_refresh_loop(stop_event: Event, radius: int = 340):
 
 def run_pre_scanned_trend_report(business_key: str, user_id: int | None = None, radius: int = 340, space_markers=None):
     snapshot = get_citywide_scan_snapshot(radius=radius)
-    business_bucket = (snapshot.get("businesses") or {}).get(business_key) or {}
+    snapshot_obj = snapshot if isinstance(snapshot, dict) else {}
+    business_bucket = (snapshot_obj.get("businesses") or {}).get(business_key) or {}
     report = business_bucket.get("best_report")
     if not report:
         return None
@@ -2219,6 +3262,56 @@ def admin_login(payload: AdminLoginRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ReportRequest(BaseModel):
+    analysis: dict
+    category: str | None = None
+    export_pdf: bool = False
+    business_type: str | None = None
+    use_llm: bool = True
+    gemini_model: str = "gemini-1.5-pro"
+
+
+@app.post("/reports/generate")
+def generate_report(payload: ReportRequest):
+    try:
+        profile = DEFAULT_MSME_ANALYSIS_PROFILE
+        if payload.category:
+            profile = MSME_CATEGORY_PROFILES.get(payload.category.lower(), DEFAULT_MSME_ANALYSIS_PROFILE)
+
+        structured = build_structured_report(payload.analysis or {}, profile)
+        narrative_result = generate_narrative_with_fallback(
+            structured,
+            business_type=(payload.business_type or payload.category or ''),
+            use_llm=bool(payload.use_llm),
+            gemini_model=(payload.gemini_model or "gemini-1.5-pro"),
+        )
+        structured["narrative"] = narrative_result.get("narrative")
+        structured["quality_control"] = narrative_result.get("qc")
+        structured["generation_meta"] = narrative_result.get("meta")
+        html = render_report_html(structured)
+
+        pdf_b64 = None
+        if payload.export_pdf:
+            pdf_bytes = try_render_pdf_bytes(html)
+            if pdf_bytes:
+                import base64
+                pdf_b64 = base64.b64encode(pdf_bytes).decode('ascii')
+
+        return {
+            "status": "success",
+            "report": structured,
+            "html": html,
+            "pdf_base64": pdf_b64,
+            "qc": narrative_result.get("qc"),
+            "generation_meta": narrative_result.get("meta"),
+            "deterministic_backup": narrative_result.get("deterministic_backup"),
+        }
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/admin/users")
 def admin_list_users(x_admin_token: str | None = Header(default=None)):
     verify_admin_token(x_admin_token)
@@ -2265,6 +3358,10 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         user_pk_column = get_users_primary_key_column(cursor)
+        if not user_pk_column:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=500, detail="Unable to determine users primary key column")
 
         existing = fetch_user_for_admin(cursor, user_pk_column, user_id)
         if not existing:
@@ -2478,13 +3575,204 @@ def admin_delete_custom_msme(msme_id: int, x_admin_token: str | None = Header(de
             raise e
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/admin/verified-local-features")
+def admin_list_verified_local_features(
+    feature_kind: str | None = None,
+    business_type: str | None = None,
+    include_inactive: bool = False,
+    x_admin_token: str | None = Header(default=None)
+):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_verified_local_features_table(cursor)
+
+        query = [
+            "SELECT id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at",
+            "FROM verified_local_features",
+            "WHERE 1 = 1",
+        ]
+        params = []
+
+        if feature_kind:
+            normalized_kind = normalize_osm_value(feature_kind)
+            if normalized_kind not in VERIFIED_LOCAL_FEATURE_KINDS:
+                raise HTTPException(status_code=400, detail="Invalid verified feature kind")
+            query.append("AND feature_kind = %s")
+            params.append(normalized_kind)
+
+        if business_type:
+            query.append("AND LOWER(TRIM(COALESCE(business_type, ''))) = %s")
+            params.append(normalize_osm_value(business_type))
+
+        if not include_inactive:
+            query.append("AND is_active = TRUE")
+
+        query.append("ORDER BY updated_at DESC, created_at DESC, id DESC")
+        cursor.execute("\n".join(query), params)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "verified_local_features": rows}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/verified-local-features")
+def admin_create_verified_local_feature(payload: AdminVerifiedLocalFeatureRequest, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        feature_kind = normalize_osm_value(payload.feature_kind)
+        if feature_kind not in VERIFIED_LOCAL_FEATURE_KINDS:
+            raise HTTPException(status_code=400, detail="Invalid verified feature kind")
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_verified_local_features_table(cursor)
+        cursor.execute(
+            """
+            INSERT INTO verified_local_features (
+                feature_kind, name, business_type, feature_subtype, latitude, longitude,
+                road_class, power, building_type, landuse, area_m2, confidence_score,
+                source_note, is_active, verified_at, created_by_admin_email
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at
+            """,
+            (
+                feature_kind,
+                payload.name,
+                payload.business_type,
+                payload.feature_subtype,
+                payload.latitude,
+                payload.longitude,
+                payload.road_class,
+                payload.power,
+                payload.building_type,
+                payload.landuse,
+                payload.area_m2,
+                int(payload.confidence_score or 0),
+                payload.source_note,
+                payload.is_active,
+                payload.verified_at,
+                None,
+            )
+        )
+        created = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "verified_local_feature": created}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/admin/verified-local-features/{feature_id}")
+def admin_update_verified_local_feature(feature_id: int, payload: AdminVerifiedLocalFeatureRequest, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        feature_kind = normalize_osm_value(payload.feature_kind)
+        if feature_kind not in VERIFIED_LOCAL_FEATURE_KINDS:
+            raise HTTPException(status_code=400, detail="Invalid verified feature kind")
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        ensure_verified_local_features_table(cursor)
+        cursor.execute(
+            """
+            UPDATE verified_local_features
+            SET feature_kind = %s,
+                name = %s,
+                business_type = %s,
+                feature_subtype = %s,
+                latitude = %s,
+                longitude = %s,
+                road_class = %s,
+                power = %s,
+                building_type = %s,
+                landuse = %s,
+                area_m2 = %s,
+                confidence_score = %s,
+                source_note = %s,
+                is_active = %s,
+                verified_at = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at
+            """,
+            (
+                feature_kind,
+                payload.name,
+                payload.business_type,
+                payload.feature_subtype,
+                payload.latitude,
+                payload.longitude,
+                payload.road_class,
+                payload.power,
+                payload.building_type,
+                payload.landuse,
+                payload.area_m2,
+                int(payload.confidence_score or 0),
+                payload.source_note,
+                payload.is_active,
+                payload.verified_at,
+                feature_id,
+            )
+        )
+        updated = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not updated:
+            raise HTTPException(status_code=404, detail="Verified local feature not found")
+
+        return {"status": "success", "verified_local_feature": updated}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/admin/verified-local-features/{feature_id}")
+def admin_delete_verified_local_feature(feature_id: int, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        ensure_verified_local_features_table(cursor)
+        cursor.execute("DELETE FROM verified_local_features WHERE id = %s RETURNING id", (feature_id,))
+        deleted = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Verified local feature not found")
+
+        return {"status": "success", "deleted_verified_local_feature_id": deleted[0]}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/analyze")
 def perform_analysis(data: AnalysisRequest):
     sme_profile = SME_DATABASE.get(data.business_type, {"key": "shop", "val": "convenience", "fear": 5, "need": 5, "name": "MSME"})
-    search_val = sme_profile["val"]
-    osm_tags = sme_profile.get("osm_tags") or [(sme_profile.get("key", "shop"), search_val)]
-    print(f"[DEBUG] perform_analysis: business_type={data.business_type}, lat={data.lat}, lon={data.lon}, radius={data.radius}, osm_tags={osm_tags}")
-    
+    analysis_profile = _get_analysis_profile(data.business_type)
+    print(
+        f"[DEBUG] perform_analysis: business_type={data.business_type}, lat={data.lat}, lon={data.lon}, radius={data.radius}, "
+        f"profile={analysis_profile.get('display_name')}, competition_weight={analysis_profile.get('competition_weight')}"
+    )
+
+    preflight_context = evaluate_layered_market_context(data.lat, data.lon, data.radius, data.business_type)
+
     # FACTOR 1: ZONING - Normalized to 0-25 scale
     zoning_score = 0
     zoning_status = "Outside Commercial Zone"
@@ -2509,123 +3797,15 @@ def perform_analysis(data: AnalysisRequest):
     else:
         hazard_description = "Hazard layer is unavailable, so no hazard class was applied to this scan."
 
-    # FACTOR 3: LOCAL COMPETITOR SCAN (SATURATION) - Normalized to 0-25 scale
-    competitors_list = []
-    competitor_dedupe = set()
-
-    try:
-        cached_competitors = []
-        for _, tag_value in osm_tags:
-            competitors = get_cached_pbf_competitors(tag_value)
-            print(f"[DEBUG] OSM competitors for tag_value={tag_value}: {len(competitors)} found")
-            cached_competitors.extend(competitors)
-
-        for competitor in cached_competitors:
-            _append_competitor_if_within_radius(
-                competitors_list,
-                competitor_dedupe,
-                competitor,
-                data.lat,
-                data.lon,
-                data.radius,
-                f"Local {sme_profile['name']}"
-            )
-    except Exception as e:
-        print(f"Spatial Scan Error: {e}")
-
-    # Scan PostgreSQL Database and include them as direct competitors.
-    custom_shops = fetch_custom_msmes(data.business_type)
-    print(f"[DEBUG] Custom MSMEs for {data.business_type}: {len(custom_shops)} found")
-    for shop in custom_shops:
-        _append_competitor_if_within_radius(
-            competitors_list,
-            competitor_dedupe,
-            {"lat": shop.get('latitude'), "lon": shop.get('longitude'), "name": shop.get('name')},
-            data.lat,
-            data.lon,
-            data.radius,
-            f"Local {sme_profile['name']}"
-        )
-
-    # Local-only fallback: match Panabo OSM features by business name keywords.
-    if not competitors_list:
-        for competitor in get_name_keyword_pbf_competitors(data.business_type):
-            _append_competitor_if_within_radius(
-                competitors_list,
-                competitor_dedupe,
-                competitor,
-                data.lat,
-                data.lon,
-                data.radius,
-                f"Nearby {sme_profile['name']}"
-            )
-
-    # Strict competitors are the only ones used for saturation scoring.
-    strict_competitors_found = len(competitors_list)
-    print(f"[DEBUG] Total competitors found for {data.business_type} at ({data.lat},{data.lon}): {strict_competitors_found}")
-
-    competitors_found = strict_competitors_found
-
-    # Normalize saturation score to 0-25 scale
-    # Lower competitors = higher score (less saturated = better)
-    if competitors_found == 0:
-        saturation_score = 25  # Perfect - no competition
-    elif competitors_found == 1:
-        saturation_score = 20  # Good - minimal competition
-    elif competitors_found <= 3:
-        saturation_score = 15  # Moderate - some competition
-    elif competitors_found <= 5:
-        saturation_score = 10  # Challenging - notable competition
-    else:
-        saturation_score = 5   # Very saturated - high competition
-
-    # Determine saturation status based on score
-    if saturation_score >= 20:
-        saturation_status = "Market Gap Available"
-    elif saturation_score >= 15:
-        saturation_status = "Low Competition"
-    elif saturation_score >= 10:
-        saturation_status = "Moderate Competition"
-    elif saturation_score >= 5:
-        saturation_status = "High Competition"
-    else:
-        saturation_status = "Oversaturated" 
-
-    # FACTOR 4: PROPRIETARY DEMAND SCAN 
-    raw_demand_power = 0
-    anchors_found = []
-    for anchor in PANABO_ANCHORS:
-        distance = calculate_distance(data.lat, data.lon, anchor["lat"], anchor["lon"])
-        if distance <= data.radius:
-            raw_demand_power += anchor["power"]
-            anchors_found.append(anchor["name"])
-
-    target_power = sme_profile['need'] * 8
-    demand_ratio = (raw_demand_power / target_power) * 25 if target_power > 0 else 25
-    demand_score = min(25, int(demand_ratio))
-    
-    if demand_score >= 20:
-        demand_status = "High Foot Traffic"
-    elif demand_score >= 10:
-        demand_status = "Moderate Foot Traffic"
-    else:
-        demand_status = "Low Visibility"
-        
-    demand_desc = f"Proximate to: {', '.join(anchors_found)}." if anchors_found else "No major Panabo infrastructure anchors detected."
-    demand_details = (
-        f"Demand score is computed by summing the power values of nearby Panabo anchors within {data.radius} meters, then normalizing that total against a target power benchmark ({target_power}). "
-        + f"Raw anchor power is {raw_demand_power}, and the result is scaled to a 0-25 index with a maximum cap of 25."
-    )
-
-    saturation_details = (
-        f"The algorithm scanned local Panabo OSM data from panabo.pbf plus local MSME entries for matching businesses within {data.radius} meters. "
-        + f"It counted direct competitors and then mapped that count to a 0-25 score: 0 competitors => 25, 1 competitor => 20, 2-3 => 15, 4-5 => 10, 6+ => 5."
-    )
-
-    zoning_details = (
-        "The zoning score is derived by checking whether the target coordinates fall inside Panabo commercial or industrial polygon bounds. "
-        + "If the site is inside the commercial polygon, it receives 25. If it is in the industrial support polygon and the business fits that category, it also receives 25; otherwise it is penalized."
-    )
+    competition_density = preflight_context["competition_density"]
+    road_access = preflight_context["road_access"]
+    anchor_proximity = preflight_context["anchor_proximity"]
+    building_density = preflight_context["building_density"]
+    saturation_score = preflight_context["saturation"]["score"]
+    saturation_status = preflight_context["saturation"]["status"]
+    saturation_details = preflight_context["saturation"]["details"]
+    competitors_list = preflight_context["competitors"]
+    competitors_found = len(competitors_list)
 
     if HAZARD_LAYER_CACHE:
         source_label = HAZARD_LAYER_SOURCE or "unknown source"
@@ -2641,52 +3821,75 @@ def perform_analysis(data: AnalysisRequest):
             "instead of using temporary placeholder bounds."
         )
 
-    breakdown_payload = {
-        "zoning": {
-            "score": zoning_score,
-            "status": zoning_status,
-            "description": "Alignment with Panabo City Land Use Plan.",
-            "details": zoning_details
-        },
-        "hazard": {
-            "score": hazard_score,
-            "status": hazard_status,
-            "description": hazard_description,
-            "details": hazard_details
-        },
-        "saturation": {
-            "score": saturation_score,
-            "status": "Oversaturated" if competitors_found >= 1 else "Market Gap Available",
-            "description": f"Penalty multiplier based on {sme_profile['name']} industry sensitivity.",
-            "details": saturation_details
-        },
-        "demand": {
-            "score": demand_score,
-            "status": demand_status,
-            "description": demand_desc,
-            "details": demand_details
-        }
-    }
+    zoning_details = (
+        "The zoning score is derived by checking whether the target coordinates fall inside Panabo commercial or industrial polygon bounds. "
+        + "If the site is inside the commercial polygon, it receives 25. If it is in the industrial support polygon and the business fits that category, it also receives 25; otherwise it is penalized."
+    )
 
-    total_score = zoning_score + hazard_score + saturation_score + demand_score
+    total_score = round(((zoning_score * 0.30) + (hazard_score * 0.20) + (saturation_score * 0.50)) * 4)
 
     # STATIC REPORTING MODULE (Combinational Matrix)
     if zoning_score <= 5:
         generated_insight = f"Critical Warning: This location is in a {zoning_status.lower()}. Even if market conditions are favorable, securing BPLO permits will be highly unlikely. Reconsider this site."
-    elif hazard_score == 0 and demand_score >= 15:
-        generated_insight = f"High Risk, High Reward (Score: {int(total_score)}). While this location benefits from strong foot traffic, it sits in a high-risk flood zone. You must factor in significant property insurance and structural mitigation costs."
-    elif demand_score >= 20 and saturation_score <= 10:
-        generated_insight = f"Competitive Hotspot (Score: {int(total_score)}). Excellent infrastructure demand is present, but the market is heavily oversaturated with {competitors_found} competitors. Success requires aggressive marketing and strong differentiation."
-    elif demand_score >= 20 and saturation_score >= 20:
-        generated_insight = f"Prime Market Gap (Score: {int(total_score)}). Highly recommended. This location enjoys fantastic foot traffic from nearby anchors with virtually zero direct competition. This is an optimal investment opportunity."
-    elif demand_score < 10 and saturation_score >= 20:
-        generated_insight = f"Low Visibility (Score: {int(total_score)}). There are zero competitors here, but also minimal infrastructure drivers. This site will require heavy destination-marketing to draw customers, as organic foot traffic is very low."
+    elif hazard_score <= 5 and anchor_proximity["score"] >= 15:
+        generated_insight = f"High Risk, High Reward (Score: {int(total_score)}). The location attracts strong traffic generators, but it is also exposed to severe flood risk. Any development plan must account for mitigation, insurance, and resilient design."
+    elif saturation_score >= 20 and road_access["score"] >= 18 and anchor_proximity["score"] >= 18:
+        generated_insight = f"Prime Market Gap (Score: {int(total_score)}). The site combines excellent road access, strong traffic generators, and a low competitive burden. This is the strongest placement profile in the current scan window."
+    elif saturation_score <= 10 and competition_density["score"] <= 10:
+        generated_insight = f"Competitive Hotspot (Score: {int(total_score)}). The corridor shows clustered competitors and the inverse-density score is weak, so this location will demand sharper differentiation and pricing discipline."
+    elif anchor_proximity["score"] < 10 and road_access["score"] < 10:
+        generated_insight = f"Low Visibility (Score: {int(total_score)}). The site lacks strong traffic generators and does not sit on a high-value road class, so footfall generation will depend heavily on destination marketing."
     elif total_score >= 70:
         generated_insight = f"Favorable Location (Score: {int(total_score)}). Strong overall metrics with manageable risks. The balance of foot traffic and market saturation provides a stable environment for this {sme_profile['name']}."
     elif total_score >= 45:
         generated_insight = f"Moderate Viability (Score: {int(total_score)}). This site has mixed indicators. Review the breakdown below—you will need to strategically compensate for environmental risks or lower market visibility."
     else:
         generated_insight = f"Not Recommended (Score: {int(total_score)}). Poor overall suitability. A combination of low demand, environmental hazards, or zoning issues makes this a highly unfavorable location."
+
+    breakdown_payload = {
+        "zoning": {
+            "score": zoning_score,
+            "status": zoning_status,
+            "description": "Alignment with Panabo City Land Use Plan.",
+            "details": zoning_details,
+        },
+        "hazard": {
+            "score": hazard_score,
+            "status": hazard_status,
+            "description": hazard_description,
+            "details": hazard_details,
+        },
+        "competition_density": {
+            "score": competition_density["score"],
+            "status": competition_density["status"],
+            "description": f"Inverse-density competition pressure for {analysis_profile.get('display_name')}",
+            "details": competition_density["details"],
+        },
+        "road_access": {
+            "score": road_access["score"],
+            "status": road_access["status"],
+            "description": f"Nearest OSM road class and accessibility fit for {analysis_profile.get('display_name')}",
+            "details": road_access["details"],
+        },
+        "anchor_proximity": {
+            "score": anchor_proximity["score"],
+            "status": anchor_proximity["status"],
+            "description": f"Traffic-generator proximity using Panabo anchor points for {analysis_profile.get('display_name')}",
+            "details": anchor_proximity["details"],
+        },
+        "building_density": {
+            "score": building_density["score"],
+            "status": building_density["status"],
+            "description": f"Built-form intensity around the site for {analysis_profile.get('display_name')}",
+            "details": building_density["details"],
+        },
+        "saturation": {
+            "score": saturation_score,
+            "status": saturation_status,
+            "description": f"Composite market saturation score for {analysis_profile.get('display_name')}",
+            "details": saturation_details,
+        },
+    }
 
     if data.user_id is not None:
         try:
@@ -2725,13 +3928,13 @@ def perform_analysis(data: AnalysisRequest):
     print(f"[DEBUG] Final score for {data.business_type} at ({data.lat},{data.lon}): {int(total_score)}\n---")
     return {
         "viability_score": int(total_score),
-        "business_type": sme_profile["name"], 
+        "business_type": sme_profile["name"],
         "competitors_found": competitors_found,
         "competitor_locations": competitors_list if competitors_found > 0 else [],
-        "target_coords": {"lat": data.lat, "lng": data.lon}, 
+        "target_coords": {"lat": data.lat, "lng": data.lon},
         "radius_meters": data.radius,
-        "insight": generated_insight, 
-        "breakdown": breakdown_payload
+        "insight": generated_insight,
+        "breakdown": breakdown_payload,
     }
 
 if __name__ == "__main__":

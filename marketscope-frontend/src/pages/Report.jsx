@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { apiUrl } from '../api';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -58,6 +59,12 @@ export default function Report({ data, targetCoords, onClose }) {
   const mapFeaturesRef = useRef(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isGeneratingAiReport, setIsGeneratingAiReport] = useState(false);
+  const [isDownloadingAiPdf, setIsDownloadingAiPdf] = useState(false);
+  const [aiNarrative, setAiNarrative] = useState('');
+  const [aiQc, setAiQc] = useState(null);
+  const [aiMeta, setAiMeta] = useState(null);
+  const [aiError, setAiError] = useState('');
   const [isPdfSettingsOpen, setIsPdfSettingsOpen] = useState(false);
   const [pdfOptions, setPdfOptions] = useState({
     format: 'a4',
@@ -287,6 +294,18 @@ export default function Report({ data, targetCoords, onClose }) {
     return dateValue || '-';
   };
 
+  const formatFactorLabel = (key) => {
+    if (key === 'zoning') return 'Zoning Fit';
+    if (key === 'hazard') return 'Hazard Exposure';
+    if (key === 'competition_density') return 'Competition Density';
+    if (key === 'road_access') return 'Road Access';
+    if (key === 'anchor_proximity') return 'Traffic Generators';
+    if (key === 'building_density') return 'Building Density';
+    if (key === 'saturation') return 'Market Saturation';
+    if (key === 'demand') return 'Infrastructure Proxies';
+    return String(key || '').replace(/_/g, ' ');
+  };
+
   const getFactorDetailText = (key, factor) => {
     const details = factor.details;
     if (typeof details === 'string' && details.trim().length > 0) {
@@ -314,10 +333,38 @@ export default function Report({ data, targetCoords, onClose }) {
       );
     }
 
+    if (key === 'competition_density') {
+      return (
+        'Competition density uses a weighted radial scan of nearby MSME competitors. ' +
+        'Closer competitors and repeated matches contribute more pressure than distant ones, so the score reacts to true local saturation instead of raw counts alone.'
+      );
+    }
+
+    if (key === 'road_access') {
+      return (
+        'Road access evaluates the nearest OSM road segment, classifies it by highway hierarchy, and blends road type with distance to the site. ' +
+        'Primary and secondary corridors score higher than service or residential edges.'
+      );
+    }
+
+    if (key === 'anchor_proximity') {
+      return (
+        'Traffic-generator proximity sums nearby anchor power with inverse-distance decay. ' +
+        'Sites near terminals, markets, schools, or similar generators receive stronger opportunity scores.'
+      );
+    }
+
+    if (key === 'building_density') {
+      return (
+        'Building density is used as a built-form proxy. ' +
+        'The engine counts and weights nearby footprints, then uses that intensity as an activity-scale multiplier rather than a standalone decision rule.'
+      );
+    }
+
     if (key === 'saturation') {
       return (
-        'Saturation is derived from counting nearby competitors within the analysis radius. ' +
-        'The algorithm maps competitor density to a 0-25 scale: fewer competitors produce a higher score.'
+        'Saturation is a composite of competitor density, road access, traffic-generator proximity, and built-form intensity. ' +
+        'The engine blends those sub-scores to estimate whether the local market is open, balanced, or crowded.'
       );
     }
 
@@ -340,108 +387,7 @@ export default function Report({ data, targetCoords, onClose }) {
     const safeName = (business_type || 'Report').replace(/\s+/g, '_');
 
     try {
-      const html2pdfModule = await import('html2pdf.js');
-      const html2pdf = html2pdfModule.default;
-
-      await html2pdf()
-        .set({
-          margin: [pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm],
-          filename: `MarketScope_${safeName}_Dossier.pdf`,
-          image: { type: 'jpeg', quality: pdfOptions.quality },
-          html2canvas: {
-            scale: pdfOptions.scale,
-            useCORS: true,
-            backgroundColor: '#ffffff',
-            scrollX: 0,
-            scrollY: 0,
-            onclone: (doc) => {
-              const clonedPage = doc.querySelector('.report-page');
-              if (clonedPage) {
-                clonedPage.classList.add('pdf-force-expand');
-              }
-
-              const style = doc.createElement('style');
-              style.textContent = `
-                .pdf-hide { display: none !important; }
-                :root,
-                html,
-                body {
-                  --bg-app: #ffffff !important;
-                  --bg-sheet: #ffffff !important;
-                  --bg-glass: #ffffff !important;
-                  --text-main: #111827 !important;
-                  --text-muted: #4b5563 !important;
-                  --border-color: #e5e7eb !important;
-                  background: #ffffff !important;
-                  color: #111827 !important;
-                }
-                .report-page {
-                  position: static !important;
-                  inset: auto !important;
-                  height: auto !important;
-                  overflow: visible !important;
-                  background: #ffffff !important;
-                  color: #111827 !important;
-                  display: block !important;
-                }
-                .report-header {
-                  position: static !important;
-                  top: auto !important;
-                  z-index: auto !important;
-                  padding: 0 0 12px !important;
-                  margin-bottom: 14px !important;
-                  background: transparent !important;
-                  border-bottom: 1px solid #e5e7eb !important;
-                  backdrop-filter: none !important;
-                }
-                .report-scroll-content {
-                  padding: 0 !important;
-                  max-width: none !important;
-                  width: 100% !important;
-                }
-                .main-score-card,
-                .insight-box,
-                .report-map-container,
-                .data-card,
-                .disclaimer-card {
-                  break-inside: avoid;
-                  page-break-inside: avoid;
-                }
-                .report-map-legend {
-                  background: #ffffff !important;
-                  border-top: 1px solid #e5e7eb !important;
-                  color: #374151 !important;
-                }
-                .legend-dot.target { border-color: #ffffff !important; }
-                .legend-dot.competitor { border-color: #ffffff !important; }
-                .progress-fill { transition: none !important; }
-                /* PDF-only: hide map and expand all metric details */
-                .pdf-force-expand .report-map-container {
-                  display: none !important;
-                }
-                .pdf-force-expand .factor-details,
-                .pdf-force-expand .factor-details.hidden {
-                  display: block !important;
-                }
-                .pdf-force-expand .detail-chevron {
-                  transform: rotate(180deg) !important;
-                }
-              `;
-              doc.head.appendChild(style);
-            }
-          },
-          jsPDF: {
-            unit: 'mm',
-            format: pdfOptions.format,
-            orientation: pdfOptions.orientation
-          },
-          pagebreak: {
-            mode: ['css', 'legacy'],
-            avoid: ['.main-score-card', '.insight-box', '.report-map-container', '.data-card', '.disclaimer-card']
-          }
-        })
-        .from(reportExportRef.current)
-        .save();
+      await exportReportPdf(`MarketScope_${safeName}_Dossier.pdf`);
     } catch (error) {
       console.error('PDF export failed:', error);
       window.alert('Unable to generate PDF right now. Please try again.');
@@ -451,12 +397,239 @@ export default function Report({ data, targetCoords, onClose }) {
     }
   };
 
+  const exportReportPdf = async (filename) => {
+    if (!reportExportRef.current) {
+      throw new Error('Report content is not ready for export.');
+    }
+
+    const html2pdfModule = await import('html2pdf.js');
+    const html2pdf = html2pdfModule.default;
+
+    await html2pdf()
+      .set({
+        margin: [pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm],
+        filename,
+        image: { type: 'jpeg', quality: pdfOptions.quality },
+        html2canvas: {
+          scale: pdfOptions.scale,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (doc) => {
+            const clonedPage = doc.querySelector('.report-page');
+            if (clonedPage) {
+              clonedPage.classList.add('pdf-force-expand');
+            }
+
+            const style = doc.createElement('style');
+            style.textContent = `
+              .pdf-hide { display: none !important; }
+              :root,
+              html,
+              body {
+                --bg-app: #ffffff !important;
+                --bg-sheet: #ffffff !important;
+                --bg-glass: #ffffff !important;
+                --text-main: #111827 !important;
+                --text-muted: #4b5563 !important;
+                --border-color: #e5e7eb !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+              }
+              .report-page {
+                position: static !important;
+                inset: auto !important;
+                height: auto !important;
+                overflow: visible !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                display: block !important;
+              }
+              .report-header {
+                position: static !important;
+                top: auto !important;
+                z-index: auto !important;
+                padding: 0 0 12px !important;
+                margin-bottom: 14px !important;
+                background: transparent !important;
+                border-bottom: 1px solid #e5e7eb !important;
+                backdrop-filter: none !important;
+              }
+              .report-scroll-content {
+                padding: 0 !important;
+                max-width: none !important;
+                width: 100% !important;
+              }
+              .main-score-card,
+              .insight-box,
+              .report-map-container,
+              .data-card,
+              .disclaimer-card {
+                break-inside: avoid;
+                page-break-inside: avoid;
+              }
+              .report-map-legend {
+                background: #ffffff !important;
+                border-top: 1px solid #e5e7eb !important;
+                color: #374151 !important;
+              }
+              .legend-dot.target { border-color: #ffffff !important; }
+              .legend-dot.competitor { border-color: #ffffff !important; }
+              .progress-fill { transition: none !important; }
+              /* PDF-only: hide map and expand all metric details */
+              .pdf-force-expand .report-map-container {
+                display: none !important;
+              }
+              .pdf-force-expand .factor-details,
+              .pdf-force-expand .factor-details.hidden {
+                display: block !important;
+              }
+              .pdf-force-expand .detail-chevron {
+                transform: rotate(180deg) !important;
+              }
+            `;
+            doc.head.appendChild(style);
+          }
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: pdfOptions.format,
+          orientation: pdfOptions.orientation
+        },
+        pagebreak: {
+          mode: ['css', 'legacy'],
+          avoid: ['.main-score-card', '.insight-box', '.report-map-container', '.data-card', '.disclaimer-card']
+        }
+      })
+      .from(reportExportRef.current)
+      .save();
+  };
+
+  const buildAnalysisPayloadFromReport = () => {
+    const breakdownSafe = data?.breakdown || {};
+    const zoningRestricted = Number(breakdownSafe?.zoning?.score ?? 0) < 12;
+    const floodProne = Number(breakdownSafe?.hazard?.score ?? 0) < 12;
+
+    return {
+      target_lat: resolvedTargetCoords?.lat ?? null,
+      target_lon: resolvedTargetCoords?.lng ?? null,
+      radius: Number(radius_meters || 340),
+      competitors: Array.isArray(competitorLocations)
+        ? competitorLocations.map((item, index) => ({
+            name: item?.name || `Competitor ${index + 1}`,
+            latitude: item?.latitude ?? item?.lat ?? null,
+            longitude: item?.longitude ?? item?.lng ?? null,
+            confidence_score: Number(item?.confidence_score ?? 70)
+          }))
+        : [],
+      anchors: [],
+      roads: [],
+      building_density: null,
+      zoning_flags: { restricted: zoningRestricted },
+      hazards: { flood_prone: floodProne }
+    };
+  };
+
+  const requestAiReport = async (exportPdf = false) => {
+    const payload = {
+      analysis: buildAnalysisPayloadFromReport(),
+      category: business_type || '',
+      business_type: business_type || '',
+      use_llm: true,
+      gemini_model: 'gemini-1.5-pro',
+      export_pdf: exportPdf
+    };
+
+    const response = await fetch(apiUrl('/reports/generate'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.detail || 'Failed to generate AI report.');
+    }
+    return result;
+  };
+
+  const handleGenerateAiReport = async () => {
+    if (isGeneratingAiReport) return;
+
+    setAiError('');
+    setIsGeneratingAiReport(true);
+    try {
+      const result = await requestAiReport(false);
+      const narrative = result?.report?.narrative || '';
+      setAiNarrative(narrative);
+      setAiQc(result?.qc || null);
+      setAiMeta(result?.generation_meta || null);
+    } catch (error) {
+      setAiError(error?.message || 'Failed to generate AI report.');
+    } finally {
+      setIsGeneratingAiReport(false);
+    }
+  };
+
+  const handleDownloadAiPdf = async () => {
+    if (isDownloadingAiPdf) return;
+
+    setAiError('');
+    setIsDownloadingAiPdf(true);
+    try {
+      const result = await requestAiReport(true);
+      const pdfBase64 = result?.pdf_base64;
+      if (!pdfBase64) {
+        await exportReportPdf(`MarketScope_${(business_type || 'Report').replace(/\s+/g, '_')}_AI_Report.pdf`);
+        return;
+      }
+
+      const binaryString = atob(pdfBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i += 1) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const safeName = (business_type || 'Report').replace(/\s+/g, '_');
+      link.href = url;
+      link.download = `MarketScope_${safeName}_AI_Report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setAiError(error?.message || 'Failed to download AI report PDF.');
+    } finally {
+      setIsDownloadingAiPdf(false);
+    }
+  };
+
   return (
     <div ref={reportExportRef} className="report-page slide-up bg-[var(--bg-app)]">
       <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-4 py-4 backdrop-blur-md sm:px-5">
         <h2 className="report-title text-lg font-semibold text-[var(--text-main)]">Analysis Dossier</h2>
 
         <div className="pdf-hide flex items-center gap-2">
+          <button
+            className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={handleGenerateAiReport}
+            disabled={isGeneratingAiReport}
+            title="Generate LLM feasibility narrative"
+          >
+            {isGeneratingAiReport ? 'Generating AI...' : 'Generate AI'}
+          </button>
+
+          <button
+            className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            onClick={handleDownloadAiPdf}
+            disabled={isDownloadingAiPdf}
+            title="Download backend AI PDF"
+          >
+            {isDownloadingAiPdf ? 'Downloading...' : 'AI PDF'}
+          </button>
           
           <button
             className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
@@ -596,6 +769,37 @@ export default function Report({ data, targetCoords, onClose }) {
           </p>
         </div>
 
+        <div className="insight-box mt-5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
+          <h4 className="insight-title mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">
+            AI Feasibility Narrative
+          </h4>
+          {aiError && (
+            <p className="mb-3 text-sm text-red-500">{aiError}</p>
+          )}
+          {aiNarrative ? (
+            <div className="space-y-3">
+              {aiNarrative.split('\n').map((line, idx) => (
+                <p key={`ai-line-${idx}`} className="text-sm leading-6 text-[var(--text-main)]">{line || '\u00a0'}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-[var(--text-muted)]">
+              Generate AI to create an LLM narrative based on structured scores, zoning/hazard status, and saturation metrics.
+            </p>
+          )}
+
+          {(aiQc || aiMeta) && (
+            <div className="mt-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-3 text-xs text-[var(--text-muted)]">
+              <p><strong>QC:</strong> {aiQc?.valid ? 'Passed' : 'Warnings detected'}</p>
+              <p><strong>LLM Used:</strong> {aiMeta?.used_llm ? 'Yes' : 'No (fallback)'}</p>
+              {aiMeta?.model && <p><strong>Model:</strong> {aiMeta.model}</p>}
+              {Array.isArray(aiQc?.warnings) && aiQc.warnings.length > 0 && (
+                <p><strong>Warnings:</strong> {aiQc.warnings.join(' | ')}</p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* SPATIAL CONTEXT MAP */}
         <h3 className="section-heading mt-6 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Spatial Context ({radius_meters}m)</h3>
         <div className="report-map-container mt-3 overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] shadow-sm">
@@ -619,7 +823,7 @@ export default function Report({ data, targetCoords, onClose }) {
                 onClick={() => toggleDetail(key)}
                 aria-expanded={expandedDetail === key}
               >
-                <span className="factor-name capitalize text-sm font-semibold text-[var(--text-main)]">{key === 'demand' ? 'Infrastructure Proxies' : key}</span>
+                <span className="factor-name text-sm font-semibold text-[var(--text-main)]">{formatFactorLabel(key)}</span>
                 <div className="factor-metrics flex items-center gap-3">
                   <span className="metric-score rounded border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold" style={{ color: getScoreColor(factor.score) }}>
                     {factor.score}/25

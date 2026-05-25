@@ -71,6 +71,7 @@ def create_app_tables(db_config):
             ensure_history_table_columns(cursor)
             ensure_users_profile_columns(cursor)
             ensure_custom_msme_table(cursor)
+            ensure_verified_local_features_table(cursor)
             ensure_admin_users_table(cursor)
             ensure_user_space_submissions_table(cursor, user_pk_column)
             ensure_admin_space_submissions_table(cursor)
@@ -144,6 +145,51 @@ def ensure_custom_msme_table(cursor):
         )
         """
     )
+
+
+def ensure_verified_local_features_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS verified_local_features (
+            id SERIAL PRIMARY KEY,
+            feature_kind VARCHAR(32) NOT NULL,
+            name TEXT NOT NULL,
+            business_type VARCHAR(120),
+            feature_subtype VARCHAR(120),
+            latitude DOUBLE PRECISION NOT NULL,
+            longitude DOUBLE PRECISION NOT NULL,
+            road_class VARCHAR(50),
+            power INTEGER,
+            building_type VARCHAR(120),
+            landuse VARCHAR(120),
+            area_m2 DOUBLE PRECISION,
+            confidence_score INTEGER NOT NULL DEFAULT 100,
+            source_note TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            verified_at DATE,
+            created_by_admin_email TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CHECK (feature_kind IN ('msme', 'anchor', 'road', 'building')),
+            CHECK (confidence_score BETWEEN 0 AND 100)
+        )
+        """
+    )
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS feature_subtype VARCHAR(120)")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS road_class VARCHAR(50)")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS power INTEGER")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS building_type VARCHAR(120)")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS landuse VARCHAR(120)")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS area_m2 DOUBLE PRECISION")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS confidence_score INTEGER NOT NULL DEFAULT 100")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS source_note TEXT")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS verified_at DATE")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS created_by_admin_email TEXT")
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_verified_local_features_kind_active ON verified_local_features(feature_kind, is_active)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_verified_local_features_business_type ON verified_local_features(business_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_verified_local_features_coords ON verified_local_features(latitude, longitude)")
 
 
 def ensure_user_space_submissions_table(cursor, user_pk_column):

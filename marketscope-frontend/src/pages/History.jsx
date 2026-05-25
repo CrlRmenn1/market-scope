@@ -145,6 +145,10 @@ export default function History({ user, onOpenReport }) {
     if (key === 'demand') return 'Infrastructure Demand';
     if (key === 'hazard') return 'Hazard Exposure';
     if (key === 'zoning') return 'Zoning Fit';
+    if (key === 'competition_density') return 'Competition Density';
+    if (key === 'road_access') return 'Road Access';
+    if (key === 'anchor_proximity') return 'Traffic Generators';
+    if (key === 'building_density') return 'Building Density';
     if (key === 'saturation') return 'Market Saturation';
     return key;
   };
@@ -199,11 +203,27 @@ export default function History({ user, onOpenReport }) {
 
   const getFactorContext = (key, factor, item) => {
     if (key === 'saturation') {
-      return `${item.competitors_found ?? 0} nearby competitor${(item.competitors_found ?? 0) === 1 ? '' : 's'}`;
+      return 'Composite score from competition, road access, traffic generators, and built-form density.';
     }
 
     if (key === 'demand') {
       return factor?.description || 'Derived from nearby anchor strength.';
+    }
+
+    if (key === 'competition_density') {
+      return factor?.description || 'Weighted inverse-density competitor scan.';
+    }
+
+    if (key === 'road_access') {
+      return factor?.description || 'Nearest road class accessibility fit.';
+    }
+
+    if (key === 'anchor_proximity') {
+      return factor?.description || 'Traffic-generator proximity score.';
+    }
+
+    if (key === 'building_density') {
+      return factor?.description || 'Built-form intensity around the site.';
     }
 
     if (key === 'hazard') {

@@ -10,6 +10,24 @@ const defaultMsmeForm = {
   longitude: ''
 };
 
+const defaultVerifiedFeatureForm = {
+  feature_kind: 'msme',
+  name: '',
+  business_type: '',
+  feature_subtype: '',
+  latitude: '',
+  longitude: '',
+  road_class: '',
+  power: '',
+  building_type: '',
+  landuse: '',
+  area_m2: '',
+  confidence_score: 100,
+  source_note: '',
+  verified_at: '',
+  is_active: true
+};
+
 const defaultAdminSpaceForm = {
   title: '',
   listing_mode: 'rent',
@@ -47,6 +65,13 @@ const BUSINESS_TYPE_OPTIONS = [
   { value: 'hardware', label: 'Hardware / Construction Supplies' }
 ];
 
+const VERIFIED_FEATURE_KIND_OPTIONS = [
+  { value: 'msme', label: 'MSME Competitor' },
+  { value: 'anchor', label: 'Traffic Anchor' },
+  { value: 'road', label: 'Road Access Point' },
+  { value: 'building', label: 'Building / Density Proxy' }
+];
+
 const mapUserToForm = (user) => ({
   full_name: user?.full_name || user?.name || '',
   email: user?.email || '',
@@ -60,6 +85,11 @@ const mapUserToForm = (user) => ({
 
 const getBusinessTypeLabel = (value) => {
   const found = BUSINESS_TYPE_OPTIONS.find((option) => option.value === value);
+  return found?.label || value || '-';
+};
+
+const getVerifiedFeatureKindLabel = (value) => {
+  const found = VERIFIED_FEATURE_KIND_OPTIONS.find((option) => option.value === value);
   return found?.label || value || '-';
 };
 
@@ -125,6 +155,14 @@ export default function AdminPanel({ adminSession }) {
   const [msmeSearchTerm, setMsmeSearchTerm] = useState('');
   const [msmeSortBy, setMsmeSortBy] = useState('type-asc');
 
+  const [verifiedFeatures, setVerifiedFeatures] = useState([]);
+  const [verifiedFeatureForm, setVerifiedFeatureForm] = useState(defaultVerifiedFeatureForm);
+  const [editingVerifiedFeatureId, setEditingVerifiedFeatureId] = useState(null);
+  const [verifiedFeatureLoading, setVerifiedFeatureLoading] = useState(true);
+  const [verifiedFeatureFilter, setVerifiedFeatureFilter] = useState('all');
+  const [verifiedFeatureSearchTerm, setVerifiedFeatureSearchTerm] = useState('');
+  const [verifiedFeatureErrors, setVerifiedFeatureErrors] = useState({});
+
   const [users, setUsers] = useState([]);
   const [userLoading, setUserLoading] = useState(true);
   const [editingUserId, setEditingUserId] = useState(null);
@@ -138,6 +176,7 @@ export default function AdminPanel({ adminSession }) {
   const [selectedAdminPhotoIndex, setSelectedAdminPhotoIndex] = useState(0);
   const [showAdminMapPicker, setShowAdminMapPicker] = useState(false);
   const [showMsmeMapPicker, setShowMsmeMapPicker] = useState(false);
+  const [showVerifiedMapPicker, setShowVerifiedMapPicker] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -178,6 +217,36 @@ export default function AdminPanel({ adminSession }) {
 
     return items;
   }, [customMsmes, msmeSearchTerm, msmeSortBy]);
+
+  const filteredVerifiedFeatures = useMemo(() => {
+    const search = verifiedFeatureSearchTerm.trim().toLowerCase();
+    let items = Array.isArray(verifiedFeatures) ? [...verifiedFeatures] : [];
+
+    if (verifiedFeatureFilter !== 'all') {
+      items = items.filter((item) => String(item?.feature_kind || '') === verifiedFeatureFilter);
+    }
+
+    if (search) {
+      items = items.filter((item) => {
+        const name = String(item?.name || '').toLowerCase();
+        const kind = String(item?.feature_kind || '').toLowerCase();
+        const subtype = String(item?.feature_subtype || '').toLowerCase();
+        const businessType = String(item?.business_type || '').toLowerCase();
+        return name.includes(search) || kind.includes(search) || subtype.includes(search) || businessType.includes(search);
+      });
+    }
+
+    items.sort((a, b) => {
+      const aKind = String(a?.feature_kind || '').toLowerCase();
+      const bKind = String(b?.feature_kind || '').toLowerCase();
+      const aName = String(a?.name || '').toLowerCase();
+      const bName = String(b?.name || '').toLowerCase();
+      if (aKind !== bKind) return aKind.localeCompare(bKind);
+      return aName.localeCompare(bName);
+    });
+
+    return items;
+  }, [verifiedFeatures, verifiedFeatureFilter, verifiedFeatureSearchTerm]);
 
   const resetMessages = () => {
     setErrorMessage('');
@@ -249,6 +318,32 @@ export default function AdminPanel({ adminSession }) {
     setShowMsmeMapPicker(false);
   };
 
+  const requestVerifiedFeatureGeolocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMessage('Geolocation not supported in this browser.');
+      setShowVerifiedMapPicker(true);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setVerifiedFeatureForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+        setErrorMessage('');
+      },
+      () => {
+        setErrorMessage('Unable to get location. Please allow location access or pin on map.');
+        setShowVerifiedMapPicker(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleVerifiedMapSelect = ({ latitude, longitude }) => {
+    setVerifiedFeatureForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
+    setShowVerifiedMapPicker(false);
+  };
+
   const loadCustomMsmes = async () => {
     if (!token) return;
     setMsmeLoading(true);
@@ -261,6 +356,24 @@ export default function AdminPanel({ adminSession }) {
       setErrorMessage(error.message || 'Failed to load custom MSMEs');
     } finally {
       setMsmeLoading(false);
+    }
+  };
+
+  const loadVerifiedFeatures = async () => {
+    if (!token) return;
+    setVerifiedFeatureLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (verifiedFeatureFilter !== 'all') params.set('feature_kind', verifiedFeatureFilter);
+
+      const response = await fetch(apiUrl(`/admin/verified-local-features${params.toString() ? `?${params.toString()}` : ''}`), { headers });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Failed to load verified local features');
+      setVerifiedFeatures(Array.isArray(data.verified_local_features) ? data.verified_local_features : []);
+    } catch (error) {
+      setErrorMessage(error.message || 'Failed to load verified local features');
+    } finally {
+      setVerifiedFeatureLoading(false);
     }
   };
 
@@ -308,9 +421,16 @@ export default function AdminPanel({ adminSession }) {
   useEffect(() => {
     resetMessages();
     loadCustomMsmes();
+    loadVerifiedFeatures();
     loadUsers();
     loadSpaces('pending');
   }, [token]);
+
+  useEffect(() => {
+    if (activeTab === 'verified') {
+      loadVerifiedFeatures();
+    }
+  }, [verifiedFeatureFilter, activeTab]);
 
   useEffect(() => {
     if (activeTab === 'spaces') {
@@ -433,6 +553,124 @@ export default function AdminPanel({ adminSession }) {
       await loadCustomMsmes();
     } catch (error) {
       setErrorMessage(error.message || 'Unable to delete custom MSME');
+    }
+  };
+
+  const submitVerifiedFeature = async (event) => {
+    event.preventDefault();
+    resetMessages();
+    setVerifiedFeatureErrors({});
+
+    const payload = {
+      feature_kind: verifiedFeatureForm.feature_kind,
+      name: verifiedFeatureForm.name.trim(),
+      business_type: verifiedFeatureForm.business_type.trim() || null,
+      feature_subtype: verifiedFeatureForm.feature_subtype.trim() || null,
+      latitude: Number(verifiedFeatureForm.latitude),
+      longitude: Number(verifiedFeatureForm.longitude),
+      road_class: verifiedFeatureForm.road_class.trim() || null,
+      power: verifiedFeatureForm.power === '' ? null : Number(verifiedFeatureForm.power),
+      building_type: verifiedFeatureForm.building_type.trim() || null,
+      landuse: verifiedFeatureForm.landuse.trim() || null,
+      area_m2: verifiedFeatureForm.area_m2 === '' ? null : Number(verifiedFeatureForm.area_m2),
+      confidence_score: verifiedFeatureForm.confidence_score === '' ? 0 : Number(verifiedFeatureForm.confidence_score),
+      source_note: verifiedFeatureForm.source_note.trim() || null,
+      verified_at: verifiedFeatureForm.verified_at || null,
+      is_active: Boolean(verifiedFeatureForm.is_active)
+    };
+
+    const errors = {};
+    if (!payload.feature_kind) errors.feature_kind = 'Select a feature kind.';
+    if (!payload.name) errors.name = 'Name is required.';
+    if (Number.isNaN(payload.latitude)) errors.latitude = 'Valid latitude required.';
+    if (Number.isNaN(payload.longitude)) errors.longitude = 'Valid longitude required.';
+
+    if (Object.keys(errors).length) {
+      setVerifiedFeatureErrors(errors);
+      setErrorMessage('Please fix the highlighted fields.');
+      return;
+    }
+
+    if (Number.isNaN(payload.confidence_score) || payload.confidence_score < 0 || payload.confidence_score > 100) {
+      setErrorMessage('Confidence score must be between 0 and 100.');
+      return;
+    }
+
+    if (payload.power !== null && Number.isNaN(payload.power)) {
+      setErrorMessage('Power must be a number when provided.');
+      return;
+    }
+
+    if (payload.area_m2 !== null && Number.isNaN(payload.area_m2)) {
+      setErrorMessage('Area must be a number when provided.');
+      return;
+    }
+
+    const isEditing = Boolean(editingVerifiedFeatureId);
+    const url = isEditing ? apiUrl(`/admin/verified-local-features/${editingVerifiedFeatureId}`) : apiUrl('/admin/verified-local-features');
+    const method = isEditing ? 'PUT' : 'POST';
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Unable to save verified local feature');
+
+      setSuccessMessage(isEditing ? 'Verified local feature updated.' : 'Verified local feature created.');
+      setVerifiedFeatureForm(defaultVerifiedFeatureForm);
+      setEditingVerifiedFeatureId(null);
+      await loadVerifiedFeatures();
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to save verified local feature');
+    }
+  };
+
+  const startEditVerifiedFeature = (item) => {
+    resetMessages();
+    setVerifiedFeatureErrors({});
+    setEditingVerifiedFeatureId(item.id);
+    setVerifiedFeatureForm({
+      feature_kind: item.feature_kind || 'msme',
+      name: item.name || '',
+      business_type: item.business_type || '',
+      feature_subtype: item.feature_subtype || '',
+      latitude: item.latitude ?? '',
+      longitude: item.longitude ?? '',
+      road_class: item.road_class || '',
+      power: item.power ?? '',
+      building_type: item.building_type || '',
+      landuse: item.landuse || '',
+      area_m2: item.area_m2 ?? '',
+      confidence_score: item.confidence_score ?? 100,
+      source_note: item.source_note || '',
+      verified_at: item.verified_at ? String(item.verified_at).slice(0, 10) : '',
+      is_active: Boolean(item.is_active)
+    });
+  };
+
+  const deleteVerifiedFeature = async (item) => {
+    if (!window.confirm(`Delete verified local feature: ${item.name}?`)) return;
+    resetMessages();
+
+    try {
+      const response = await fetch(apiUrl(`/admin/verified-local-features/${item.id}`), {
+        method: 'DELETE',
+        headers
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Unable to delete verified local feature');
+
+      setSuccessMessage('Verified local feature deleted.');
+      if (editingVerifiedFeatureId === item.id) {
+        setEditingVerifiedFeatureId(null);
+        setVerifiedFeatureForm(defaultVerifiedFeatureForm);
+      }
+      await loadVerifiedFeatures();
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to delete verified local feature');
     }
   };
 
@@ -584,9 +822,12 @@ export default function AdminPanel({ adminSession }) {
       {errorMessage && <div className="error-alert mt-4">{errorMessage}</div>}
       {successMessage && <div className="admin-success-alert mt-4">{successMessage}</div>}
 
-      <div className="admin-tabs mt-6" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+      <div className="admin-tabs mt-6" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
         <button type="button" className={`admin-tab-btn ${activeTab === 'msmes' ? 'active' : ''}`} onClick={() => setActiveTab('msmes')}>
           Custom MSMEs
+        </button>
+        <button type="button" className={`admin-tab-btn ${activeTab === 'verified' ? 'active' : ''}`} onClick={() => setActiveTab('verified')}>
+          Verified Local Data
         </button>
         <button type="button" className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
           Users
@@ -681,6 +922,134 @@ export default function AdminPanel({ adminSession }) {
             ))}
             {!msmeLoading && filteredCustomMsmes.length === 0 && (
               <div className="data-card">No MSMEs match your search.</div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'verified' && (
+        <>
+          <div className="data-card mt-6 admin-card">
+            <h3 className="section-heading" style={{ marginBottom: '12px' }}>{editingVerifiedFeatureId ? 'Edit Verified Local Feature' : 'Add Verified Local Feature'}</h3>
+            <form onSubmit={submitVerifiedFeature}>
+              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Feature Kind</label>
+                  <select className="app-select" value={verifiedFeatureForm.feature_kind} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, feature_kind: e.target.value }))}>
+                    {VERIFIED_FEATURE_KIND_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Business Type (optional)</label>
+                  <select className="app-select" value={verifiedFeatureForm.business_type} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, business_type: e.target.value }))}>
+                    <option value="">Not specific</option>
+                    {BUSINESS_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label>Name</label>
+                <input value={verifiedFeatureForm.name} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, name: e.target.value }))} />
+                {verifiedFeatureErrors.name && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.name}</p>}
+              </div>
+
+              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Latitude</label>
+                  <input value={verifiedFeatureForm.latitude} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, latitude: e.target.value }))} />
+                  {verifiedFeatureErrors.latitude && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.latitude}</p>}
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Longitude</label>
+                  <input value={verifiedFeatureForm.longitude} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, longitude: e.target.value }))} />
+                  {verifiedFeatureErrors.longitude && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.longitude}</p>}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 10, justifyContent: 'center' }}>
+                <button type="button" className="map-action-btn" onClick={requestVerifiedFeatureGeolocation}>Use my location</button>
+                <button type="button" className="map-action-btn" onClick={() => setShowVerifiedMapPicker(true)}>Pin on map</button>
+              </div>
+              {showVerifiedMapPicker && <MapPicker onSelect={handleVerifiedMapSelect} onClose={() => setShowVerifiedMapPicker(false)} />}
+
+              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Subtype / Road Class</label>
+                  <input value={verifiedFeatureForm.feature_subtype} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, feature_subtype: e.target.value }))} placeholder="e.g., tertiary, market, mall" />
+                </div>
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Confidence</label>
+                  <input value={verifiedFeatureForm.confidence_score} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, confidence_score: e.target.value }))} />
+                  {verifiedFeatureErrors.confidence_score && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.confidence_score}</p>}
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label>Notes / Source</label>
+                <input value={verifiedFeatureForm.source_note} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, source_note: e.target.value }))} placeholder="Field survey, broker, photo-id" />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, margin: '10px 0 14px', justifyContent: 'center' }}>
+                <button type="submit" className="primary-btn">{editingVerifiedFeatureId ? 'Update Feature' : 'Create Feature'}</button>
+                {editingVerifiedFeatureId && (
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      setEditingVerifiedFeatureId(null);
+                      setVerifiedFeatureForm(defaultVerifiedFeatureForm);
+                    }}
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <div className="data-card admin-card admin-tools-card">
+            <div className="admin-tools-grid">
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label>Filter Kind</label>
+                <select className="app-select" value={verifiedFeatureFilter} onChange={(e) => setVerifiedFeatureFilter(e.target.value)}>
+                  <option value="all">All</option>
+                  {VERIFIED_FEATURE_KIND_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label>Search</label>
+                <input value={verifiedFeatureSearchTerm} onChange={(e) => setVerifiedFeatureSearchTerm(e.target.value)} placeholder="Search name, type, or business" />
+              </div>
+            </div>
+          </div>
+
+          <div className="history-list mt-6">
+            {verifiedFeatureLoading && <div className="data-card">Loading verified features...</div>}
+            {!verifiedFeatureLoading && filteredVerifiedFeatures.map((item) => (
+              <div className="data-card history-card" key={item.id} style={{ padding: 8 }}>
+                <div className="history-card-top" style={{ gap: 8 }}>
+                  <div>
+                    <h4 className="history-title" style={{ margin: 0, fontSize: 15 }}>{item.name}</h4>
+                    <p className="history-meta" style={{ margin: '4px 0', fontSize: 12 }}>Kind: {getVerifiedFeatureKindLabel(item.feature_kind)} | Type: {item.business_type || item.feature_subtype || '-'}</p>
+                    <p className="history-meta" style={{ margin: '2px 0', fontSize: 12 }}>Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
+                    <p className="history-meta" style={{ margin: '2px 0', fontSize: 12 }}>Confidence: {item.confidence_score ?? 100}% — Source: {item.source_note || '-'}</p>
+                  </div>
+                </div>
+                <div className="admin-actions-row" style={{ marginTop: 6 }}>
+                  <button className="admin-action-btn admin-action-btn-edit" onClick={() => startEditVerifiedFeature(item)} style={{ padding: '6px 10px', fontSize: 13 }}>Edit</button>
+                  <button className="admin-action-btn admin-action-btn-delete" onClick={() => deleteVerifiedFeature(item)} style={{ padding: '6px 10px', fontSize: 13 }}>Delete</button>
+                </div>
+              </div>
+            ))}
+            {!verifiedFeatureLoading && filteredVerifiedFeatures.length === 0 && (
+              <div className="data-card">No verified features match your search.</div>
             )}
           </div>
         </>
