@@ -4,3 +4,10 @@ __pycache__/
 .venv
 dist/
 *.pbf
+.vscode/
+*.pyc
+.pytest_cache/
+.env.local
+.env.*
+.idea/
+.DS_Store
