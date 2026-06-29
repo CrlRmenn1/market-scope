@@ -55,7 +55,7 @@ const getHazardStyle = (hazardVar) => {
   };
 };
 
-export default function Home({ onMapTap, userId }) {
+export default function Home({ onMapTap, userId, previewSelection, onSpaceDetailOpenChange }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
@@ -80,6 +80,22 @@ export default function Home({ onMapTap, userId }) {
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
   const [selectedSpacePhotoIndex, setSelectedSpacePhotoIndex] = useState(0);
+
+  useEffect(() => {
+    if (!previewSelection) return;
+
+    const nextLat = Number(previewSelection.coords?.lat);
+    const nextLng = Number(previewSelection.coords?.lng);
+    if (!Number.isFinite(nextLat) || !Number.isFinite(nextLng)) return;
+
+    setSelectedSpaceMarker(null);
+    setPreviewCollapsed(false);
+    setSelectedCoord({ lat: nextLat, lng: nextLng });
+    setPreviewBusinessType(previewSelection.businessType || '');
+    setPreviewRadius(Number(previewSelection.radius || 500));
+    setMapViewMode('normal');
+    setLocationUpdated(true);
+  }, [previewSelection]);
 
   const normalizePhotoUrls = (marker) => {
     const rawPhotos = Array.isArray(marker?.photo_urls) ? marker.photo_urls : [];
@@ -188,6 +204,8 @@ export default function Home({ onMapTap, userId }) {
   };
 
   useEffect(() => {
+    let handleSpaceMarkersUpdated = null;
+
     if (!mapInstance.current) {
       mapInstance.current = L.map(mapRef.current, {
         center: [7.3075, 125.6811],
@@ -223,68 +241,83 @@ export default function Home({ onMapTap, userId }) {
       spaceMarkerLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
       competitorLayerGroup.current = L.layerGroup().addTo(mapInstance.current);
 
-      fetch(apiUrl('/spaces/map-markers'))
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error('Unable to load map space markers');
-          }
-          return response.json();
-        })
-        .then((data) => {
-          if (!spaceMarkerLayerGroup.current || !mapInstance.current) return;
+      const loadSpaceMarkers = () => {
+        if (!spaceMarkerLayerGroup.current || !mapInstance.current) return;
 
-          const markers = Array.isArray(data?.markers) ? data.markers : [];
+        spaceMarkerLayerGroup.current.clearLayers();
+        spaceHoverTimers.current.forEach((timer) => window.clearTimeout(timer));
+        spaceHoverTimers.current.clear();
 
-          markers.forEach((item) => {
-            const lat = Number(item?.latitude);
-            const lng = Number(item?.longitude);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        fetch(apiUrl('/spaces/map-markers'))
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error('Unable to load map space markers');
+            }
+            return response.json();
+          })
+          .then((data) => {
+            if (!spaceMarkerLayerGroup.current || !mapInstance.current) return;
 
-            const marker = L.marker([lat, lng], { icon: createSpaceMarkerIcon(item) }).addTo(spaceMarkerLayerGroup.current);
-            marker.bindTooltip(buildMarkerBrief(item), {
-              className: 'space-brief-tooltip',
-              direction: 'top',
-              sticky: false,
-              opacity: 1
-            });
+            const markers = Array.isArray(data?.markers) ? data.markers : [];
 
-            marker.on('mouseover', () => {
-              const timer = window.setTimeout(() => {
-                marker.openTooltip();
-              }, 1500);
-              spaceHoverTimers.current.set(marker._leaflet_id, timer);
-            });
+            markers.forEach((item) => {
+              const lat = Number(item?.latitude);
+              const lng = Number(item?.longitude);
+              if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-            marker.on('mouseout', () => {
-              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
-              if (timer) {
-                window.clearTimeout(timer);
-                spaceHoverTimers.current.delete(marker._leaflet_id);
-              }
-              marker.closeTooltip();
-            });
-
-            marker.on('click', () => {
-              const timer = spaceHoverTimers.current.get(marker._leaflet_id);
-              if (timer) {
-                window.clearTimeout(timer);
-                spaceHoverTimers.current.delete(marker._leaflet_id);
-              }
-              const coords = { lat, lng };
-              setSelectedCoord(coords);
-              setSelectedSpaceMarker({
-                ...item,
-                latitude: lat,
-                longitude: lng,
-                photo_urls: normalizePhotoUrls(item)
+              const marker = L.marker([lat, lng], { icon: createSpaceMarkerIcon(item) }).addTo(spaceMarkerLayerGroup.current);
+              marker.bindTooltip(buildMarkerBrief(item), {
+                className: 'space-brief-tooltip',
+                direction: 'top',
+                sticky: false,
+                opacity: 1
               });
-              mapInstance.current.panTo([lat, lng]);
+
+              marker.on('mouseover', () => {
+                const timer = window.setTimeout(() => {
+                  marker.openTooltip();
+                }, 1500);
+                spaceHoverTimers.current.set(marker._leaflet_id, timer);
+              });
+
+              marker.on('mouseout', () => {
+                const timer = spaceHoverTimers.current.get(marker._leaflet_id);
+                if (timer) {
+                  window.clearTimeout(timer);
+                  spaceHoverTimers.current.delete(marker._leaflet_id);
+                }
+                marker.closeTooltip();
+              });
+
+              marker.on('click', () => {
+                const timer = spaceHoverTimers.current.get(marker._leaflet_id);
+                if (timer) {
+                  window.clearTimeout(timer);
+                  spaceHoverTimers.current.delete(marker._leaflet_id);
+                }
+                const coords = { lat, lng };
+                setSelectedCoord(coords);
+                setSelectedSpaceMarker({
+                  ...item,
+                  latitude: lat,
+                  longitude: lng,
+                  photo_urls: normalizePhotoUrls(item)
+                });
+                mapInstance.current.panTo([lat, lng]);
+              });
             });
+          })
+          .catch(() => {
+            // Keep map usable even if marker feed is temporarily unavailable.
           });
-        })
-        .catch(() => {
-          // Keep map usable even if marker feed is temporarily unavailable.
-        });
+      };
+
+      handleSpaceMarkersUpdated = () => {
+        loadSpaceMarkers();
+      };
+
+      loadSpaceMarkers();
+      window.addEventListener('marketscope-space-markers-updated', handleSpaceMarkersUpdated);
 
       fetch('/panabo_hazard_5yr.geojson')
         .then((response) => {
@@ -370,6 +403,9 @@ export default function Home({ onMapTap, userId }) {
 
       hazardLayerGroup.current = null;
       hazardGeoJsonLayerRef.current = null;
+      if (handleSpaceMarkersUpdated) {
+        window.removeEventListener('marketscope-space-markers-updated', handleSpaceMarkersUpdated);
+      }
       if (mapInstance.current) {
         mapInstance.current.remove();
         mapInstance.current = null;
@@ -481,7 +517,7 @@ export default function Home({ onMapTap, userId }) {
       setPreviewMessage('Scanning nearby competitors...');
 
       try {
-        const response = await fetch(apiUrl('/analyze'), {
+        const response = await fetch(apiUrl('/competitors/preview'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -533,6 +569,16 @@ export default function Home({ onMapTap, userId }) {
     const timer = setTimeout(() => setLocationUpdated(false), 120);
     return () => clearTimeout(timer);
   }, [selectedSpaceMarker]);
+
+  useEffect(() => {
+    if (typeof onSpaceDetailOpenChange !== 'function') return undefined;
+
+    onSpaceDetailOpenChange(Boolean(selectedSpaceMarker));
+
+    return () => {
+      onSpaceDetailOpenChange(false);
+    };
+  }, [selectedSpaceMarker, onSpaceDetailOpenChange]);
 
   useEffect(() => {
     if (!mapInstance.current || !competitorLayerGroup.current) return;

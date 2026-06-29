@@ -9,6 +9,7 @@ import BottomNav from './components/BottomNav';
 import BottomSheet from './components/BottomSheet';
 import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
+import AdminNavbar from './components/AdminNavbar';
 import OnboardingModal from './components/OnboardingModal';
 import SpaceSubmissionModal from './components/SpaceSubmissionModal';
 import './App.css';
@@ -16,9 +17,7 @@ import './App.css';
 const REQUIRED_TREND_FIELDS = [
   'primary_business',
   'startup_capital',
-  'risk_tolerance',
   'preferred_setup',
-  'time_commitment',
   'target_payback_months'
 ];
 
@@ -43,6 +42,7 @@ export default function App() {
   const adminContentClass = 'pt-[88px]';
   const [session, setSession] = useState(null);
   const [adminSession, setAdminSession] = useState(null);
+  const [adminActiveTab, setAdminActiveTab] = useState('msmes');
   const [activeTab, setActiveTab] = useState(() => {
     const savedTab = localStorage.getItem('marketscope_active_tab');
     return validTabs.includes(savedTab) ? savedTab : 'home';
@@ -53,10 +53,12 @@ export default function App() {
   const [sheetInitialBusinessType, setSheetInitialBusinessType] = useState('');
   const [sheetInitialRadius, setSheetInitialRadius] = useState(500);
   const [reportData, setReportData] = useState(null);
+  const [mapPreviewSelection, setMapPreviewSelection] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSpaceSubmissionModal, setShowSpaceSubmissionModal] = useState(false);
   const [missingTrendPreferences, setMissingTrendPreferences] = useState([]);
+  const [isSpaceDetailOpen, setIsSpaceDetailOpen] = useState(false);
 
   const saveOpenReport = (data, coords) => {
     localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
@@ -230,6 +232,27 @@ export default function App() {
     setShowBottomSheet(false);
   };
 
+  const handlePreviewCompetitors = ({ coords, businessType, radius }) => {
+    if (!coords) return;
+
+    const nextCoords = {
+      lat: Number(coords.lat),
+      lng: Number(coords.lng)
+    };
+
+    setSelectedCoords(nextCoords);
+    setSheetInitialBusinessType('');
+    setSheetInitialRadius(500);
+    setMapPreviewSelection({
+      id: Date.now(),
+      coords: nextCoords,
+      businessType: businessType || '',
+      radius: Number(radius || 500)
+    });
+    setActiveTab('home');
+    setShowBottomSheet(false);
+  };
+
   const handleCloseReport = () => {
     setReportData(null);
     clearOpenReport();
@@ -265,8 +288,15 @@ export default function App() {
         />
 
         <main className={`${appContentClass} ${adminContentClass}`}>
-          <AdminPanel adminSession={adminSession} onAdminLogout={handleAdminLogout} />
+          <AdminPanel
+            adminSession={adminSession}
+            onAdminLogout={handleAdminLogout}
+            activeTab={adminActiveTab}
+            onActiveTabChange={setAdminActiveTab}
+          />
         </main>
+
+        <AdminNavbar activeTab={adminActiveTab} onChange={setAdminActiveTab} />
       </div>
     );
   }
@@ -290,7 +320,13 @@ export default function App() {
 
       <main className={`${appContentClass} ${reportData ? 'overflow-hidden' : ''}`}>
         {activeTab === 'home' && (
-          <Home onMapTap={handleMapTap} theme={theme} userId={session.user_id || session.id} />
+          <Home
+            onMapTap={handleMapTap}
+            theme={theme}
+            userId={session.user_id || session.id}
+            previewSelection={mapPreviewSelection}
+            onSpaceDetailOpenChange={setIsSpaceDetailOpen}
+          />
         )}
         
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
@@ -324,6 +360,7 @@ export default function App() {
               setSheetInitialBusinessType('');
               setSheetInitialRadius(500);
             }} 
+            onPreviewCompetitors={handlePreviewCompetitors}
             onViewReport={handleViewReport}
             userId={session.user_id || session.id}
             initialBusinessType={sheetInitialBusinessType}
@@ -340,7 +377,7 @@ export default function App() {
         )}
       </main>
 
-      {!showBottomSheet && !reportData && !showSpaceSubmissionModal && (
+      {!showBottomSheet && !reportData && !showSpaceSubmissionModal && !isSpaceDetailOpen && (
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       )}
 

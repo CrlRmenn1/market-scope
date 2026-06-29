@@ -160,8 +160,8 @@ export default function Profile({ user, onProfileUpdate }) {
 
   return (
     <div className="profile-page page-enter min-h-full">
-      <div className="profile-shell mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
-        <div className="profile-card profile-hero-card fade-in flex flex-col items-center gap-4 p-5 text-center sm:flex-row sm:items-center sm:text-left">
+      <div className="profile-shell mx-auto flex w-full max-w-8xl flex-col gap-4 px-6 pb-28 pt-4 sm:px-8">
+        <div className="profile-card profile-hero-card fade-in flex flex-col items-center gap-4 p-5 text-center">
           {avatarForDisplay ? (
             <img src={avatarForDisplay} alt="Profile" className="profile-avatar-image" />
           ) : (
@@ -191,7 +191,7 @@ export default function Profile({ user, onProfileUpdate }) {
           </div>
         </div>
 
-        <div className="settings-list profile-settings-list mt-6 grid gap-4">
+        <div className="settings-list profile-settings-list mt-6 grid gap-4 lg:grid-cols-2">
           <div className="settings-item rounded-2xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 shadow-none">
             <div className="settings-info flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <span className="settings-label">User ID</span>

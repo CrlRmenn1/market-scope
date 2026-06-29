@@ -5,9 +5,7 @@ import TrendPreferencesGate from '../components/TrendPreferencesGate';
 const REQUIRED_TREND_FIELDS = [
   'primary_business',
   'startup_capital',
-  'risk_tolerance',
   'preferred_setup',
-  'time_commitment',
   'target_payback_months'
 ];
 
@@ -144,7 +142,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
 
   return (
     <div className="profile-page page-enter min-h-full">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-8xl flex-col gap-4 px-6 pb-28 pt-4 sm:px-8">
         <div className="profile-card fade-in rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-left shadow-sm">
           <div className="trends-header-row">
             <div>
@@ -201,7 +199,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
         )}
 
         {!loading && !error && hasRecommendations && (
-          <div className="trends-list mt-2 flex flex-col gap-4">
+          <div className="trends-list mt-2 grid gap-4 lg:grid-cols-2">
             {recommendations.map((item) => {
               const score = Number(item?.opportunity_score || 0);
               const tone = getScoreTone(score);

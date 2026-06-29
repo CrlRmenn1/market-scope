@@ -4,9 +4,7 @@ import { apiUrl } from '../api';
 const REQUIRED_FIELDS = [
   'primary_business',
   'startup_capital',
-  'risk_tolerance',
   'preferred_setup',
-  'time_commitment',
   'target_payback_months'
 ];
 
@@ -61,9 +59,7 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
     birthday: user?.birthday ? String(user.birthday).slice(0, 10) : '',
     primary_business: user?.primary_business || '',
     startup_capital: user?.startup_capital ?? '',
-    risk_tolerance: user?.risk_tolerance || '',
     preferred_setup: user?.preferred_setup || '',
-    time_commitment: user?.time_commitment || '',
     target_payback_months: user?.target_payback_months ?? ''
   });
 
@@ -176,16 +172,6 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
               </label>
 
               <label className="text-sm text-slate-200">
-                <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Risk Tolerance</span>
-                <select className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.risk_tolerance} onChange={(e) => updateField('risk_tolerance', e.target.value)}>
-                  <option value="">Select...</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </label>
-
-              <label className="text-sm text-slate-200">
                 <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Preferred Setup</span>
                 <select className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.preferred_setup} onChange={(e) => updateField('preferred_setup', e.target.value)}>
                   <option value="">Select...</option>
@@ -194,15 +180,6 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
                   <option value="roadside">Roadside</option>
                   <option value="market-stall">Market Stall</option>
                   <option value="warehouse">Warehouse</option>
-                </select>
-              </label>
-
-              <label className="text-sm text-slate-200">
-                <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Time Commitment</span>
-                <select className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.time_commitment} onChange={(e) => updateField('time_commitment', e.target.value)}>
-                  <option value="">Select...</option>
-                  <option value="part-time">Part-time</option>
-                  <option value="full-time">Full-time</option>
                 </select>
               </label>
 

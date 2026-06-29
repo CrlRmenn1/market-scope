@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiUrl } from '../api';
+import { getBusinessTypeLabel } from '../utils/businessTypes';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -60,7 +61,6 @@ export default function Report({ data, targetCoords, onClose }) {
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isGeneratingAiReport, setIsGeneratingAiReport] = useState(false);
-  const [isDownloadingAiPdf, setIsDownloadingAiPdf] = useState(false);
   const [aiNarrative, setAiNarrative] = useState('');
   const [aiQc, setAiQc] = useState(null);
   const [aiMeta, setAiMeta] = useState(null);
@@ -259,6 +259,7 @@ export default function Report({ data, targetCoords, onClose }) {
   if (!data) return null;
 
   const { viability_score, breakdown, business_type, radius_meters, insight } = data;
+  const businessLabel = data?.business_label || getBusinessTypeLabel(business_type) || business_type || 'Analysis';
   const spaceContext = data?.space_context || data?.selected_space || null;
 
   const toggleDetail = (key) => {
@@ -571,42 +572,6 @@ export default function Report({ data, targetCoords, onClose }) {
     }
   };
 
-  const handleDownloadAiPdf = async () => {
-    if (isDownloadingAiPdf) return;
-
-    setAiError('');
-    setIsDownloadingAiPdf(true);
-    try {
-      const result = await requestAiReport(true);
-      const pdfBase64 = result?.pdf_base64;
-      if (!pdfBase64) {
-        await exportReportPdf(`MarketScope_${(business_type || 'Report').replace(/\s+/g, '_')}_AI_Report.pdf`);
-        return;
-      }
-
-      const binaryString = atob(pdfBase64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i += 1) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const blob = new Blob([bytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const safeName = (business_type || 'Report').replace(/\s+/g, '_');
-      link.href = url;
-      link.download = `MarketScope_${safeName}_AI_Report.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setAiError(error?.message || 'Failed to download AI report PDF.');
-    } finally {
-      setIsDownloadingAiPdf(false);
-    }
-  };
-
   return (
     <div ref={reportExportRef} className="report-page slide-up bg-[var(--bg-app)]">
       <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-4 py-4 backdrop-blur-md sm:px-5">
@@ -622,15 +587,6 @@ export default function Report({ data, targetCoords, onClose }) {
             {isGeneratingAiReport ? 'Generating AI...' : 'Generate AI'}
           </button>
 
-          <button
-            className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            onClick={handleDownloadAiPdf}
-            disabled={isDownloadingAiPdf}
-            title="Download backend AI PDF"
-          >
-            {isDownloadingAiPdf ? 'Downloading...' : 'AI PDF'}
-          </button>
-          
           <button
             className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             onClick={() => setIsPdfSettingsOpen(true)}
@@ -751,7 +707,7 @@ export default function Report({ data, targetCoords, onClose }) {
       <div className="report-scroll-content mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6">
         
         <div className="main-score-card fade-in rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-6 shadow-sm">
-          <p className="section-heading mb-3 text-center text-sm font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">{business_type}</p>
+          <p className="section-heading mb-3 text-center text-sm font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">{businessLabel}</p>
           <div className="score-ring-large flex h-32 w-32 items-center justify-center rounded-full border-4 border-[var(--border-color)] bg-[var(--bg-app)]">
             <span className="big-score text-4xl font-bold leading-none text-[var(--text-main)]">{viability_score}</span>
           </div>
@@ -776,14 +732,14 @@ export default function Report({ data, targetCoords, onClose }) {
           {aiError && (
             <p className="mb-3 text-sm text-red-500">{aiError}</p>
           )}
-          {aiNarrative ? (
+              {aiNarrative ? (
             <div className="space-y-3">
               {aiNarrative.split('\n').map((line, idx) => (
                 <p key={`ai-line-${idx}`} className="text-sm leading-6 text-[var(--text-main)]">{line || '\u00a0'}</p>
               ))}
             </div>
           ) : (
-            <p className="text-sm leading-6 text-[var(--text-muted)]">
+              <p className="text-sm leading-6 text-[var(--text-muted)]">
               Generate AI to create an LLM narrative based on structured scores, zoning/hazard status, and saturation metrics.
             </p>
           )}

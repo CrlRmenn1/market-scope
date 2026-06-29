@@ -260,10 +260,11 @@ def try_render_pdf_bytes(html: str) -> Optional[bytes]:
 
 def build_llm_prompt_payload(structured: Dict[str, Any], business_type: str = '') -> Dict[str, str]:
     system_prompt = (
-        "You are a business location analyst for Panabo MSMEs. "
-        "Create a clear feasibility report from the provided structured location analysis. "
-        "Use a professional business tone. Never invent facts or numbers. "
-        "If uncertain, state assumptions explicitly."
+        "You are a friendly business location advisor for new Panabo MSME entrepreneurs. "
+        "Write in a gentle, simple, and clear tone aimed at people new to business. "
+        "Prefer short sentences and common words. Never invent facts or numbers; use only the data provided. "
+        "When using an uncommon or technical word, add a short definition in parentheses immediately after the word. "
+        "If you must state assumptions, label them clearly and keep them brief."
     )
 
     payload = {
@@ -296,8 +297,10 @@ def build_llm_prompt_payload(structured: Dict[str, Any], business_type: str = ''
         "Use only the data below (JSON):\n"
         f"{json.dumps(payload, ensure_ascii=True)}\n\n"
         "Constraints:\n"
-        "- Keep it concise but analytical.\n"
+        "- Keep it concise, gentle, and easy to read for new entrepreneurs. Use common words.\n"
+        "- If you use a technical term, include a one-line plain-language definition in parentheses immediately after the term.\n"
         "- Include key numeric values exactly as provided.\n"
+        "- Use only the data below (do not add or invent facts).\n"
         "- Do not include markdown code fences.\n"
         "- Do not output JSON."
     )
@@ -331,62 +334,70 @@ def generate_deterministic_narrative(structured: Dict[str, Any], business_type: 
 
     lines: List[str] = []
     lines.append('Executive Summary')
-    lines.append(f"The site is evaluated for {business_type or 'the selected MSME category'} with a viability score of {final} (±{sigma}).")
+    # simple definition for viability and sigma for new entrepreneurs
+    lines.append(f"This report looks at the selected place for {business_type or 'your business'}.")
+    lines.append(f"Viability score: {final} (±{sigma}) — (viability: a simple measure of how likely the site is to do well; sigma: estimated uncertainty).")
     lines.append("")
 
     lines.append('Location Snapshot')
-    lines.append(f"Coordinates: {((s.get('target_coordinates') or {}).get('latitude'))}, {((s.get('target_coordinates') or {}).get('longitude'))}.")
-    lines.append(f"Scan radius: {inputs.get('radius') or 'N/A'} meters. Competitors observed: {competitors}.")
+    lat = ((s.get('target_coordinates') or {}).get('latitude'))
+    lon = ((s.get('target_coordinates') or {}).get('longitude'))
+    lines.append(f"Location: {lat if lat is not None else 'N/A'}, {lon if lon is not None else 'N/A'}.")
+    lines.append(f"Scan radius: {inputs.get('radius') or 'N/A'} meters. Competitors found: {competitors}.")
     lines.append("")
 
     lines.append('Zoning Status')
-    lines.append(f"Restricted zoning flag: {'Yes' if zoning_flags.get('restricted') else 'No'}.")
+    lines.append(f"Restricted zoning: {'Yes' if zoning_flags.get('restricted') else 'No'}.")
     lines.append("")
 
     lines.append('Hazard Status')
-    lines.append(f"Flood-prone flag: {'Yes' if hazards.get('flood_prone') else 'No'}.")
+    lines.append(f"Flood-prone area: {'Yes' if hazards.get('flood_prone') else 'No'}.")
     lines.append("")
 
     lines.append('Saturation Assessment')
-    lines.append(f"Competition pressure score: {round(sub_scores['competition'], 1)} (higher means denser competition).")
+    lines.append(f"Competition level: {round(sub_scores['competition'], 1)} (higher = more competitors nearby).")
     lines.append("")
 
     lines.append('Demand and Anchor Commentary')
-    lines.append(f"Anchor proximity score: {round(sub_scores['anchors'], 1)}. Access score: {round(sub_scores['access'], 1)}.")
+    lines.append(f"Nearby demand score: {round(sub_scores['anchors'], 1)}. Access score: {round(sub_scores['access'], 1)}.")
     lines.append("")
 
     lines.append('Interpretation & Insights')
     if final >= 70:
-        lines.append('Assessment: Strongly viable — suitable for a small pilot or lease negotiation.')
-        lines.append('Suggested focus: secure short-term lease, test product mix and pricing, and monitor footfall for 4–8 weeks.')
+        lines.append('This looks promising. You can try a small test (pilot) for a few weeks to see real customer interest.')
+        lines.append('Start small: short lease or pop-up, simple tracking of visitors and sales.')
     elif final >= 50:
-        lines.append('Assessment: Moderately viable — proceed cautiously with targeted validation.')
-        lines.append('Suggested focus: low-cost pilot, targeted promotions, and competitor differentiation (unique offer or convenience).')
+        lines.append('This could work with care. Run a low-cost test and focus on something different from nearby shops.')
+        lines.append('Try special offers or a small menu to learn what customers prefer.')
     else:
-        lines.append('Assessment: Low viability — consider alternative locations or niche approaches.')
-        lines.append('Suggested focus: explore nearby lower-competition pockets or pivot offering to a niche customer segment.')
+        lines.append('This site looks challenging right now. Consider looking nearby for quieter spots or a different product idea.')
+        lines.append('If you stay, test on a very small scale before committing.')
 
-    # Sensitivity insights
+    # Sensitivity insights (kept simple)
     sens = s.get('sensitivity', {}) or {}
     if sens:
         lines.append("")
         lines.append('Confidence & Sensitivity')
-        lines.append(f"Estimated uncertainty (sigma): {sigma}.")
+        lines.append(f"Estimated uncertainty (sigma): {sigma} (smaller means more confidence).")
         comp_effect = round(float(sens.get('competitor_plus1_effect', 0)), 3)
         anchor_effect = round(float(sens.get('anchor_minus100m_effect', 0)), 3)
-        lines.append(f"Marginal effect of one more competitor: {comp_effect:+} viability points.")
-        lines.append(f"Effect of moving 100m closer to an anchor: {anchor_effect:+} viability points.")
+        lines.append(f"One more nearby competitor changes the score by: {comp_effect:+} points.")
+        lines.append(f"Being 100m closer to a strong anchor changes the score by: {anchor_effect:+} points.")
 
-    # Weak points
+    # Key weaknesses
     lines.append("")
     lines.append('Key Weaknesses')
     for k, v in weakest:
+        # keep wording very simple
         lines.append(f"- {k.title()}: {round(v,1)}")
 
     # Recommendations
     lines.append("")
     lines.append('Recommendation')
-    lines.append(recommendation.get('text') or 'No strong recommendation.')
+    # rewrite recommendation text to be simple if present
+    rec_text = recommendation.get('text') or 'No strong recommendation.'
+    # keep original suggestion but make phrasing simpler
+    lines.append(rec_text)
 
     # Next actions: prioritized list
     lines.append("")

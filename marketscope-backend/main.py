@@ -250,6 +250,13 @@ class AnalysisRequest(BaseModel):
     user_id: int | None = None
 
 
+class CompetitorPreviewRequest(BaseModel):
+    lat: float
+    lon: float
+    business_type: str
+    radius: int = 340
+
+
 class AdminLoginRequest(BaseModel):
     email: str
     password: str
@@ -1984,6 +1991,91 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
     }
 
 
+def collect_competitor_preview(lat, lon, radius_meters, business_type):
+    profile_key = normalize_osm_value(business_type)
+    profile_key_safe = profile_key or ""
+    profile = MSME_CATEGORY_PROFILES.get(profile_key_safe, DEFAULT_MSME_ANALYSIS_PROFILE)
+    osm_tags = profile.get("osm_tags") or SME_DATABASE.get(profile_key_safe, {}).get("osm_tags") or [("shop", "convenience")]
+
+    competitors_list = []
+    competitor_dedupe = set()
+
+    try:
+        verified_competitors = fetch_verified_local_features("msme", business_type=business_type)
+        for shop in verified_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                {
+                    "lat": shop.get("latitude"),
+                    "lon": shop.get("longitude"),
+                    "name": shop.get("name"),
+                    "source": "verified_local",
+                    "confidence_score": shop.get("confidence_score"),
+                },
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+    except Exception as exc:
+        print(f"Verified local competitor preview error: {exc}")
+
+    try:
+        cached_competitors = []
+        for _, tag_value in osm_tags:
+            cached_competitors.extend(get_cached_pbf_competitors(tag_value))
+
+        for competitor in cached_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+    except Exception as exc:
+        print(f"Spatial competitor preview error: {exc}")
+
+    try:
+        custom_competitors = fetch_custom_msmes(business_type)
+        for shop in custom_competitors:
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                {"lat": shop.get("latitude"), "lon": shop.get("longitude"), "name": shop.get("name"), "source": "custom_msme"},
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+    except Exception as exc:
+        print(f"Custom MSME competitor preview error: {exc}")
+
+    if not competitors_list:
+        for competitor in get_name_keyword_pbf_competitors(business_type):
+            _append_competitor_if_within_radius(
+                competitors_list,
+                competitor_dedupe,
+                competitor,
+                lat,
+                lon,
+                radius_meters,
+                profile.get("display_name") or "MSME"
+            )
+
+    return {
+        "business_type": profile_key_safe,
+        "business_label": profile.get("display_name") or "MSME",
+        "target_coords": {"lat": lat, "lng": lon},
+        "radius_meters": radius_meters,
+        "competitors_found": len(competitors_list),
+        "competitor_locations": competitors_list,
+    }
+
+
 def preload_pbf_competitor_cache():
     global PBF_COMPETITOR_CACHE, PBF_ALL_COMPETITORS, PBF_CACHE_LOADED
 
@@ -2419,11 +2511,12 @@ def fetch_active_space_markers_for_analysis():
             contact_info,
             notes,
             photo_urls,
+            status,
             created_at,
             reviewed_at,
             'user'::text AS source_type
         FROM user_space_submissions
-        WHERE status = 'approved'
+        WHERE status IN ('approved', 'pending')
         """
     )
     user_rows = cursor.fetchall() or []
@@ -2469,6 +2562,7 @@ def fetch_active_space_markers_for_analysis():
             "title": row.get("title"),
             "listing_mode": row.get("listing_mode"),
             "guarantee_level": "guaranteed",
+            "status": row.get("status"),
             "property_type": row.get("property_type"),
             "business_type": row.get("business_type"),
             "latitude": row.get("latitude"),
@@ -3775,14 +3869,15 @@ def admin_delete_verified_local_feature(feature_id: int, x_admin_token: str | No
 
 @app.post("/analyze")
 def perform_analysis(data: AnalysisRequest):
-    sme_profile = SME_DATABASE.get(data.business_type, {"key": "shop", "val": "convenience", "fear": 5, "need": 5, "name": "MSME"})
-    analysis_profile = _get_analysis_profile(data.business_type)
+    business_key = normalize_osm_value(data.business_type) or ''
+    sme_profile = SME_DATABASE.get(business_key, {"key": business_key or "shop", "val": "convenience", "fear": 5, "need": 5, "name": "MSME"})
+    analysis_profile = _get_analysis_profile(business_key)
     print(
-        f"[DEBUG] perform_analysis: business_type={data.business_type}, lat={data.lat}, lon={data.lon}, radius={data.radius}, "
+        f"[DEBUG] perform_analysis: business_type={business_key}, lat={data.lat}, lon={data.lon}, radius={data.radius}, "
         f"profile={analysis_profile.get('display_name')}, competition_weight={analysis_profile.get('competition_weight')}"
     )
 
-    preflight_context = evaluate_layered_market_context(data.lat, data.lon, data.radius, data.business_type)
+    preflight_context = evaluate_layered_market_context(data.lat, data.lon, data.radius, business_key)
 
     # FACTOR 1: ZONING - Normalized to 0-25 scale
     zoning_score = 0
@@ -3791,7 +3886,7 @@ def perform_analysis(data: AnalysisRequest):
         zoning_score = 25
         zoning_status = "Compliant (Commercial Center)"
     elif check_inside_bounds(data.lat, data.lon, ZONING_LAYERS["industrial_anflo"]):
-        if data.business_type in ["carwash", "laundry", "hardware", "moto"]:
+        if business_key in ["carwash", "laundry", "hardware", "moto"]:
             zoning_score = 25
             zoning_status = "Compliant (Agri-Industrial Support)"
         else:
@@ -3918,7 +4013,7 @@ def perform_analysis(data: AnalysisRequest):
                 """,
                 (
                     data.user_id,
-                    sme_profile["name"],
+                    business_key,
                     int(total_score),
                     data.lat,
                     data.lon,
@@ -3936,16 +4031,26 @@ def perform_analysis(data: AnalysisRequest):
             print(f"History Save Error: {e}")
 
     # FINAL PAYLOAD
-    print(f"[DEBUG] Final score for {data.business_type} at ({data.lat},{data.lon}): {int(total_score)}\n---")
+    print(f"[DEBUG] Final score for {business_key} at ({data.lat},{data.lon}): {int(total_score)}\n---")
     return {
         "viability_score": int(total_score),
-        "business_type": sme_profile["name"],
+        "business_type": business_key,
+        "business_label": sme_profile["name"],
         "competitors_found": competitors_found,
         "competitor_locations": competitors_list if competitors_found > 0 else [],
         "target_coords": {"lat": data.lat, "lng": data.lon},
         "radius_meters": data.radius,
         "insight": generated_insight,
         "breakdown": breakdown_payload,
+    }
+
+
+@app.post("/competitors/preview")
+def preview_competitors(data: CompetitorPreviewRequest):
+    preview = collect_competitor_preview(data.lat, data.lon, data.radius, data.business_type)
+    return {
+        "status": "success",
+        **preview,
     }
 
 if __name__ == "__main__":

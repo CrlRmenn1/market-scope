@@ -6,7 +6,7 @@
    1. CORE THEME & LAYOUT
    ========================================= */
 :root {
-  --bg-app: #050505;
+  --bg-app: #000000;
   --bg-glass: rgba(15, 15, 15, 0.7);
   --bg-sheet: #111111;
   --accent: #a855f7; /* Purple */
@@ -17,6 +17,14 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+img,
+picture,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
 
 html, body, #root {
   height: 100%; width: 100%;

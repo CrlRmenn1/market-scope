@@ -212,6 +212,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
       setIsSubmitted(true);
       setForm(defaultForm);
       setStepIndex(0);
+      window.dispatchEvent(new Event('marketscope-space-markers-updated'));
     } catch (error) {
       setErrorMessage(error.message || 'Unable to submit space listing.');
     } finally {

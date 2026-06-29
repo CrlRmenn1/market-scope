@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { apiUrl } from '../api';
 import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
 
-export default function BottomSheet({ onClose, coords, onViewReport, userId, initialBusinessType = '', initialRadius = 500 }) {
+export default function BottomSheet({ onClose, coords, onPreviewCompetitors, onViewReport, userId, initialBusinessType = '', initialRadius = 500 }) {
   const [step, setStep] = useState(initialBusinessType ? 2 : 1);
   const [businessType, setBusinessType] = useState(initialBusinessType || '');
   const [selectedRadius, setSelectedRadius] = useState(initialRadius || 500);
-  const [apiData, setApiData] = useState(null);
+  const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
   const [analysisModeIndex, setAnalysisModeIndex] = useState(0);
   const analysisModes = [
     'Zoning Validation',
@@ -15,33 +15,34 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
     'Demand Projection'
   ];
 
-  const startAnalysis = async () => {
-    setStep(3); 
+  const runFullAnalysis = async () => {
+    if (!coords || !businessType) return;
+
+    setStep(3);
+    setIsRunningAnalysis(true);
     try {
       const response = await fetch(apiUrl('/analyze'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lat: coords.lat, lon: coords.lng,
-          business_type: businessType, 
+          lat: coords.lat,
+          lon: coords.lng,
+          business_type: businessType,
           radius: selectedRadius,
-          user_id: userId 
-        }),
+          user_id: userId || null
+        })
       });
 
-      // THE FIX: If the server throws an error (503 or 429), catch it BEFORE parsing the JSON
+      const data = await response.json();
       if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
+        throw new Error(data?.detail || 'Unable to run full analysis');
       }
 
-      const data = await response.json();
-      setApiData(data);
-      setStep(4);
-
-    } catch (e) {
-      console.error("Backend Error:", e);
-      setStep(1); // Kick them back to step 1
-      alert("⚠️ The MarketScope Geospatial Engine is temporarily overwhelmed or offline. Please wait a few seconds and try again.");
+      onViewReport?.(data);
+    } catch (error) {
+      alert(error?.message || 'Unable to run full analysis right now.');
+    } finally {
+      setIsRunningAnalysis(false);
     }
   };
 
@@ -64,15 +65,18 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
 
   useEffect(() => {
     let intervalId;
-    if (step === 3) {
+    if (isRunningAnalysis) {
       intervalId = window.setInterval(() => {
         setAnalysisModeIndex((prev) => (prev + 1) % analysisModes.length);
       }, 1200);
+    } else {
+      setAnalysisModeIndex(0);
     }
+
     return () => {
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [step]);
+  }, [isRunningAnalysis]);
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
@@ -121,21 +125,28 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
             </div>
           )}
 
-          {step === 2 && (
+          {step === 2 && !isRunningAnalysis && (
             <div className="fade-in text-center">
               <h2 className="sheet-title mb-2">Confirm Target</h2>
               <p className="loc-label">📍 {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</p>
               <div className="location-card">
-                <p>Deploying Engine for: <b className="capitalize">{businessType}</b></p>
+                <p>Running full analysis for: <b className="capitalize">{businessType}</b></p>
                 <p style={{ marginTop: '6px' }}>Radius: <b>{selectedRadius}m</b></p>
               </div>
-              <button className="primary-btn" onClick={startAnalysis}>Run Suitability Engine</button>
-              <button className="secondary-btn" onClick={() => setStep(1)}>Go Back</button>
+              <div className="flex flex-col gap-3">
+                <button
+                  className="primary-btn"
+                  disabled={isRunningAnalysis}
+                  onClick={runFullAnalysis}
+                >
+                  {isRunningAnalysis ? 'Running Full Analysis...' : 'Run Full Analysis'}
+                </button>
+                <button className="secondary-btn" onClick={() => setStep(1)}>Go Back</button>
+              </div>
             </div>
           )}
 
-          {/* NEW STEP 3: STAGGERED TASKBAR LOADING */}
-          {step === 3 && (
+          {isRunningAnalysis && (
             <div className="fade-in py-10">
               <div className="engine-loader">
                 <div className="spin-ring"></div>
@@ -145,7 +156,7 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
                 <div className="analysis-mode-pill">Analysis Mode • {analysisModes[analysisModeIndex]}</div>
               </div>
               <h3 className="loading-headline text-center mb-6">Evaluating Constraints</h3>
-              
+
               <div className="loading-taskbar">
                 <div className="task-item delay-1">
                   <span className="task-text">Verifying CLUP Zoning Regulations</span>
@@ -164,20 +175,6 @@ export default function BottomSheet({ onClose, coords, onViewReport, userId, ini
                   <div className="task-spinner"></div>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* STEP 4 */}
-          {step === 4 && apiData && (
-            <div className="fade-in text-center">
-              <div className="score-container">
-                <h2 className="big-score">{apiData.viability_score}</h2>
-                <p className="score-label">Suitability Score</p>
-              </div>
-              <div className="data-card">
-                <p>Identified <b>{apiData.competitors_found}</b> competitors in catchment area.</p>
-              </div>
-              <button className="primary-btn mt-6" onClick={() => onViewReport(apiData)}>View Full Report</button>
             </div>
           )}
         </div>

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
 import { parseCoordinatePairText } from '../utils/coordinates';
 import MapPicker from '../components/MapPicker';
+const ZoningManager = React.lazy(() => import('../components/ZoningManager'));
+const FloodZoneManager = React.lazy(() => import('../components/FloodZoneManager'));
 
 const defaultMsmeForm = {
   name: '',
@@ -10,29 +12,9 @@ const defaultMsmeForm = {
   longitude: ''
 };
 
-const defaultVerifiedFeatureForm = {
-  feature_kind: 'msme',
-  name: '',
-  business_type: '',
-  feature_subtype: '',
-  latitude: '',
-  longitude: '',
-  road_class: '',
-  power: '',
-  building_type: '',
-  landuse: '',
-  area_m2: '',
-  confidence_score: 100,
-  source_note: '',
-  verified_at: '',
-  is_active: true
-};
-
 const defaultAdminSpaceForm = {
   title: '',
   listing_mode: 'rent',
-  guarantee_level: 'potential',
-  confidence_score: '',
   property_type: '',
   business_type: '',
   latitude: '',
@@ -40,13 +22,9 @@ const defaultAdminSpaceForm = {
   address_text: '',
   price_min: '',
   price_max: '',
-  source_note: '',
   contact_info: '',
   notes: '',
-  photo_urls: [],
-  verified_at: '',
-  expires_at: '',
-  is_active: true
+  photo_urls: []
 };
 
 const BUSINESS_TYPE_OPTIONS = [
@@ -65,31 +43,8 @@ const BUSINESS_TYPE_OPTIONS = [
   { value: 'hardware', label: 'Hardware / Construction Supplies' }
 ];
 
-const VERIFIED_FEATURE_KIND_OPTIONS = [
-  { value: 'msme', label: 'MSME Competitor' },
-  { value: 'anchor', label: 'Traffic Anchor' },
-  { value: 'road', label: 'Road Access Point' },
-  { value: 'building', label: 'Building / Density Proxy' }
-];
-
-const mapUserToForm = (user) => ({
-  full_name: user?.full_name || user?.name || '',
-  email: user?.email || '',
-  address: user?.address || '',
-  cellphone_number: user?.cellphone_number || '',
-  avatar_url: user?.avatar_url || '',
-  age: user?.age ?? '',
-  birthday: user?.birthday ? String(user.birthday).slice(0, 10) : '',
-  primary_business: user?.primary_business || ''
-});
-
 const getBusinessTypeLabel = (value) => {
   const found = BUSINESS_TYPE_OPTIONS.find((option) => option.value === value);
-  return found?.label || value || '-';
-};
-
-const getVerifiedFeatureKindLabel = (value) => {
-  const found = VERIFIED_FEATURE_KIND_OPTIONS.find((option) => option.value === value);
   return found?.label || value || '-';
 };
 
@@ -144,9 +99,11 @@ const formatPesoRange = (minValue, maxValue) => {
   return 'Not set';
 };
 
-export default function AdminPanel({ adminSession }) {
+export default function AdminPanel({ adminSession, activeTab: controlledActiveTab, onActiveTabChange }) {
   const token = adminSession?.token;
-  const [activeTab, setActiveTab] = useState('msmes');
+  const [internalActiveTab, setInternalActiveTab] = useState('msmes');
+  const activeTab = controlledActiveTab || internalActiveTab;
+  const setActiveTab = onActiveTabChange || setInternalActiveTab;
 
   const [customMsmes, setCustomMsmes] = useState([]);
   const [msmeForm, setMsmeForm] = useState(defaultMsmeForm);
@@ -155,28 +112,18 @@ export default function AdminPanel({ adminSession }) {
   const [msmeSearchTerm, setMsmeSearchTerm] = useState('');
   const [msmeSortBy, setMsmeSortBy] = useState('type-asc');
 
-  const [verifiedFeatures, setVerifiedFeatures] = useState([]);
-  const [verifiedFeatureForm, setVerifiedFeatureForm] = useState(defaultVerifiedFeatureForm);
-  const [editingVerifiedFeatureId, setEditingVerifiedFeatureId] = useState(null);
-  const [verifiedFeatureLoading, setVerifiedFeatureLoading] = useState(true);
-  const [verifiedFeatureFilter, setVerifiedFeatureFilter] = useState('all');
-  const [verifiedFeatureSearchTerm, setVerifiedFeatureSearchTerm] = useState('');
-  const [verifiedFeatureErrors, setVerifiedFeatureErrors] = useState({});
-
   const [users, setUsers] = useState([]);
   const [userLoading, setUserLoading] = useState(true);
-  const [editingUserId, setEditingUserId] = useState(null);
-  const [userForm, setUserForm] = useState(null);
 
   const [userSpaceSubmissions, setUserSpaceSubmissions] = useState([]);
   const [adminSpaceSubmissions, setAdminSpaceSubmissions] = useState([]);
   const [spaceLoading, setSpaceLoading] = useState(true);
   const [spaceFilterStatus, setSpaceFilterStatus] = useState('pending');
+  const [spacePanelMode, setSpacePanelMode] = useState('submit');
   const [adminSpaceForm, setAdminSpaceForm] = useState(defaultAdminSpaceForm);
   const [selectedAdminPhotoIndex, setSelectedAdminPhotoIndex] = useState(0);
   const [showAdminMapPicker, setShowAdminMapPicker] = useState(false);
   const [showMsmeMapPicker, setShowMsmeMapPicker] = useState(false);
-  const [showVerifiedMapPicker, setShowVerifiedMapPicker] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -217,36 +164,6 @@ export default function AdminPanel({ adminSession }) {
 
     return items;
   }, [customMsmes, msmeSearchTerm, msmeSortBy]);
-
-  const filteredVerifiedFeatures = useMemo(() => {
-    const search = verifiedFeatureSearchTerm.trim().toLowerCase();
-    let items = Array.isArray(verifiedFeatures) ? [...verifiedFeatures] : [];
-
-    if (verifiedFeatureFilter !== 'all') {
-      items = items.filter((item) => String(item?.feature_kind || '') === verifiedFeatureFilter);
-    }
-
-    if (search) {
-      items = items.filter((item) => {
-        const name = String(item?.name || '').toLowerCase();
-        const kind = String(item?.feature_kind || '').toLowerCase();
-        const subtype = String(item?.feature_subtype || '').toLowerCase();
-        const businessType = String(item?.business_type || '').toLowerCase();
-        return name.includes(search) || kind.includes(search) || subtype.includes(search) || businessType.includes(search);
-      });
-    }
-
-    items.sort((a, b) => {
-      const aKind = String(a?.feature_kind || '').toLowerCase();
-      const bKind = String(b?.feature_kind || '').toLowerCase();
-      const aName = String(a?.name || '').toLowerCase();
-      const bName = String(b?.name || '').toLowerCase();
-      if (aKind !== bKind) return aKind.localeCompare(bKind);
-      return aName.localeCompare(bName);
-    });
-
-    return items;
-  }, [verifiedFeatures, verifiedFeatureFilter, verifiedFeatureSearchTerm]);
 
   const resetMessages = () => {
     setErrorMessage('');
@@ -318,32 +235,6 @@ export default function AdminPanel({ adminSession }) {
     setShowMsmeMapPicker(false);
   };
 
-  const requestVerifiedFeatureGeolocation = () => {
-    if (!navigator.geolocation) {
-      setErrorMessage('Geolocation not supported in this browser.');
-      setShowVerifiedMapPicker(true);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setVerifiedFeatureForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
-        setErrorMessage('');
-      },
-      () => {
-        setErrorMessage('Unable to get location. Please allow location access or pin on map.');
-        setShowVerifiedMapPicker(true);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
-  const handleVerifiedMapSelect = ({ latitude, longitude }) => {
-    setVerifiedFeatureForm((c) => ({ ...c, latitude: String(latitude), longitude: String(longitude) }));
-    setShowVerifiedMapPicker(false);
-  };
-
   const loadCustomMsmes = async () => {
     if (!token) return;
     setMsmeLoading(true);
@@ -356,24 +247,6 @@ export default function AdminPanel({ adminSession }) {
       setErrorMessage(error.message || 'Failed to load custom MSMEs');
     } finally {
       setMsmeLoading(false);
-    }
-  };
-
-  const loadVerifiedFeatures = async () => {
-    if (!token) return;
-    setVerifiedFeatureLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (verifiedFeatureFilter !== 'all') params.set('feature_kind', verifiedFeatureFilter);
-
-      const response = await fetch(apiUrl(`/admin/verified-local-features${params.toString() ? `?${params.toString()}` : ''}`), { headers });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Failed to load verified local features');
-      setVerifiedFeatures(Array.isArray(data.verified_local_features) ? data.verified_local_features : []);
-    } catch (error) {
-      setErrorMessage(error.message || 'Failed to load verified local features');
-    } finally {
-      setVerifiedFeatureLoading(false);
     }
   };
 
@@ -421,16 +294,9 @@ export default function AdminPanel({ adminSession }) {
   useEffect(() => {
     resetMessages();
     loadCustomMsmes();
-    loadVerifiedFeatures();
     loadUsers();
     loadSpaces('pending');
   }, [token]);
-
-  useEffect(() => {
-    if (activeTab === 'verified') {
-      loadVerifiedFeatures();
-    }
-  }, [verifiedFeatureFilter, activeTab]);
 
   useEffect(() => {
     if (activeTab === 'spaces') {
@@ -556,191 +422,6 @@ export default function AdminPanel({ adminSession }) {
     }
   };
 
-  const submitVerifiedFeature = async (event) => {
-    event.preventDefault();
-    resetMessages();
-    setVerifiedFeatureErrors({});
-
-    const payload = {
-      feature_kind: verifiedFeatureForm.feature_kind,
-      name: verifiedFeatureForm.name.trim(),
-      business_type: verifiedFeatureForm.business_type.trim() || null,
-      feature_subtype: verifiedFeatureForm.feature_subtype.trim() || null,
-      latitude: Number(verifiedFeatureForm.latitude),
-      longitude: Number(verifiedFeatureForm.longitude),
-      road_class: verifiedFeatureForm.road_class.trim() || null,
-      power: verifiedFeatureForm.power === '' ? null : Number(verifiedFeatureForm.power),
-      building_type: verifiedFeatureForm.building_type.trim() || null,
-      landuse: verifiedFeatureForm.landuse.trim() || null,
-      area_m2: verifiedFeatureForm.area_m2 === '' ? null : Number(verifiedFeatureForm.area_m2),
-      confidence_score: verifiedFeatureForm.confidence_score === '' ? 0 : Number(verifiedFeatureForm.confidence_score),
-      source_note: verifiedFeatureForm.source_note.trim() || null,
-      verified_at: verifiedFeatureForm.verified_at || null,
-      is_active: Boolean(verifiedFeatureForm.is_active)
-    };
-
-    const errors = {};
-    if (!payload.feature_kind) errors.feature_kind = 'Select a feature kind.';
-    if (!payload.name) errors.name = 'Name is required.';
-    if (Number.isNaN(payload.latitude)) errors.latitude = 'Valid latitude required.';
-    if (Number.isNaN(payload.longitude)) errors.longitude = 'Valid longitude required.';
-
-    if (Object.keys(errors).length) {
-      setVerifiedFeatureErrors(errors);
-      setErrorMessage('Please fix the highlighted fields.');
-      return;
-    }
-
-    if (Number.isNaN(payload.confidence_score) || payload.confidence_score < 0 || payload.confidence_score > 100) {
-      setErrorMessage('Confidence score must be between 0 and 100.');
-      return;
-    }
-
-    if (payload.power !== null && Number.isNaN(payload.power)) {
-      setErrorMessage('Power must be a number when provided.');
-      return;
-    }
-
-    if (payload.area_m2 !== null && Number.isNaN(payload.area_m2)) {
-      setErrorMessage('Area must be a number when provided.');
-      return;
-    }
-
-    const isEditing = Boolean(editingVerifiedFeatureId);
-    const url = isEditing ? apiUrl(`/admin/verified-local-features/${editingVerifiedFeatureId}`) : apiUrl('/admin/verified-local-features');
-    const method = isEditing ? 'PUT' : 'POST';
-
-    try {
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Unable to save verified local feature');
-
-      setSuccessMessage(isEditing ? 'Verified local feature updated.' : 'Verified local feature created.');
-      setVerifiedFeatureForm(defaultVerifiedFeatureForm);
-      setEditingVerifiedFeatureId(null);
-      await loadVerifiedFeatures();
-    } catch (error) {
-      setErrorMessage(error.message || 'Unable to save verified local feature');
-    }
-  };
-
-  const startEditVerifiedFeature = (item) => {
-    resetMessages();
-    setVerifiedFeatureErrors({});
-    setEditingVerifiedFeatureId(item.id);
-    setVerifiedFeatureForm({
-      feature_kind: item.feature_kind || 'msme',
-      name: item.name || '',
-      business_type: item.business_type || '',
-      feature_subtype: item.feature_subtype || '',
-      latitude: item.latitude ?? '',
-      longitude: item.longitude ?? '',
-      road_class: item.road_class || '',
-      power: item.power ?? '',
-      building_type: item.building_type || '',
-      landuse: item.landuse || '',
-      area_m2: item.area_m2 ?? '',
-      confidence_score: item.confidence_score ?? 100,
-      source_note: item.source_note || '',
-      verified_at: item.verified_at ? String(item.verified_at).slice(0, 10) : '',
-      is_active: Boolean(item.is_active)
-    });
-  };
-
-  const deleteVerifiedFeature = async (item) => {
-    if (!window.confirm(`Delete verified local feature: ${item.name}?`)) return;
-    resetMessages();
-
-    try {
-      const response = await fetch(apiUrl(`/admin/verified-local-features/${item.id}`), {
-        method: 'DELETE',
-        headers
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Unable to delete verified local feature');
-
-      setSuccessMessage('Verified local feature deleted.');
-      if (editingVerifiedFeatureId === item.id) {
-        setEditingVerifiedFeatureId(null);
-        setVerifiedFeatureForm(defaultVerifiedFeatureForm);
-      }
-      await loadVerifiedFeatures();
-    } catch (error) {
-      setErrorMessage(error.message || 'Unable to delete verified local feature');
-    }
-  };
-
-  const startEditUser = (user) => {
-    resetMessages();
-    setEditingUserId(user.user_id);
-    setUserForm(mapUserToForm(user));
-  };
-
-  const cancelEditUser = () => {
-    setEditingUserId(null);
-    setUserForm(null);
-  };
-
-  const saveUser = async () => {
-    if (!editingUserId || !userForm) return;
-    resetMessages();
-
-    const payload = {
-      ...userForm,
-      age: userForm.age === '' ? null : Number(userForm.age),
-      birthday: userForm.birthday || null
-    };
-
-    if (!payload.full_name.trim() || !payload.email.trim()) {
-      setErrorMessage('Full name and email are required.');
-      return;
-    }
-
-    try {
-      const response = await fetch(apiUrl(`/admin/users/${editingUserId}`), {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Unable to update user');
-
-      setSuccessMessage('User profile updated.');
-      setEditingUserId(null);
-      setUserForm(null);
-      await loadUsers();
-    } catch (error) {
-      setErrorMessage(error.message || 'Unable to update user');
-    }
-  };
-
-  const deleteUser = async (user) => {
-    if (!window.confirm(`Delete user: ${user.full_name || user.email}?`)) return;
-    resetMessages();
-
-    try {
-      const response = await fetch(apiUrl(`/admin/users/${user.user_id}`), {
-        method: 'DELETE',
-        headers
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || 'Unable to delete user');
-
-      setSuccessMessage('User deleted.');
-      if (editingUserId === user.user_id) {
-        setEditingUserId(null);
-        setUserForm(null);
-      }
-      await loadUsers();
-    } catch (error) {
-      setErrorMessage(error.message || 'Unable to delete user');
-    }
-  };
-
   const submitAdminSpace = async (event) => {
     event.preventDefault();
     resetMessages();
@@ -748,8 +429,6 @@ export default function AdminPanel({ adminSession }) {
     const payload = {
       title: adminSpaceForm.title.trim(),
       listing_mode: adminSpaceForm.listing_mode,
-      guarantee_level: adminSpaceForm.guarantee_level,
-      confidence_score: adminSpaceForm.confidence_score === '' ? null : Number(adminSpaceForm.confidence_score),
       property_type: adminSpaceForm.property_type.trim() || null,
       business_type: adminSpaceForm.business_type || null,
       latitude: Number(adminSpaceForm.latitude),
@@ -757,22 +436,13 @@ export default function AdminPanel({ adminSession }) {
       address_text: adminSpaceForm.address_text.trim() || null,
       price_min: adminSpaceForm.price_min === '' ? null : Number(adminSpaceForm.price_min),
       price_max: adminSpaceForm.price_max === '' ? null : Number(adminSpaceForm.price_max),
-      source_note: adminSpaceForm.source_note.trim() || null,
       contact_info: adminSpaceForm.contact_info.trim() || null,
       notes: adminSpaceForm.notes.trim() || null,
-      photo_urls: adminSpaceForm.photo_urls || [],
-      verified_at: adminSpaceForm.verified_at || null,
-      expires_at: adminSpaceForm.expires_at || null,
-      is_active: Boolean(adminSpaceForm.is_active)
+      photo_urls: adminSpaceForm.photo_urls || []
     };
 
     if (!payload.title || Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
       setErrorMessage('Title and valid coordinates are required for admin space submission.');
-      return;
-    }
-
-    if (payload.confidence_score !== null && (payload.confidence_score < 0 || payload.confidence_score > 100)) {
-      setErrorMessage('Confidence score must be between 0 and 100.');
       return;
     }
 
@@ -821,21 +491,6 @@ export default function AdminPanel({ adminSession }) {
 
       {errorMessage && <div className="error-alert mt-4">{errorMessage}</div>}
       {successMessage && <div className="admin-success-alert mt-4">{successMessage}</div>}
-
-      <div className="admin-tabs mt-6" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
-        <button type="button" className={`admin-tab-btn ${activeTab === 'msmes' ? 'active' : ''}`} onClick={() => setActiveTab('msmes')}>
-          Custom MSMEs
-        </button>
-        <button type="button" className={`admin-tab-btn ${activeTab === 'verified' ? 'active' : ''}`} onClick={() => setActiveTab('verified')}>
-          Verified Local Data
-        </button>
-        <button type="button" className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-          Users
-        </button>
-        <button type="button" className={`admin-tab-btn ${activeTab === 'spaces' ? 'active' : ''}`} onClick={() => setActiveTab('spaces')}>
-          Space Submissions
-        </button>
-      </div>
 
       {activeTab === 'msmes' && (
         <>
@@ -927,441 +582,274 @@ export default function AdminPanel({ adminSession }) {
         </>
       )}
 
-      {activeTab === 'verified' && (
-        <>
-          <div className="data-card mt-6 admin-card">
-            <h3 className="section-heading" style={{ marginBottom: '12px' }}>{editingVerifiedFeatureId ? 'Edit Verified Local Feature' : 'Add Verified Local Feature'}</h3>
-            <form onSubmit={submitVerifiedFeature}>
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Feature Kind</label>
-                  <select className="app-select" value={verifiedFeatureForm.feature_kind} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, feature_kind: e.target.value }))}>
-                    {VERIFIED_FEATURE_KIND_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Business Type (optional)</label>
-                  <select className="app-select" value={verifiedFeatureForm.business_type} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, business_type: e.target.value }))}>
-                    <option value="">Not specific</option>
-                    {BUSINESS_TYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Name</label>
-                <input value={verifiedFeatureForm.name} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, name: e.target.value }))} />
-                {verifiedFeatureErrors.name && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.name}</p>}
-              </div>
-
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Latitude</label>
-                  <input value={verifiedFeatureForm.latitude} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, latitude: e.target.value }))} />
-                  {verifiedFeatureErrors.latitude && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.latitude}</p>}
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Longitude</label>
-                  <input value={verifiedFeatureForm.longitude} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, longitude: e.target.value }))} />
-                  {verifiedFeatureErrors.longitude && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.longitude}</p>}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, marginBottom: 10, justifyContent: 'center' }}>
-                <button type="button" className="map-action-btn" onClick={requestVerifiedFeatureGeolocation}>Use my location</button>
-                <button type="button" className="map-action-btn" onClick={() => setShowVerifiedMapPicker(true)}>Pin on map</button>
-              </div>
-              {showVerifiedMapPicker && <MapPicker onSelect={handleVerifiedMapSelect} onClose={() => setShowVerifiedMapPicker(false)} />}
-
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Subtype / Road Class</label>
-                  <input value={verifiedFeatureForm.feature_subtype} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, feature_subtype: e.target.value }))} placeholder="e.g., tertiary, market, mall" />
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Confidence</label>
-                  <input value={verifiedFeatureForm.confidence_score} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, confidence_score: e.target.value }))} />
-                  {verifiedFeatureErrors.confidence_score && <p className="form-error" style={{ color: '#b00020', fontSize: 12, marginTop: 6 }}>{verifiedFeatureErrors.confidence_score}</p>}
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Notes / Source</label>
-                <input value={verifiedFeatureForm.source_note} onChange={(e) => setVerifiedFeatureForm((c) => ({ ...c, source_note: e.target.value }))} placeholder="Field survey, broker, photo-id" />
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, margin: '10px 0 14px', justifyContent: 'center' }}>
-                <button type="submit" className="primary-btn">{editingVerifiedFeatureId ? 'Update Feature' : 'Create Feature'}</button>
-                {editingVerifiedFeatureId && (
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => {
-                      setEditingVerifiedFeatureId(null);
-                      setVerifiedFeatureForm(defaultVerifiedFeatureForm);
-                    }}
-                  >
-                    Cancel Edit
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-
-          <div className="data-card admin-card admin-tools-card">
-            <div className="admin-tools-grid">
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label>Filter Kind</label>
-                <select className="app-select" value={verifiedFeatureFilter} onChange={(e) => setVerifiedFeatureFilter(e.target.value)}>
-                  <option value="all">All</option>
-                  {VERIFIED_FEATURE_KIND_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label>Search</label>
-                <input value={verifiedFeatureSearchTerm} onChange={(e) => setVerifiedFeatureSearchTerm(e.target.value)} placeholder="Search name, type, or business" />
-              </div>
-            </div>
-          </div>
-
-          <div className="history-list mt-6">
-            {verifiedFeatureLoading && <div className="data-card">Loading verified features...</div>}
-            {!verifiedFeatureLoading && filteredVerifiedFeatures.map((item) => (
-              <div className="data-card history-card" key={item.id} style={{ padding: 8 }}>
-                <div className="history-card-top" style={{ gap: 8 }}>
-                  <div>
-                    <h4 className="history-title" style={{ margin: 0, fontSize: 15 }}>{item.name}</h4>
-                    <p className="history-meta" style={{ margin: '4px 0', fontSize: 12 }}>Kind: {getVerifiedFeatureKindLabel(item.feature_kind)} | Type: {item.business_type || item.feature_subtype || '-'}</p>
-                    <p className="history-meta" style={{ margin: '2px 0', fontSize: 12 }}>Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
-                    <p className="history-meta" style={{ margin: '2px 0', fontSize: 12 }}>Confidence: {item.confidence_score ?? 100}% — Source: {item.source_note || '-'}</p>
-                  </div>
-                </div>
-                <div className="admin-actions-row" style={{ marginTop: 6 }}>
-                  <button className="admin-action-btn admin-action-btn-edit" onClick={() => startEditVerifiedFeature(item)} style={{ padding: '6px 10px', fontSize: 13 }}>Edit</button>
-                  <button className="admin-action-btn admin-action-btn-delete" onClick={() => deleteVerifiedFeature(item)} style={{ padding: '6px 10px', fontSize: 13 }}>Delete</button>
-                </div>
-              </div>
-            ))}
-            {!verifiedFeatureLoading && filteredVerifiedFeatures.length === 0 && (
-              <div className="data-card">No verified features match your search.</div>
-            )}
-          </div>
-        </>
-      )}
 
       {activeTab === 'users' && (
         <div className="history-list mt-6">
           {userLoading && <div className="data-card">Loading users...</div>}
-          {!userLoading && users.map((user) => {
-            const editing = editingUserId === user.user_id;
-            return (
-              <div className="data-card history-card" key={user.user_id}>
-                {!editing ? (
-                  <>
-                    <div className="history-card-top">
-                      <div>
-                        <h4 className="history-title">{user.full_name || 'Unnamed User'}</h4>
-                        <p className="history-meta">{user.email}</p>
-                        <p className="history-meta">User ID: {user.user_id}</p>
-                      </div>
-                    </div>
-                    <div className="admin-actions-row">
-                      <button className="admin-action-btn admin-action-btn-edit" onClick={() => startEditUser(user)}>Edit</button>
-                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => deleteUser(user)}>Delete</button>
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <div className="input-group">
-                      <label>Full Name</label>
-                      <input value={userForm.full_name} onChange={(e) => setUserForm((c) => ({ ...c, full_name: e.target.value }))} />
-                    </div>
-                    <div className="input-group">
-                      <label>Email</label>
-                      <input value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
-                    </div>
-                    <div className="input-group">
-                      <label>Cellphone Number</label>
-                      <input value={userForm.cellphone_number} onChange={(e) => setUserForm((c) => ({ ...c, cellphone_number: e.target.value }))} />
-                    </div>
-                    <div className="input-group">
-                      <label>Address</label>
-                      <input value={userForm.address} onChange={(e) => setUserForm((c) => ({ ...c, address: e.target.value }))} />
-                    </div>
-                    <div className="input-group">
-                      <label>Birthday</label>
-                      <input type="date" value={userForm.birthday} onChange={(e) => setUserForm((c) => ({ ...c, birthday: e.target.value }))} />
-                    </div>
-                    <div className="input-group">
-                      <label>Age</label>
-                      <input value={userForm.age} onChange={(e) => setUserForm((c) => ({ ...c, age: e.target.value }))} />
-                    </div>
-                    <div className="input-group">
-                      <label>Primary Business</label>
-                      <input value={userForm.primary_business} onChange={(e) => setUserForm((c) => ({ ...c, primary_business: e.target.value }))} />
-                    </div>
-                    <div className="history-actions-row">
-                      <button className="primary-btn history-open-btn" onClick={saveUser}>Save</button>
-                      <button className="secondary-btn" onClick={cancelEditUser}>Cancel</button>
-                    </div>
-                  </div>
-                )}
+          {!userLoading && users.map((user) => (
+            <div className="data-card history-card" key={user.user_id}>
+              <div className="history-card-top">
+                <div>
+                  <h4 className="history-title">{user.full_name || 'Unnamed User'}</h4>
+                  <p className="history-meta">{user.email}</p>
+                  <p className="history-meta">User ID: {user.user_id}</p>
+                </div>
               </div>
-            );
-          })}
+              <div className="history-card-body">
+                {user.cellphone_number && <p className="history-meta">Phone: {user.cellphone_number}</p>}
+                {user.address && <p className="history-meta">Address: {user.address}</p>}
+                {user.primary_business && <p className="history-meta">Primary Business: {user.primary_business}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'clup' && (
+        <div className="data-card mt-6 admin-card">
+          <React.Suspense fallback={<div>Loading zoning manager…</div>}>
+            <ZoningManager token={token} />
+          </React.Suspense>
+        </div>
+      )}
+
+      {activeTab === 'flood' && (
+        <div className="data-card mt-6 admin-card">
+          <React.Suspense fallback={<div>Loading flood zone manager…</div>}>
+            <FloodZoneManager token={token} />
+          </React.Suspense>
         </div>
       )}
 
       {activeTab === 'spaces' && (
         <>
-          <div className="data-card mt-6 admin-card">
-            <h3 className="section-heading" style={{ marginBottom: '12px' }}>Add Admin Space Submission</h3>
-            <form onSubmit={submitAdminSpace}>
-              <div className="input-group">
-                <label>Title <span className="required-indicator">*</span></label>
-                <input required value={adminSpaceForm.title} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, title: e.target.value }))} />
-              </div>
+          <div className="data-card admin-card admin-tools-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 24 }}>
+            <button type="button" className={`admin-tab-btn ${spacePanelMode === 'submit' ? 'active' : ''}`} onClick={() => setSpacePanelMode('submit')}>
+              Submit Space
+            </button>
+            <button type="button" className={`admin-tab-btn ${spacePanelMode === 'submissions' ? 'active' : ''}`} onClick={() => setSpacePanelMode('submissions')}>
+              User Submissions
+            </button>
+          </div>
 
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Listing Mode</label>
-                  <select className="app-select" value={adminSpaceForm.listing_mode} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, listing_mode: e.target.value }))}>
-                    <option value="rent">For Rent</option>
-                    <option value="buy">For Sale</option>
-                  </select>
+          {spacePanelMode === 'submit' && (
+            <div className="data-card mt-6 admin-card">
+              <h3 className="section-heading" style={{ marginBottom: '12px' }}>Add Admin Space Submission</h3>
+              <form onSubmit={submitAdminSpace}>
+                <div className="input-group">
+                  <label>Title <span className="required-indicator">*</span></label>
+                  <input required value={adminSpaceForm.title} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, title: e.target.value }))} />
                 </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Guarantee Level</label>
-                  <select className="app-select" value={adminSpaceForm.guarantee_level} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, guarantee_level: e.target.value }))}>
-                    <option value="potential">Potential</option>
-                    <option value="guaranteed">Guaranteed</option>
-                  </select>
-                </div>
-              </div>
 
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Business Type</label>
-                  <select className="app-select" value={adminSpaceForm.business_type} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, business_type: e.target.value }))}>
-                    <option value="">Not specific</option>
-                    {BUSINESS_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Confidence (0-100)</label>
-                  <input
-                    value={adminSpaceForm.confidence_score}
-                    onChange={(e) => setAdminSpaceForm((c) => ({ ...c, confidence_score: e.target.value }))}
-                    placeholder="85"
-                    disabled={adminSpaceForm.guarantee_level === 'guaranteed'}
-                  />
-                </div>
-              </div>
-
-                  <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Latitude <span className="required-indicator">*</span></label>
-                  <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} placeholder="7.310967506654152, 125.6853653454886" />
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Longitude <span className="required-indicator">*</span></label>
-                  <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} />
-                </div>
-              </div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 10, justifyContent: 'center' }}>
-                    <button type="button" className="map-action-btn" onClick={requestAdminGeolocation}>
-                      <span>Use my location</span>
-                    </button>
-                    <button type="button" className="map-action-btn" onClick={() => setShowAdminMapPicker(true)}>
-                      <span>Pin on map</span>
-                    </button>
+                <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Listing Mode</label>
+                    <select className="app-select" value={adminSpaceForm.listing_mode} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, listing_mode: e.target.value }))}>
+                      <option value="rent">For Rent</option>
+                      <option value="buy">For Sale</option>
+                    </select>
                   </div>
-                  {showAdminMapPicker && <MapPicker onSelect={handleAdminMapSelect} onClose={() => setShowAdminMapPicker(false)} />}
-
-              <div className="input-group">
-                <label>Property Type</label>
-                <input value={adminSpaceForm.property_type} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, property_type: e.target.value }))} placeholder="Storefront, Lot, Stall" />
-              </div>
-
-              <div className="input-group">
-                <label>Address</label>
-                <input value={adminSpaceForm.address_text} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, address_text: e.target.value }))} placeholder="Address or landmark" />
-              </div>
-
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Min Price (PHP)</label>
-                  <input value={adminSpaceForm.price_min} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, price_min: e.target.value }))} />
-                </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Max Price (PHP)</label>
-                  <input value={adminSpaceForm.price_max} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, price_max: e.target.value }))} />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Contact Info</label>
-                <input value={adminSpaceForm.contact_info} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, contact_info: e.target.value }))} />
-              </div>
-
-              <div className="input-group">
-                <label>Source Note</label>
-                <input value={adminSpaceForm.source_note} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, source_note: e.target.value }))} placeholder="Field survey, broker tip, etc." />
-              </div>
-
-              <div className="input-group">
-                <label>Notes</label>
-                <textarea value={adminSpaceForm.notes} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, notes: e.target.value }))} rows={3} />
-              </div>
-
-              <div className="input-group">
-                <label>Photos for Preview</label>
-                <input type="file" accept="image/*" multiple onChange={handleAdminPhotoUpload} />
-                <p className="form-hint">Upload up to 4 photos. Tap a thumbnail to review it.</p>
-                {adminSpaceForm.photo_urls?.length > 0 && (
-                  <div className="photo-review-shell">
-                    <div className="photo-review-strip" role="list" aria-label="Admin uploaded photos">
-                      {adminSpaceForm.photo_urls.map((photoUrl, index) => (
-                        <div key={`${photoUrl}-${index}`} className={`photo-review-thumb ${selectedAdminPhotoIndex === index ? 'is-active' : ''}`} role="listitem">
-                          <button
-                            type="button"
-                            className="photo-review-thumb-select"
-                            onClick={() => setSelectedAdminPhotoIndex(index)}
-                            aria-label={`Review admin photo ${index + 1}`}
-                          >
-                            <img src={photoUrl} alt={`Admin thumbnail ${index + 1}`} />
-                          </button>
-                          <button type="button" className="photo-preview-remove" onClick={() => removeAdminPhotoAtIndex(index)} aria-label={`Remove admin photo ${index + 1}`}>
-                            ×
-                          </button>
-                        </div>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Business Type</label>
+                    <select className="app-select" value={adminSpaceForm.business_type} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, business_type: e.target.value }))}>
+                      <option value="">Not specific</option>
+                      {BUSINESS_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
-                    </div>
+                    </select>
                   </div>
-                )}
-              </div>
-
-              <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Verified Date</label>
-                  <input type="date" value={adminSpaceForm.verified_at} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, verified_at: e.target.value }))} />
-                  <p className="admin-field-help">When the listing was last confirmed as real and available.</p>
                 </div>
-                <div className="input-group" style={{ marginBottom: 0 }}>
-                  <label>Expires Date</label>
-                  <input type="date" value={adminSpaceForm.expires_at} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, expires_at: e.target.value }))} />
-                  <p className="admin-field-help">After this date, the listing should be rechecked or marked inactive.</p>
+
+                <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Latitude <span className="required-indicator">*</span></label>
+                    <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.latitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, latitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} placeholder="7.310967506654152, 125.6853653454886" />
+                  </div>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Longitude <span className="required-indicator">*</span></label>
+                    <input required type="text" inputMode="decimal" step="any" value={adminSpaceForm.longitude} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, longitude: e.target.value }))} onPaste={handleCoordinatePaste(setAdminSpaceForm)} />
+                  </div>
                 </div>
-              </div>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 10, justifyContent: 'center' }}>
+                  <button type="button" className="map-action-btn" onClick={requestAdminGeolocation}>
+                    <span>Use my location</span>
+                  </button>
+                  <button type="button" className="map-action-btn" onClick={() => setShowAdminMapPicker(true)}>
+                    <span>Pin on map</span>
+                  </button>
+                </div>
+                {showAdminMapPicker && <MapPicker onSelect={handleAdminMapSelect} onClose={() => setShowAdminMapPicker(false)} />}
 
-              <div className="input-group">
-                <label>
-                  <input type="checkbox" checked={adminSpaceForm.is_active} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, is_active: e.target.checked }))} style={{ marginRight: 8 }} />
-                  Active on map
-                </label>
-              </div>
+                <div className="input-group">
+                  <label>Property Type</label>
+                  <input value={adminSpaceForm.property_type} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, property_type: e.target.value }))} placeholder="Storefront, Lot, Stall" />
+                </div>
 
-              <button type="submit" className="primary-btn">Create Admin Space Entry</button>
-            </form>
-          </div>
+                <div className="input-group">
+                  <label>Address</label>
+                  <input value={adminSpaceForm.address_text} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, address_text: e.target.value }))} placeholder="Address or landmark" />
+                </div>
 
-          <div className="data-card admin-card admin-tools-card">
-            <div className="admin-tools-grid">
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label>User Submission Filter</label>
-                <select className="app-select" value={spaceFilterStatus} onChange={(e) => setSpaceFilterStatus(e.target.value)}>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="archived">Archived</option>
-                  <option value="all">All</option>
-                </select>
-              </div>
-              <div className="input-group" style={{ marginBottom: 0 }}>
-                <label>Refresh</label>
-                <button type="button" className="secondary-btn" onClick={() => loadSpaces(spaceFilterStatus)}>Reload Space Data</button>
-              </div>
-            </div>
-          </div>
+                <div className="admin-tools-grid" style={{ marginBottom: 12 }}>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Min Price (PHP)</label>
+                    <input value={adminSpaceForm.price_min} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, price_min: e.target.value }))} />
+                  </div>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Max Price (PHP)</label>
+                    <input value={adminSpaceForm.price_max} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, price_max: e.target.value }))} />
+                  </div>
+                </div>
 
-          <div className="history-list mt-6">
-            <div className="data-card admin-card">
-              <h3 className="section-heading" style={{ marginBottom: 12 }}>User Submissions ({spaceFilterStatus})</h3>
+                <div className="input-group">
+                  <label>Contact Info</label>
+                  <input value={adminSpaceForm.contact_info} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, contact_info: e.target.value }))} />
+                </div>
 
-              {spaceLoading && <p className="history-meta">Loading submissions...</p>}
-              {!spaceLoading && userSpaceSubmissions.length === 0 && <p className="history-meta">No user submissions in this filter.</p>}
+                <div className="input-group">
+                  <label>Notes</label>
+                  <textarea value={adminSpaceForm.notes} onChange={(e) => setAdminSpaceForm((c) => ({ ...c, notes: e.target.value }))} rows={3} />
+                </div>
 
-              {!spaceLoading && userSpaceSubmissions.map((item) => {
-                const statusMeta = getSubmissionStatusMeta(item.status);
-                const statusClass = `admin-submission-card ${statusMeta.className}`;
-                const normalizedStatus = String(item.status || '').toLowerCase();
-
-                return (
-                <div key={item.id} className={statusClass} style={{ marginTop: 12 }}>
-                  <div className="history-card-top">
-                    <div>
-                      <h4 className="history-title">{item.title}</h4>
-                      <div className="admin-submission-head">
-                        <span className={`submission-status-pill ${statusMeta.className}`}>{statusMeta.label}</span>
-                        <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level}</p>
+                <div className="input-group">
+                  <label>Photos for Preview</label>
+                  <input type="file" accept="image/*" multiple onChange={handleAdminPhotoUpload} />
+                  <p className="form-hint">Upload up to 4 photos. Tap a thumbnail to review it.</p>
+                  {adminSpaceForm.photo_urls?.length > 0 && (
+                    <div className="photo-review-shell">
+                      <div className="photo-review-strip" role="list" aria-label="Admin uploaded photos">
+                        {adminSpaceForm.photo_urls.map((photoUrl, index) => (
+                          <div key={`${photoUrl}-${index}`} className={`photo-review-thumb ${selectedAdminPhotoIndex === index ? 'is-active' : ''}`} role="listitem">
+                            <button
+                              type="button"
+                              className="photo-review-thumb-select"
+                              onClick={() => setSelectedAdminPhotoIndex(index)}
+                              aria-label={`Review admin photo ${index + 1}`}
+                            >
+                              <img src={photoUrl} alt={`Admin thumbnail ${index + 1}`} />
+                            </button>
+                            <button type="button" className="photo-preview-remove" onClick={() => removeAdminPhotoAtIndex(index)} aria-label={`Remove admin photo ${index + 1}`}>
+                              ×
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                      <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
-                      <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
-                      {item.address_text && <p className="history-meta">Address: {item.address_text}</p>}
-                      {item.contact_info && <p className="history-meta">Contact: {item.contact_info}</p>}
-                      <p className="admin-submission-note">{statusMeta.message}</p>
-                    </div>
-                  </div>
-
-                  {normalizedStatus === 'pending' ? (
-                    <div className="admin-actions-row">
-                      <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Approve</button>
-                      <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Reject</button>
-                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
-                    </div>
-                  ) : normalizedStatus === 'approved' ? (
-                    <div className="admin-actions-row">
-                      <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Move to Rejected</button>
-                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
-                    </div>
-                  ) : (
-                    <div className="admin-actions-row">
-                      <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Mark Approved</button>
-                      <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
                     </div>
                   )}
                 </div>
-              )})}
+
+                <button type="submit" className="primary-btn">Create Admin Space Entry</button>
+              </form>
             </div>
+          )}
 
-            <div className="data-card admin-card">
-              <h3 className="section-heading" style={{ marginBottom: 12 }}>Admin Space Entries</h3>
-
-              {spaceLoading && <p className="history-meta">Loading admin entries...</p>}
-              {!spaceLoading && adminSpaceSubmissions.length === 0 && <p className="history-meta">No admin entries yet.</p>}
-
-              {!spaceLoading && adminSpaceSubmissions.map((item) => (
-                <div key={item.id} className="history-card" style={{ marginTop: 12 }}>
-                  <div className="history-card-top">
-                    <div>
-                      <h4 className="history-title">{item.title}</h4>
-                      <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level} | Active: {item.is_active ? 'Yes' : 'No'}</p>
-                      <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
-                      <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
-                      <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>
-                    </div>
+          {spacePanelMode === 'submissions' && (
+            <>
+              <div className="data-card mt-6 admin-card admin-tools-card">
+                <div className="admin-tools-grid admin-tools-grid--compact">
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>User Submission Filter</label>
+                    <select className="app-select" value={spaceFilterStatus} onChange={(e) => setSpaceFilterStatus(e.target.value)}>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="archived">Archived</option>
+                      <option value="all">All</option>
+                    </select>
+                  </div>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>&nbsp;</label>
+                    <button type="button" className="secondary-btn secondary-btn--compact" onClick={() => loadSpaces(spaceFilterStatus)}>Reload Space Data</button>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+
+              <div className="history-list mt-6">
+                <div className="data-card admin-card">
+                  <h3 className="section-heading" style={{ marginBottom: 12 }}>User Submissions ({spaceFilterStatus})</h3>
+
+                  {spaceLoading && <p className="history-meta">Loading submissions...</p>}
+                  {!spaceLoading && userSpaceSubmissions.length === 0 && <p className="history-meta">No user submissions in this filter.</p>}
+
+                  {!spaceLoading && userSpaceSubmissions.map((item) => {
+                    const statusMeta = getSubmissionStatusMeta(item.status);
+                    const statusClass = `admin-submission-card ${statusMeta.className}`;
+                    const normalizedStatus = String(item.status || '').toLowerCase();
+
+                    return (
+                      <div key={item.id} className={statusClass} style={{ marginTop: 12 }}>
+                        <div className="history-card-top">
+                          <div>
+                            <h4 className="history-title">{item.title}</h4>
+                            <div className="admin-submission-head">
+                              <span className={`submission-status-pill ${statusMeta.className}`}>{statusMeta.label}</span>
+                              <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)}</p>
+                            </div>
+                            <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
+                            <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
+                            {item.address_text && <p className="history-meta">Address: {item.address_text}</p>}
+                            {item.contact_info && <p className="history-meta">Contact: {item.contact_info}</p>}
+                            <p className="admin-submission-note">{statusMeta.message}</p>
+                          </div>
+                        </div>
+
+                        {Array.isArray(item.photo_urls) && item.photo_urls.length > 0 && (
+                          <div className="submission-photo-preview" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                            {item.photo_urls.map((photoUrl, index) => (
+                              <img
+                                key={index}
+                                src={photoUrl}
+                                alt={`Submission ${item.title} photo ${index + 1}`}
+                                style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid #ddd' }}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {normalizedStatus === 'pending' ? (
+                          <div className="admin-actions-row">
+                            <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Approve</button>
+                            <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Reject</button>
+                            <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
+                          </div>
+                        ) : normalizedStatus === 'approved' ? (
+                          <div className="admin-actions-row">
+                            <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Move to Rejected</button>
+                            <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
+                          </div>
+                        ) : (
+                          <div className="admin-actions-row">
+                            <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Mark Approved</button>
+                            <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="data-card admin-card">
+            <h3 className="section-heading" style={{ marginBottom: 12 }}>Admin Space Entries</h3>
+
+            {spaceLoading && <p className="history-meta">Loading admin entries...</p>}
+            {!spaceLoading && adminSpaceSubmissions.length === 0 && <p className="history-meta">No admin entries yet.</p>}
+
+            {!spaceLoading && adminSpaceSubmissions.map((item) => (
+              <div key={item.id} className="history-card" style={{ marginTop: 12 }}>
+                <div className="history-card-top">
+                  <div>
+                    <h4 className="history-title">{item.title}</h4>
+                    <p className="history-meta">Mode: {getListingModeLabel(item.listing_mode)} | Guarantee: {item.guarantee_level} | Active: {item.is_active ? 'Yes' : 'No'}</p>
+                    <p className="history-meta">Lat: {Number(item.latitude).toFixed(6)} | Lon: {Number(item.longitude).toFixed(6)}</p>
+                    <p className="history-meta">Business: {getBusinessTypeLabel(item.business_type)} | Price: {formatPesoRange(item.price_min, item.price_max)}</p>
+                    <p className="history-meta">Confidence: {item.confidence_score ?? '-'} | Expires: {item.expires_at ? String(item.expires_at).slice(0, 10) : '-'}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}

@@ -38,7 +38,7 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
     target_payback = int(requirement.get("payback_months") or 0)
 
     startup_capital = user_profile.get("startup_capital")
-    risk_tolerance = str(user_profile.get("risk_tolerance") or "").strip().lower()
+    risk_tolerance = "medium"
     preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
     target_payback_months = user_profile.get("target_payback_months")
 
@@ -108,7 +108,7 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
     reasons = [
         f"Market trend average score is {market_avg_score:.1f} across {market_scan_count} recent scans.",
         f"Local competitor estimate is {int(local_competitor_count)} around this business type.",
-        f"User profile signals a {risk_tolerance or 'default'} risk preference and {preferred_setup or 'unset'} setup preference.",
+        f"The recommendation uses a default medium risk profile and preferred setup is {preferred_setup or 'unset'}.",
     ]
 
     return {
@@ -191,7 +191,7 @@ def recommend_trends(user_profile, global_trends):
     recommendations = []
 
     startup_capital = user_profile.get("startup_capital") or 0
-    risk_tolerance = str(user_profile.get("risk_tolerance") or "medium").strip().lower()
+    risk_tolerance = "medium"
     preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
     target_payback_months = user_profile.get("target_payback_months") or 0
 
@@ -205,7 +205,9 @@ def recommend_trends(user_profile, global_trends):
         # Check if the business matches the user's profile
         if startup_capital < capital_min or startup_capital > capital_max:
             continue
-        if risk_tolerance != risk and risk_tolerance != "high":
+        if risk_tolerance == "low" and risk != "low":
+            continue
+        if risk_tolerance == "medium" and risk not in {"low", "medium"}:
             continue
         if preferred_setup and preferred_setup != setup:
             continue

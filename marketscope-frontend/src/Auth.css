@@ -207,35 +207,29 @@
   color: #fff !important;
 }
 
-/* Stronger rule: force dark background and white text for the Primary Business select and its option list */
+/* Enforce dark background and white text for all auth form controls */
+.auth-form-wrapper .input-group input,
+.auth-form-wrapper .input-group select,
+.auth-form-wrapper .input-group textarea,
+.auth-form-wrapper .input-group select option {
+  color: #fff !important;
+  background-color: #0f172a !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+
+/* Stronger rule: make the Primary Business select consistent with other fields */
 .auth-form-wrapper .input-group select[name="primary_business"],
 .auth-form-wrapper .input-group select[name="primary_business"] option,
 .auth-form-wrapper .input-group select[name="primary_business"]::-ms-expand {
-  background: #0b0b0d !important;
+  background-color: #0f172a !important;
   color: #fff !important;
-  border-color: rgba(255,255,255,0.06) !important;
-}
-
-/* Generic fallback: any select inside auth form uses dark background */
-.auth-form-wrapper .input-group select,
-.auth-form-wrapper .input-group select option {
-  background: #0b0b0d !important;
-  color: #fff !important;
-}
-
-/* Enforce white text and dark background for required/setup fields; accent-focus matches theme */
-.auth-form-wrapper .input-group input,
-.auth-form-wrapper .input-group select,
-.auth-form-wrapper .input-group textarea {
-  color: #fff !important;
-  background: var(--bg-sheet) !important;
-  border-color: var(--border-color) !important;
+  border-color: rgba(255,255,255,0.12) !important;
 }
 
 .auth-form-wrapper .input-group input::placeholder,
 .auth-form-wrapper .input-group select::placeholder,
 .auth-form-wrapper .input-group textarea::placeholder {
-  color: var(--text-muted) !important;
+  color: #94a3b8 !important;
 }
 
 /* Trend Preferences Gate: force selects and option list to dark theme */

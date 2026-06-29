@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiUrl } from '../api';
+import { getBusinessTypeKey, getBusinessTypeLabel } from '../utils/businessTypes';
 
 const formatDate = (value) => {
   if (!value) return 'Unknown date';
@@ -21,6 +22,8 @@ export default function History({ user, onOpenReport }) {
   const [openingHistoryId, setOpeningHistoryId] = useState(null);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
+  const [deleteMode, setDeleteMode] = useState(false);
 
   const getCompetitorCount = (item) => {
     if (typeof item?.competitors_found === 'number') return item.competitors_found;
@@ -68,17 +71,36 @@ export default function History({ user, onOpenReport }) {
       if (!term) return true;
 
       const businessType = String(item?.business_type || '').toLowerCase();
+      const businessLabel = String(getBusinessTypeLabel(item?.business_type || '') || '').toLowerCase();
       const insight = String(item?.insight || '').toLowerCase();
-      return businessType.includes(term) || insight.includes(term);
+      return businessType.includes(term) || businessLabel.includes(term) || insight.includes(term);
     });
   }, [history, historySearchTerm, historyScoreFilter]);
 
   const hasHistory = useMemo(() => history.length > 0, [history]);
   const hasFilteredHistory = useMemo(() => filteredHistory.length > 0, [filteredHistory]);
+  const visibleHistoryIds = useMemo(() => filteredHistory.map((item) => item.history_id).filter(Boolean), [filteredHistory]);
+  const selectedVisibleHistoryIds = useMemo(
+    () => selectedHistoryIds.filter((historyId) => visibleHistoryIds.includes(historyId)),
+    [selectedHistoryIds, visibleHistoryIds]
+  );
+  const allVisibleSelected = hasFilteredHistory && selectedVisibleHistoryIds.length === visibleHistoryIds.length;
+  const someVisibleSelected = selectedVisibleHistoryIds.length > 0 && !allVisibleSelected;
+
+  useEffect(() => {
+    setSelectedHistoryIds((current) => current.filter((historyId) => history.some((item) => item.history_id === historyId)));
+  }, [history]);
+
+  useEffect(() => {
+    if (!deleteMode) {
+      setSelectedHistoryIds([]);
+    }
+  }, [deleteMode]);
 
   const buildReportPayload = (item) => ({
     viability_score: item.viability_score,
-    business_type: item.business_type || 'Saved Analysis',
+    business_type: getBusinessTypeKey(item.business_type || ''),
+    business_label: getBusinessTypeLabel(item.business_type || '') || 'Saved Analysis',
     competitors_found: getCompetitorCount(item),
     competitor_locations: item.competitor_locations || [],
     target_coords: {
@@ -102,7 +124,37 @@ export default function History({ user, onOpenReport }) {
       const data = await response.json();
 
       if (response.ok && data?.history) {
-        onOpenReport?.(buildReportPayload(data.history));
+        const payload = buildReportPayload(data.history);
+
+        // If the saved history entry looks legacy (missing current saturation subcomponents),
+        // attempt to re-run the live analysis so the opened report matches the current Report view.
+        const hasSaturationSubcomponents = payload.breakdown && (payload.breakdown.competition_density || payload.breakdown.road_access || payload.breakdown.anchor_proximity || payload.breakdown.building_density);
+
+        if (!hasSaturationSubcomponents) {
+          try {
+            const analyzeResp = await fetch(apiUrl('/analyze'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                lat: payload.target_coords?.lat,
+                lon: payload.target_coords?.lng,
+                business_type: payload.business_type,
+                radius: payload.radius_meters || 340,
+                user_id: userId
+              })
+            });
+
+            const analyzeData = await analyzeResp.json();
+            if (analyzeResp.ok && analyzeData) {
+              onOpenReport?.(analyzeData);
+              return;
+            }
+          } catch (err) {
+            // Fall back to saved payload below
+          }
+        }
+
+        onOpenReport?.(payload);
       } else {
         onOpenReport?.(buildReportPayload(item));
       }
@@ -187,6 +239,7 @@ export default function History({ user, onOpenReport }) {
       }
 
       setHistory((current) => current.filter((entry) => entry.history_id !== item.history_id));
+      setSelectedHistoryIds((current) => current.filter((historyId) => historyId !== item.history_id));
       setExpandedHistoryId((current) => (current === item.history_id ? null : current));
       setExpandedFactorKeyByHistoryId((current) => {
         const next = { ...current };
@@ -199,6 +252,80 @@ export default function History({ user, onOpenReport }) {
     } finally {
       setDeletingHistoryId(null);
     }
+  };
+
+  const toggleHistorySelection = (historyId) => {
+    if (!historyId) return;
+
+    setSelectedHistoryIds((current) => (
+      current.includes(historyId)
+        ? current.filter((value) => value !== historyId)
+        : [...current, historyId]
+    ));
+  };
+
+  const toggleVisibleSelection = () => {
+    if (allVisibleSelected) {
+      setSelectedHistoryIds((current) => current.filter((historyId) => !visibleHistoryIds.includes(historyId)));
+      return;
+    }
+
+    setSelectedHistoryIds((current) => {
+      const next = new Set(current);
+      visibleHistoryIds.forEach((historyId) => next.add(historyId));
+      return Array.from(next);
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!userId || selectedVisibleHistoryIds.length === 0) return;
+
+    const confirmMessage = selectedVisibleHistoryIds.length === 1
+      ? 'Delete the selected saved analysis?'
+      : `Delete ${selectedVisibleHistoryIds.length} selected saved analyses?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    setDeleteError('');
+
+    try {
+      const results = await Promise.all(selectedVisibleHistoryIds.map(async (historyId) => {
+        const response = await fetch(apiUrl(`/users/${userId}/history/${historyId}`), {
+          method: 'DELETE'
+        });
+        const data = await response.json();
+        return { historyId, response, data };
+      }));
+
+      const failedResult = results.find(({ response }) => !response.ok && response.status !== 404);
+      if (failedResult) {
+        throw new Error(failedResult.data?.detail || 'Unable to delete one or more history items');
+      }
+
+      setHistory((current) => current.filter((entry) => !selectedVisibleHistoryIds.includes(entry.history_id)));
+      setExpandedHistoryId((current) => (selectedVisibleHistoryIds.includes(current) ? null : current));
+      setExpandedFactorKeyByHistoryId((current) => {
+        const next = { ...current };
+        selectedVisibleHistoryIds.forEach((historyId) => {
+          delete next[historyId];
+        });
+        return next;
+      });
+      setSelectedHistoryIds((current) => current.filter((historyId) => !selectedVisibleHistoryIds.includes(historyId)));
+    } catch (error) {
+      setDeleteError(error.message || 'Unable to delete selected history items');
+    } finally {
+      setDeleteMode(false);
+    }
+  };
+
+  const handleDeleteModeAction = async () => {
+    if (!deleteMode) {
+      setDeleteMode(true);
+      return;
+    }
+
+    setDeleteMode(false);
   };
 
   const getFactorContext = (key, factor, item) => {
@@ -237,7 +364,7 @@ export default function History({ user, onOpenReport }) {
     <div className="history-confirm-overlay" role="presentation" onClick={() => setDeleteCandidate(null)}>
       <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-delete-title" onClick={(event) => event.stopPropagation()}>
         <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-rose-300">Confirm deletion</p>
-        <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-slate-50">Delete {deleteCandidate.business_type}?</h3>
+        <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-slate-50">Delete {getBusinessTypeLabel(deleteCandidate.business_type)}?</h3>
         <p className="history-confirm-text mt-3 text-sm leading-6 text-slate-300">
           This removes the saved analysis from your history. You can run the same site again later, but this saved copy will be gone.
         </p>
@@ -256,11 +383,36 @@ export default function History({ user, onOpenReport }) {
 
   return (
     <div className="profile-page page-enter min-h-full">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-8xl flex-col gap-4 px-6 pb-28 pt-4 sm:px-8">
         <div className="profile-card fade-in rounded-2xl border border-white/10 bg-slate-900/70 p-5 text-left shadow-sm">
           <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Analysis History</h2>
           <p className="profile-email text-sm text-slate-300">Previous site analyses for your account.</p>
         </div>
+
+        {hasHistory && deleteMode && (
+          <div className="data-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-violet-400/40 hover:bg-violet-500/10"
+                onClick={toggleVisibleSelection}
+              >
+                {allVisibleSelected ? 'Clear selection' : 'Select all visible reports'}
+              </button>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-300">{selectedVisibleHistoryIds.length} selected</span>
+                <button
+                  type="button"
+                  className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-lg border border-rose-400/20 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-300/40 hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleBulkDelete}
+                  disabled={selectedVisibleHistoryIds.length === 0}
+                >
+                  Delete selected
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {loading && <div className="data-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300 shadow-sm">Loading history...</div>}
 
@@ -293,30 +445,53 @@ export default function History({ user, onOpenReport }) {
                 />
               </div>
               <div className="input-group" style={{ marginBottom: 0 }}>
-                <label>Type</label>
-                <select
-                  value={historyScoreFilter}
-                  onChange={(e) => setHistoryScoreFilter(e.target.value)}
-                  className="app-select w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
-                >
-                  <option value="all">All</option>
-                  <option value="50-up">50 points and up</option>
-                  <option value="below-50">Below 50 points</option>
-                </select>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label>Type</label>
+                    <select
+                      value={historyScoreFilter}
+                      onChange={(e) => setHistoryScoreFilter(e.target.value)}
+                      className="app-select w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20"
+                    >
+                      <option value="all">All</option>
+                      <option value="50-up">50 points and up</option>
+                      <option value="below-50">Below 50 points</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    className={`history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-lg border px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${deleteMode ? 'border-violet-400/35 bg-violet-500/15 text-violet-200 hover:border-violet-300/50 hover:bg-violet-500/25' : 'border-rose-400/20 bg-rose-500/10 text-rose-200 hover:border-rose-300/40 hover:bg-rose-500/20'}`}
+                    onClick={handleDeleteModeAction}
+                  >
+                    {deleteMode ? 'Cancel delete' : 'Delete'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="history-list mt-6 flex flex-col gap-4">
+          <div className="history-list mt-6 grid gap-4 lg:grid-cols-2">
           {filteredHistory.map((item) => (
-            <div className="data-card history-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm" key={item.history_id}>
+            <div className={`data-card history-card rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-sm ${selectedHistoryIds.includes(item.history_id) ? 'ring-2 ring-violet-400/50' : ''}`} key={item.history_id}>
+              {deleteMode && (
+                <label className="history-select-row mb-3 flex items-center gap-3 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={selectedHistoryIds.includes(item.history_id)}
+                    onChange={() => toggleHistorySelection(item.history_id)}
+                    className="h-4 w-4 rounded border-white/20 bg-slate-950 text-violet-500 focus:ring-violet-400/30"
+                  />
+                  <span>{selectedHistoryIds.includes(item.history_id) ? 'Selected for deletion' : 'Select this report'}</span>
+                </label>
+              )}
+
               <button
                 type="button"
                 className="history-card-top history-card-button flex w-full items-start justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-violet-400/30 hover:bg-violet-500/10"
                 onClick={() => openSavedReport(item)}
               >
                 <div>
-                  <h3 className="history-title text-lg font-semibold text-slate-50">{item.business_type}</h3>
+                  <h3 className="history-title text-lg font-semibold text-slate-50">{getBusinessTypeLabel(item.business_type)}</h3>
                   <p className="history-meta mt-1 text-sm text-slate-400">{formatDate(item.created_at)}</p>
                 </div>
                 <span className="profile-badge inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-200">Score {item.viability_score}</span>
@@ -341,10 +516,18 @@ export default function History({ user, onOpenReport }) {
                 <button
                   type="button"
                   className="history-delete-btn inline-flex items-center justify-center rounded-lg border border-rose-400/20 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-200 transition hover:border-rose-300/40 hover:bg-rose-500/20"
-                  onClick={() => setDeleteCandidate(item)}
+                  onClick={() => {
+                    if (deleteMode) {
+                      toggleHistorySelection(item.history_id);
+                      return;
+                    }
+                    setDeleteCandidate(item);
+                  }}
                   disabled={deletingHistoryId === item.history_id}
                 >
-                  {deletingHistoryId === item.history_id ? 'Deleting...' : 'Delete history'}
+                  {deleteMode
+                    ? (selectedHistoryIds.includes(item.history_id) ? 'Selected' : 'Select')
+                    : (deletingHistoryId === item.history_id ? 'Deleting...' : 'Delete history')}
                 </button>
               </div>
 
