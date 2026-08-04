@@ -176,7 +176,7 @@ export default function ZoningEditor({ initialCenter = [7.3109675, 125.6853653],
             Click the map to place vertices. You need at least 3 points. Use Undo if you place one in the wrong spot.
           </div>
           <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>{pointCountLabel}</div>
-          <div style={{ marginTop: 4, fontSize: 12, color: '#fda4af' }}>A dashed outline will appear as soon as you place points.</div>
+          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>A dashed outline will appear as soon as you place points.</div>
         </div>
 
         <div className="zoning-editor-actions zoning-editor-actions-left">

@@ -95,13 +95,13 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const viewportBaselineRef = useRef(0);
   const keyboardOpenRef = useRef(false);
 
-  const authPanelClass = 'fade-in !w-full !max-w-[520px] space-y-5 !rounded-[30px] !border !border-white/10 !bg-slate-950/80 !p-6 !shadow-[0_30px_90px_rgba(2,6,23,0.55)] !backdrop-blur-xl sm:!p-8';
-  const authSectionTitleClass = 'text-3xl font-semibold tracking-tight !text-white sm:text-[2.15rem]';
-  const authSectionSubtitleClass = 'text-sm text-slate-200/90';
-  const authLabelClass = 'mb-2 block text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-slate-300';
-  const authInputClass = 'mt-0 w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20';
-  const authPrimaryButtonClass = 'btn-primary w-full rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold shadow-lg shadow-violet-500/25 transition hover:from-violet-500 hover:to-fuchsia-400';
-  const authSecondaryButtonClass = 'btn-secondary w-full rounded-xl border border-violet-300/50 bg-white/5 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/10';
+  const authPanelClass = 'fade-in w-full max-w-[520px] space-y-5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-6 shadow-sm sm:p-8';
+  const authSectionTitleClass = 'text-3xl font-semibold tracking-tight text-[var(--text-main)] sm:text-[2.15rem]';
+  const authSectionSubtitleClass = 'text-sm text-[var(--text-muted)]';
+  const authLabelClass = 'mb-2 block text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]';
+  const authInputClass = 'mt-0 w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-3 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]';
+  const authPrimaryButtonClass = 'btn-primary w-full rounded-xl bg-[var(--btn-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]';
+  const authSecondaryButtonClass = 'btn-secondary w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-3 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]';
 
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -481,7 +481,6 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const renderHero = () => (
     <div className="hero-container relative isolate flex min-h-[100dvh] w-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.28),transparent_34%),radial-gradient(circle_at_top_right,rgba(59,7,100,0.72),transparent_32%),linear-gradient(180deg,#22073a_0%,#0b1120_45%,#050816_100%)] px-5 py-4 text-center sm:px-8 lg:px-12">
       <div className="pointer-events-none absolute inset-0 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/12 blur-3xl" />
 
       <div className="hero-header !right-4 !top-[calc(env(safe-area-inset-top)+12px)] !z-40">
         <button className="burger-menu-btn" onClick={() => setIsBurgerOpen(!isBurgerOpen)} aria-label="Open menu">
@@ -508,10 +507,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
 
       <div className="hero-content relative z-10 flex max-w-[680px] flex-col items-center gap-5 px-4 py-8 sm:gap-6 sm:px-6 lg:py-0">
         {renderMarketScopeBadge()}
-        <h1 className="hero-title max-w-[11ch] text-[clamp(2.7rem,7vw,4.5rem)] font-black leading-[0.96] tracking-[-0.06em] text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.35)]">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
-        <p className="hero-description max-w-[28rem] text-base leading-7 text-violet-100/90 sm:text-lg">The geospatial viability engine designed exclusively for local entrepreneurs and MSMEs.</p>
-        <p className="hero-instruction rounded-full border border-violet-200/20 bg-white/5 px-4 py-2 text-sm font-semibold leading-6 text-violet-50 shadow-[0_10px_35px_rgba(0,0,0,0.18)] backdrop-blur-md">Quick Start: Tap Get Started, drop a pin, and scan market potential in seconds.</p>
-        <button className="get-started-btn mt-2 rounded-xl bg-gradient-to-r from-violet-600 via-violet-500 to-fuchsia-500 px-8 py-4 text-base font-semibold text-white shadow-[0_16px_40px_rgba(168,85,247,0.35)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(168,85,247,0.45)]" onClick={() => setCurrentView('register')}>
+        <h1 className="hero-title max-w-[11ch] text-[clamp(2.7rem,7vw,4.5rem)] font-black leading-[0.96] tracking-[-0.06em] text-white">Discover<br/>Panabo's<br/>Hidden Markets.</h1>
+        <p className="hero-description max-w-[28rem] text-base leading-7 text-white/70 sm:text-lg">The geospatial viability engine designed exclusively for local entrepreneurs and MSMEs.</p>
+        <p className="hero-instruction rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold leading-6 text-white/90">Quick Start: Tap Get Started, drop a pin, and scan market potential in seconds.</p>
+        <button className="get-started-btn mt-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-neutral-900 transition duration-300 hover:-translate-y-0.5 hover:bg-neutral-200" onClick={() => setCurrentView('register')}>
           Get Started
         </button>
       </div>
@@ -579,8 +578,8 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         {showForgotPassword && (
-          <div className="forgot-password-panel rounded-xl border border-violet-400/30 bg-violet-950/20 p-3">
-            <p className="forgot-password-note text-xs text-violet-100">Enter your account email and set a new password.</p>
+          <div className="forgot-password-panel rounded-xl border border-[var(--border-color)] bg-[var(--accent-hover)] p-3">
+            <p className="forgot-password-note text-xs text-[var(--text-muted)]">Enter your account email and set a new password.</p>
             <div className="input-group forgot-input-group">
               <label className={authLabelClass}>Reset Email</label>
               <input
@@ -640,7 +639,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         <p className="auth-footer">
-          New to MarketScope? <span className="!text-white" onClick={() => setCurrentView('register')}>Create Account</span>
+          New to MarketScope? <span className="!text-[var(--text-main)] font-semibold" onClick={() => setCurrentView('register')}>Create Account</span>
         </p>
       </form>
     </div>
@@ -756,7 +755,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           />
           <button
             type="button"
-            className="upload-trigger inline-flex w-full items-center justify-center gap-2 rounded-xl border border-violet-300/40 bg-white/5 px-4 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/10"
+            className="upload-trigger inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-3 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]"
             onClick={() => registerAvatarInputRef.current?.click()}
             onMouseDown={(event) => event.preventDefault()}
           >
@@ -820,7 +819,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </button>
 
         <p className="auth-footer">
-          Already have an account? <span className="!text-white" onClick={() => setCurrentView('login')}>Log In</span>
+          Already have an account? <span className="!text-[var(--text-main)] font-semibold" onClick={() => setCurrentView('login')}>Log In</span>
         </p>
       </form>
     </div>

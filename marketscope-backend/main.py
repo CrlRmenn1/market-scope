@@ -23,6 +23,7 @@ from db_schema import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
     ADMIN_TOKEN,
+    AHP_GLOBAL_CATEGORY_SENTINEL,
     RESET_CODE_DEV_MODE,
     RESET_CODE_TTL_MINUTES,
     create_app_tables,
@@ -38,6 +39,11 @@ from db_schema import (
     get_users_primary_key_column_async,
     send_password_reset_email,
 )
+from ahp import (
+    AHPValidationError,
+    build_reciprocal_matrix,
+    solve_ahp,
+)
 from auth_service import (
     forgot_password as auth_forgot_password,
     get_missing_trend_preferences,
@@ -51,6 +57,7 @@ from user_service import (
     get_user_history as user_get_history,
     get_user_history_item as user_get_history_item,
     get_user_profile as user_get_profile,
+    mark_user_onboarding_seen as user_mark_onboarding_seen,
     update_user_profile as user_update_profile,
 )
 from reporting import (
@@ -149,6 +156,7 @@ async def lifespan(app: FastAPI):
     preload_hazard_layer_cache()
     preload_pbf_competitor_cache()
     preload_pbf_spatial_context_cache()
+    _load_ahp_weights_cache()
     stop_event = Event()
     auto_refresh_thread = Thread(
         target=_trend_snapshot_auto_refresh_loop,
@@ -291,6 +299,13 @@ class AdminVerifiedLocalFeatureRequest(BaseModel):
     is_active: bool = True
 
 
+class AhpPairwiseSubmitRequest(BaseModel):
+    level: str                          # "criteria" | "saturation"
+    category: str | None = None         # required if level == "saturation"
+    criteria_labels: list[str]          # order defines matrix row/col order
+    judgments: dict[str, float]         # upper-triangle only, "i,j" string keys -> Saaty value
+
+
 class AdminUpdateUser(BaseModel):
     full_name: str
     email: str
@@ -427,6 +442,17 @@ async def update_user_profile(user_id: int, payload: UpdateUserProfile):
     try:
         updated_user = await user_update_profile(app.state.db_pool, user_id, payload)
         return {"status": "success", "user": dict(updated_user) if updated_user else None}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/users/{user_id}/onboarding-seen")
+async def mark_onboarding_seen(user_id: int):
+    try:
+        updated = await user_mark_onboarding_seen(app.state.db_pool, user_id)
+        return {"status": "success", "onboarding_seen": bool(updated["onboarding_seen"])}
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -666,6 +692,65 @@ ZONING_LAYERS = {
 }
 
 VERIFIED_LOCAL_FEATURE_KINDS = {"msme", "anchor", "road", "building"}
+
+# ==========================================
+# AHP WEIGHTS CACHE
+# ==========================================
+# In-memory cache of admin-configured AHP weight configs, keyed by
+# (level, category). Avoids a DB round-trip per perform_analysis() call, since
+# citywide scans call perform_analysis() hundreds of times per scan across all
+# MSME categories. Populated at startup (lifespan) and refreshed after every
+# admin write.
+_AHP_WEIGHTS_CACHE = {}
+_AHP_WEIGHTS_CACHE_LOCK = Lock()
+
+
+def _load_ahp_weights_cache():
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            SELECT level, category, criteria_labels, pairwise_matrix, priority_vector,
+                   lambda_max, consistency_index, random_index, consistency_ratio,
+                   is_consistent, updated_by_admin_email, updated_at
+            FROM ahp_weight_configs
+            """
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[AHP] Failed to load weights cache: {e}", flush=True)
+        return
+
+    new_cache = {}
+    for row in rows:
+        key = (row["level"], row["category"])
+        new_cache[key] = {
+            "criteria_labels": row["criteria_labels"],
+            "pairwise_matrix": row["pairwise_matrix"],
+            "priority_vector": row["priority_vector"],
+            "lambda_max": row["lambda_max"],
+            "ci": row["consistency_index"],
+            "ri": row["random_index"],
+            "cr": row["consistency_ratio"],
+            "is_consistent": row["is_consistent"],
+            "updated_by_admin_email": row["updated_by_admin_email"],
+            "updated_at": row["updated_at"],
+        }
+
+    with _AHP_WEIGHTS_CACHE_LOCK:
+        _AHP_WEIGHTS_CACHE.clear()
+        _AHP_WEIGHTS_CACHE.update(new_cache)
+
+
+def get_ahp_weights(level: str, category: str | None = None):
+    """Returns the cached AHP config dict for (level, category), or None if not
+    yet configured -- callers should fall back to static defaults in that case."""
+    cache_key = (level, category or AHP_GLOBAL_CATEGORY_SENTINEL)
+    with _AHP_WEIGHTS_CACHE_LOCK:
+        return _AHP_WEIGHTS_CACHE.get(cache_key)
 
 
 def _source_confidence_multiplier(source_name, confidence_score=None):
@@ -1937,18 +2022,24 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
     anchor_proximity = _score_anchor_proximity(lat, lon, radius_meters, profile, verified_anchors=verified_anchors)
     building_density = _score_building_density(lat, lon, radius_meters, profile, verified_buildings=verified_buildings)
 
+    ahp_saturation = get_ahp_weights("saturation", profile_key_safe)
+    if ahp_saturation:
+        w_competition, w_road, w_anchor, w_building = ahp_saturation["priority_vector"]
+        saturation_weight_source = "ahp"
+    else:
+        w_competition = float(profile.get("competition_weight") or 0.42)
+        w_road = float(profile.get("road_weight") or 0.23)
+        w_anchor = float(profile.get("anchor_weight") or 0.20)
+        w_building = float(profile.get("building_weight") or 0.15)
+        saturation_weight_source = "static_fallback"
+
     saturation_raw = (
-        (competition_density["score"] * float(profile.get("competition_weight") or 0.42))
-        + (road_access["score"] * float(profile.get("road_weight") or 0.23))
-        + (anchor_proximity["score"] * float(profile.get("anchor_weight") or 0.20))
-        + (building_density["score"] * float(profile.get("building_weight") or 0.15))
+        (competition_density["score"] * w_competition)
+        + (road_access["score"] * w_road)
+        + (anchor_proximity["score"] * w_anchor)
+        + (building_density["score"] * w_building)
     )
-    weight_total = (
-        float(profile.get("competition_weight") or 0.42)
-        + float(profile.get("road_weight") or 0.23)
-        + float(profile.get("anchor_weight") or 0.20)
-        + float(profile.get("building_weight") or 0.15)
-    )
+    weight_total = w_competition + w_road + w_anchor + w_building
     saturation_score = round(_clamp_score(saturation_raw / max(0.01, weight_total), 0, 25))
 
     if saturation_score >= 20:
@@ -1964,9 +2055,21 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
 
     saturation_details = (
         f"The composite market saturation score blends competitor density, road access, traffic-generator proximity, and built-form intensity for {profile.get('display_name')}. "
-        f"Weights used for this category are competition={float(profile.get('competition_weight') or 0.42):.2f}, road={float(profile.get('road_weight') or 0.23):.2f}, anchor={float(profile.get('anchor_weight') or 0.20):.2f}, building={float(profile.get('building_weight') or 0.15):.2f}. "
+        f"Weights used for this category ({saturation_weight_source}) are competition={w_competition:.2f}, road={w_road:.2f}, anchor={w_anchor:.2f}, building={w_building:.2f}. "
         f"Raw component scores are competition {competition_density['score']}, road {road_access['score']}, anchor {anchor_proximity['score']}, and building {building_density['score']}."
     )
+
+    ahp_sub_criteria_methodology = {
+        "source": saturation_weight_source,
+        "criteria_labels": (ahp_saturation or {}).get("criteria_labels") or ["competition", "road", "anchor", "building"],
+        "pairwise_matrix": (ahp_saturation or {}).get("pairwise_matrix"),
+        "priority_vector": [w_competition, w_road, w_anchor, w_building],
+        "lambda_max": (ahp_saturation or {}).get("lambda_max"),
+        "consistency_index": (ahp_saturation or {}).get("ci"),
+        "random_index": (ahp_saturation or {}).get("ri"),
+        "consistency_ratio": (ahp_saturation or {}).get("cr"),
+        "is_consistent": (ahp_saturation or {}).get("is_consistent", True),
+    }
 
     return {
         "profile": profile,
@@ -1976,6 +2079,7 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
         "road_access": road_access,
         "anchor_proximity": anchor_proximity,
         "building_density": building_density,
+        "ahp_sub_criteria_methodology": ahp_sub_criteria_methodology,
         "saturation": {
             "score": saturation_score,
             "status": saturation_status,
@@ -2975,6 +3079,224 @@ def verify_admin_token(x_admin_token: str | None):
         raise HTTPException(status_code=401, detail="Unauthorized admin access")
 
 
+AHP_LEVEL_EXPECTED_SIZE = {"criteria": 3, "saturation": 4}
+
+
+def _ahp_judgments_to_upper_triangle(judgments: dict) -> dict:
+    """Converts {"i,j": value} string-keyed JSON judgments into {(i, j): value}
+    tuple-keyed judgments expected by ahp.build_reciprocal_matrix."""
+    upper_triangle = {}
+    for key, value in (judgments or {}).items():
+        try:
+            i_str, j_str = str(key).split(",")
+            i, j = int(i_str), int(j_str)
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail=f"Malformed judgment key: {key!r}, expected 'i,j'")
+        if i >= j:
+            raise HTTPException(status_code=400, detail=f"Judgment key {key!r} must satisfy i < j (upper triangle only)")
+        upper_triangle[(i, j)] = value
+    return upper_triangle
+
+
+def _ahp_config_row_to_dict(row: dict) -> dict:
+    return {
+        "level": row["level"],
+        "category": row["category"],
+        "criteria_labels": row["criteria_labels"],
+        "pairwise_matrix": row["pairwise_matrix"],
+        "priority_vector": row["priority_vector"],
+        "lambda_max": row["lambda_max"],
+        "consistency_index": row["consistency_index"],
+        "random_index": row["random_index"],
+        "consistency_ratio": row["consistency_ratio"],
+        "is_consistent": row["is_consistent"],
+        "updated_by_admin_email": row["updated_by_admin_email"],
+        "updated_at": row["updated_at"],
+    }
+
+
+@app.post("/admin/ahp/matrix")
+def admin_submit_ahp_matrix(payload: AhpPairwiseSubmitRequest, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        level = str(payload.level or "").strip().lower()
+        if level not in AHP_LEVEL_EXPECTED_SIZE:
+            raise HTTPException(status_code=400, detail="level must be either 'criteria' or 'saturation'")
+
+        if level == "criteria":
+            category = AHP_GLOBAL_CATEGORY_SENTINEL
+        else:
+            category = str(payload.category or "").strip().lower()
+            if category not in MSME_CATEGORY_PROFILES:
+                raise HTTPException(status_code=400, detail=f"Unknown business category: {payload.category!r}")
+
+        expected_n = AHP_LEVEL_EXPECTED_SIZE[level]
+        if len(payload.criteria_labels) != expected_n:
+            raise HTTPException(
+                status_code=400,
+                detail=f"criteria_labels must have exactly {expected_n} entries for level={level!r}"
+            )
+
+        upper_triangle = _ahp_judgments_to_upper_triangle(payload.judgments)
+        matrix = build_reciprocal_matrix(upper_triangle, expected_n)
+        solved = solve_ahp(matrix)
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            INSERT INTO ahp_weight_configs (
+                level, category, criteria_labels, pairwise_matrix, priority_vector,
+                lambda_max, consistency_index, random_index, consistency_ratio,
+                is_consistent, updated_by_admin_email
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (level, category) DO UPDATE SET
+                criteria_labels = EXCLUDED.criteria_labels,
+                pairwise_matrix = EXCLUDED.pairwise_matrix,
+                priority_vector = EXCLUDED.priority_vector,
+                lambda_max = EXCLUDED.lambda_max,
+                consistency_index = EXCLUDED.consistency_index,
+                random_index = EXCLUDED.random_index,
+                consistency_ratio = EXCLUDED.consistency_ratio,
+                is_consistent = EXCLUDED.is_consistent,
+                updated_by_admin_email = EXCLUDED.updated_by_admin_email,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+            """,
+            (
+                level,
+                category,
+                Json(payload.criteria_labels),
+                Json(matrix),
+                Json(solved["priority_vector"]),
+                solved["lambda_max"],
+                solved["ci"],
+                solved["ri"],
+                solved["cr"],
+                solved["is_consistent"],
+                ADMIN_EMAIL,
+            )
+        )
+        saved = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        _load_ahp_weights_cache()
+
+        return {"status": "success", "config": _ahp_config_row_to_dict(saved)}
+    except AHPValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/ahp/matrix")
+def admin_get_ahp_matrix(level: str, category: str | None = None, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        level = str(level or "").strip().lower()
+        if level not in AHP_LEVEL_EXPECTED_SIZE:
+            raise HTTPException(status_code=400, detail="level must be either 'criteria' or 'saturation'")
+        lookup_category = AHP_GLOBAL_CATEGORY_SENTINEL if level == "criteria" else str(category or "").strip().lower()
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            "SELECT * FROM ahp_weight_configs WHERE level = %s AND category = %s",
+            (level, lookup_category)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="No AHP matrix configured for this level/category yet")
+
+        return {"status": "success", "config": _ahp_config_row_to_dict(row)}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/ahp/matrices")
+def admin_list_ahp_matrices(x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT * FROM ahp_weight_configs ORDER BY level, category")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        configured_by_key = {(row["level"], row["category"]): row for row in rows}
+        entries = []
+
+        criteria_row = configured_by_key.get(("criteria", AHP_GLOBAL_CATEGORY_SENTINEL))
+        entries.append({
+            "level": "criteria",
+            "category": AHP_GLOBAL_CATEGORY_SENTINEL,
+            "is_configured": criteria_row is not None,
+            "is_consistent": criteria_row["is_consistent"] if criteria_row else None,
+            "consistency_ratio": criteria_row["consistency_ratio"] if criteria_row else None,
+            "updated_by_admin_email": criteria_row["updated_by_admin_email"] if criteria_row else None,
+            "updated_at": criteria_row["updated_at"] if criteria_row else None,
+        })
+
+        for category_key in MSME_CATEGORY_PROFILES:
+            row = configured_by_key.get(("saturation", category_key))
+            entries.append({
+                "level": "saturation",
+                "category": category_key,
+                "is_configured": row is not None,
+                "is_consistent": row["is_consistent"] if row else None,
+                "consistency_ratio": row["consistency_ratio"] if row else None,
+                "updated_by_admin_email": row["updated_by_admin_email"] if row else None,
+                "updated_at": row["updated_at"] if row else None,
+            })
+
+        return {"status": "success", "configs": entries}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/admin/ahp/matrix")
+def admin_delete_ahp_matrix(level: str, category: str | None = None, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    try:
+        level = str(level or "").strip().lower()
+        if level not in AHP_LEVEL_EXPECTED_SIZE:
+            raise HTTPException(status_code=400, detail="level must be either 'criteria' or 'saturation'")
+        lookup_category = AHP_GLOBAL_CATEGORY_SENTINEL if level == "criteria" else str(category or "").strip().lower()
+
+        conn = psycopg2.connect(**DB_CONFIG)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            "DELETE FROM ahp_weight_configs WHERE level = %s AND category = %s RETURNING id",
+            (level, lookup_category)
+        )
+        deleted = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        if not deleted:
+            raise HTTPException(status_code=404, detail="No AHP matrix configured for this level/category")
+
+        _load_ahp_weights_cache()
+        return {"status": "success", "reverted_to": "static_fallback"}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def normalize_listing_mode(value: str) -> str:
     mode = str(value or "").strip().lower()
     if mode not in {"rent", "buy"}:
@@ -3932,7 +4254,31 @@ def perform_analysis(data: AnalysisRequest):
         + "If the site is inside the commercial polygon, it receives 25. If it is in the industrial support polygon and the business fits that category, it also receives 25; otherwise it is penalized."
     )
 
-    total_score = round(((zoning_score * 0.30) + (hazard_score * 0.20) + (saturation_score * 0.50)) * 4)
+    ahp_criteria = get_ahp_weights("criteria", None)
+    if ahp_criteria:
+        w_zoning, w_hazard, w_saturation = ahp_criteria["priority_vector"]
+        criteria_weight_source = "ahp"
+    else:
+        w_zoning, w_hazard, w_saturation = 0.30, 0.20, 0.50
+        criteria_weight_source = "static_fallback"
+
+    total_score = round(((zoning_score * w_zoning) + (hazard_score * w_hazard) + (saturation_score * w_saturation)) * 4)
+
+    ahp_criteria_methodology = {
+        "source": criteria_weight_source,
+        "criteria_labels": (ahp_criteria or {}).get("criteria_labels") or ["zoning", "hazard", "saturation"],
+        "pairwise_matrix": (ahp_criteria or {}).get("pairwise_matrix"),
+        "priority_vector": [w_zoning, w_hazard, w_saturation],
+        "lambda_max": (ahp_criteria or {}).get("lambda_max"),
+        "consistency_index": (ahp_criteria or {}).get("ci"),
+        "random_index": (ahp_criteria or {}).get("ri"),
+        "consistency_ratio": (ahp_criteria or {}).get("cr"),
+        "is_consistent": (ahp_criteria or {}).get("is_consistent", True),
+    }
+    ahp_methodology_payload = {
+        "criteria": ahp_criteria_methodology,
+        "saturation_sub_criteria": preflight_context.get("ahp_sub_criteria_methodology"),
+    }
 
     # STATIC REPORTING MODULE (Combinational Matrix)
     if zoning_score <= 5:
@@ -4008,8 +4354,8 @@ def perform_analysis(data: AnalysisRequest):
                 INSERT INTO analysis_history (
                     user_id, business_type, viability_score,
                     target_lat, target_lon, radius_used, insight,
-                    competitors_found, competitor_locations, breakdown
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    competitors_found, competitor_locations, breakdown, ahp_methodology
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     data.user_id,
@@ -4021,7 +4367,8 @@ def perform_analysis(data: AnalysisRequest):
                     generated_insight,
                     competitors_found,
                     Json(sanitized_competitors_list),
-                    Json(breakdown_payload)
+                    Json(breakdown_payload),
+                    Json(ahp_methodology_payload)
                 )
             )
             conn.commit()
@@ -4042,6 +4389,7 @@ def perform_analysis(data: AnalysisRequest):
         "radius_meters": data.radius,
         "insight": generated_insight,
         "breakdown": breakdown_payload,
+        "ahp_methodology": ahp_methodology_payload,
     }
 
 

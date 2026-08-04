@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { apiUrl } from '../api';
 import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
 
@@ -55,7 +56,7 @@ const getHazardStyle = (hazardVar) => {
   };
 };
 
-export default function Home({ onMapTap, userId, previewSelection, onSpaceDetailOpenChange }) {
+export default function Home({ onViewReport, theme, userId, previewSelection, onSpaceDetailOpenChange, tourActive = false, onTourEnd }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
@@ -65,6 +66,8 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
   const selectedMarkerRef = useRef(null);
   const competitorLayerGroup = useRef(null);
   const competitorCircleRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const boundaryLayerRef = useRef(null);
   const previewRequestIdRef = useRef(0);
   const [selectedCoord, setSelectedCoord] = useState(null);
   const [selectedSpaceMarker, setSelectedSpaceMarker] = useState(null);
@@ -80,6 +83,26 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [locationUpdated, setLocationUpdated] = useState(false);
   const [selectedSpacePhotoIndex, setSelectedSpacePhotoIndex] = useState(0);
+  const [legendOpen, setLegendOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth > 640 && window.innerHeight > 520);
+  const [analyzing, setAnalyzing] = useState(false);
+  const analysisActiveRef = useRef(true);
+
+  useEffect(() => {
+    analysisActiveRef.current = true;
+    return () => {
+      analysisActiveRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tourActive) return;
+    setSelectedCoord(null);
+    setSelectedSpaceMarker(null);
+    setCompetitorLocations([]);
+    setPreviewError('');
+    setPreviewCollapsed(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourActive]);
 
   useEffect(() => {
     if (!previewSelection) return;
@@ -216,8 +239,8 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
       mapInstance.current.createPane('previewPane');
       mapInstance.current.getPane('previewPane').style.zIndex = 450;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+      tileLayerRef.current = L.tileLayer(getTileUrl(), {
+        attribution: TILE_ATTRIBUTION,
         maxZoom: 19
       }).addTo(mapInstance.current);
 
@@ -229,8 +252,8 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
         [PANABO_BOUNDS.south, PANABO_BOUNDS.west]
       ];
 
-      L.polygon(boundaryCoords, {
-        color: '#a855f7',
+      boundaryLayerRef.current = L.polygon(boundaryCoords, {
+        color: getMapInk(),
         weight: 3,
         opacity: 0.8,
         fill: false,
@@ -413,6 +436,20 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
     };
   }, []);
 
+  // Swap map tiles and vector ink when the app theme changes.
+  useEffect(() => {
+    if (tileLayerRef.current) {
+      tileLayerRef.current.setUrl(getTileUrl());
+    }
+    const ink = getMapInk();
+    if (boundaryLayerRef.current) {
+      boundaryLayerRef.current.setStyle({ color: ink });
+    }
+    if (competitorCircleRef.current) {
+      competitorCircleRef.current.setStyle({ color: ink, fillColor: ink });
+    }
+  }, [theme]);
+
   useEffect(() => {
     mapViewModeRef.current = mapViewMode;
 
@@ -480,11 +517,11 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
     competitorCircleRef.current = L.circle([selectedCoord.lat, selectedCoord.lng], {
       radius: previewRadius,
       pane: 'previewPane',
-      color: '#ffffff',
-      weight: 4,
-      opacity: 1,
-      fillColor: '#a855f7',
-      fillOpacity: 0.14,
+      color: getMapInk(),
+      weight: 3,
+      opacity: 0.9,
+      fillColor: getMapInk(),
+      fillOpacity: 0.08,
       dashArray: '10 8'
     }).addTo(mapInstance.current);
 
@@ -606,13 +643,89 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
     return () => clearTimeout(timer);
   }, [locationUpdated]);
 
+  const runFullAnalysis = async () => {
+    if (!selectedCoord || !previewBusinessType || analyzing) return;
+
+    setAnalyzing(true);
+    setPreviewError('');
+
+    try {
+      const response = await fetch(apiUrl('/analyze'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: selectedCoord.lat,
+          lon: selectedCoord.lng,
+          business_type: previewBusinessType,
+          radius: previewRadius,
+          user_id: userId || null
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.detail || 'Analysis failed. Please try again.');
+      }
+      if (!analysisActiveRef.current) return;
+
+      if (tourActive) {
+        onTourEnd?.();
+      }
+      onViewReport?.(data);
+    } catch (error) {
+      if (analysisActiveRef.current) {
+        setPreviewError(error.message || 'Analysis failed. Please try again.');
+      }
+    } finally {
+      if (analysisActiveRef.current) {
+        setAnalyzing(false);
+      }
+    }
+  };
+
+  const tourStep = !tourActive ? 0 : !selectedCoord ? 1 : !previewBusinessType ? 2 : 3;
+  const tourCopy = analyzing
+    ? { title: 'Scanning your spot', body: 'Checking zoning, flood risk, demand, and competitors. The report opens in a moment.' }
+    : tourStep === 1
+      ? { title: 'Drop your first pin', body: 'Tap anywhere inside the city boundary to pick a spot worth checking.' }
+      : tourStep === 2
+        ? { title: 'Pick a business type', body: 'What do you want to open here? Choose from the list in the scan panel.' }
+        : { title: 'Run your first scan', body: 'Adjust the radius if you like, then press Run Full Analysis.' };
+
+  const clearSelection = () => {
+    if (analyzing) return;
+    setSelectedCoord(null);
+    setSelectedSpaceMarker(null);
+    setCompetitorLocations([]);
+    setPreviewError('');
+    setPreviewMessage('Drop a pin, then choose an MSME and radius to preview competitors.');
+  };
+
   return (
-    <div className={`home-container relative page-enter ${mapViewMode}-mode`} data-map-mode={mapViewMode}>
+    <div className={`home-container page-enter ${mapViewMode}-mode`} data-map-mode={mapViewMode}>
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }} />
 
       {outOfBounds && (
         <div className="out-of-bounds-warning">
           Click within Panabo City boundary only
+        </div>
+      )}
+
+      {tourActive && (
+        <div className="tour-card" role="status">
+          <div className="tour-card__head">
+            <p className="eyebrow-label">{analyzing ? 'Almost there' : `Step ${tourStep} of 3`}</p>
+            <span className="tour-dots" aria-hidden="true">
+              {[1, 2, 3].map((dot) => (
+                <span key={dot} className={`tour-dot ${tourStep >= dot ? 'active' : ''}`} />
+              ))}
+            </span>
+          </div>
+          <h4 className="tour-card__title">{tourCopy.title}</h4>
+          <p className="tour-card__body">{tourCopy.body}</p>
+          <button type="button" className="tour-card__skip" onClick={() => onTourEnd?.()}>
+            Skip tour
+          </button>
         </div>
       )}
 
@@ -680,23 +793,30 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
                 type="button"
                 className="primary-btn"
                 onClick={() => {
-                  onMapTap({ lat: Number(selectedSpaceMarker.latitude), lng: Number(selectedSpaceMarker.longitude) }, {
-                    prefillBusinessType: selectedSpaceMarker.business_type || '',
-                    prefillRadius: previewRadius
-                  });
+                  setPreviewBusinessType(selectedSpaceMarker.business_type || '');
+                  setPreviewCollapsed(false);
                   setSelectedSpaceMarker(null);
                 }}
               >
-                Next
+                Analyze This Space
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {!selectedCoord && !selectedSpaceMarker && (
+        <div className="map-scan-hint" role="status">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" />
+          </svg>
+          Tap anywhere on the map to scan a location
+        </div>
+      )}
+
       {selectedCoord && (
         <div
-          className={`map-quick-panel data-card ${previewCollapsed ? 'is-collapsed' : ''} ${locationUpdated ? 'location-updated' : ''}`}
+          className={`map-quick-panel ${previewCollapsed ? 'is-collapsed' : ''} ${locationUpdated ? 'location-updated' : ''}`}
           onClick={() => previewCollapsed && setPreviewCollapsed(false)}
           style={{ cursor: previewCollapsed ? 'pointer' : 'default' }}
         >
@@ -711,32 +831,70 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
                 )}
               </div>
             ) : (
-              <div>
-                <h3 className="section-heading" style={{ marginBottom: 4 }}>Competitor Preview</h3>
-                <p className="map-quick-panel__coords">{selectedCoord.lat.toFixed(5)}, {selectedCoord.lng.toFixed(5)}</p>
+              <div className="map-quick-panel__title">
+                <span className="map-quick-panel__pin" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" />
+                  </svg>
+                </span>
+                <div>
+                  <p className="eyebrow-label">Site Scan</p>
+                  <p className="map-quick-panel__coords">{selectedCoord.lat.toFixed(5)}, {selectedCoord.lng.toFixed(5)}</p>
+                </div>
               </div>
             )}
-            <button
-              type="button"
-              className="map-quick-panel__toggle"
-              onClick={(e) => {
-                e.stopPropagation();
-                setPreviewCollapsed((current) => !current);
-              }}
-              aria-label={previewCollapsed ? 'Expand preview panel' : 'Collapse preview panel'}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d={previewCollapsed ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+            <div className="map-quick-panel__controls">
+              <button
+                type="button"
+                className="map-quick-panel__toggle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewCollapsed((current) => !current);
+                }}
+                disabled={analyzing}
+                aria-label={previewCollapsed ? 'Expand scan panel' : 'Collapse scan panel'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d={previewCollapsed ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {!previewCollapsed && (
+                <button
+                  type="button"
+                  className="map-quick-panel__toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearSelection();
+                  }}
+                  disabled={analyzing}
+                  aria-label="Clear selected location"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
 
-          {!previewCollapsed && (
+          {!previewCollapsed && (analyzing ? (
+            <div className="map-scan-loading">
+              <p className="map-scan-loading__title">Running full analysis&hellip;</p>
+              <div className="loading-taskbar">
+                {['Verifying CLUP Zoning Regulations', 'Cross-referencing Hazard Risk Overlays', 'Querying Live Market Saturation', 'Calculating Demand Infrastructure'].map((task, index) => (
+                  <div key={task} className={`task-item delay-${index + 1}`}>
+                    <span className="task-text">{task}</span>
+                    <span className="task-spinner" aria-hidden="true" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
             <>
               <div className="input-group">
-                <label className="input-label">Select MSME</label>
-                <select className="styled-select" value={previewBusinessType} onChange={(event) => setPreviewBusinessType(event.target.value)}>
-                  <option value="">Choose an MSME...</option>
+                <label className="input-label">Business Type</label>
+                <select className={`styled-select ${tourActive && tourStep === 2 ? 'tour-pulse' : ''}`} value={previewBusinessType} onChange={(event) => setPreviewBusinessType(event.target.value)}>
+                  <option value="">Choose a business type...</option>
                   {BUSINESS_TYPE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
@@ -744,7 +902,10 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
               </div>
 
               <div className="input-group">
-                <label className="input-label">Radius</label>
+                <div className="map-radius-row">
+                  <label className="input-label">Scan Radius</label>
+                  <span className="map-radius-chip">{previewRadius}m</span>
+                </div>
                 <input
                   type="range"
                   min="100"
@@ -756,13 +917,15 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
                 />
                 <div className="radius-slider-meta">
                   <span>100m</span>
-                  <b>{previewRadius}m</b>
                   <span>1500m</span>
                 </div>
               </div>
 
               <div className="map-quick-panel__summary">
-                {previewLoading ? 'Scanning nearby competitors...' : previewMessage}
+                <span>{previewLoading ? 'Scanning nearby competitors...' : previewMessage}</span>
+                {!previewLoading && competitorLocations.length > 0 && (
+                  <span className="map-competitor-chip">{competitorLocations.length} nearby</span>
+                )}
               </div>
 
               {previewError && <div className="error-alert" style={{ marginTop: 0 }}>{previewError}</div>}
@@ -770,61 +933,77 @@ export default function Home({ onMapTap, userId, previewSelection, onSpaceDetail
               <div className="map-quick-panel__actions">
                 <button
                   type="button"
-                  className="primary-btn"
+                  className={`primary-btn ${tourActive && tourStep === 3 && !analyzing ? 'tour-pulse' : ''}`}
                   disabled={!previewBusinessType || previewLoading}
-                  onClick={() => onMapTap(selectedCoord, { prefillBusinessType: previewBusinessType, prefillRadius: previewRadius })}
+                  onClick={runFullAnalysis}
                 >
-                  Open Full Report
+                  Run Full Analysis
                 </button>
               </div>
             </>
-          )}
+          ))}
         </div>
       )}
 
-      {/* Map legend: show flood-related indicators only when in flood mode, otherwise show space/boundary indicators */}
-      {mapViewMode === 'flood' ? (
-        <div className="map-legend" aria-hidden={mapViewMode !== 'flood'}>
-          <h4 className="legend-title">Flood Zones</h4>
-          <div className="legend-item">
-            <span className="legend-color flood-critical"></span>
-            <span className="legend-text">Very High Flood Danger</span>
+      {legendOpen ? (
+        <div className="map-legend">
+          <div className="map-legend__head">
+            <h4 className="legend-title">{mapViewMode === 'flood' ? 'Flood Zones' : 'Map Legend'}</h4>
+            <button type="button" className="map-legend__close" onClick={() => setLegendOpen(false)} aria-label="Collapse legend">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+              </svg>
+            </button>
           </div>
-          <div className="legend-item">
-            <span className="legend-color flood-high"></span>
-            <span className="legend-text">High Flood Danger</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-color flood-moderate"></span>
-            <span className="legend-text">Moderate Flood Danger</span>
-          </div>
-        </div>
-      ) : (
-        <div className="map-legend" aria-hidden={mapViewMode !== 'normal'}>
-          <h4 className="legend-title">Panabo City Boundary</h4>
-          <div className="legend-item">
-            <span className="legend-color boundary-line"></span>
-            <span className="legend-text">Scanning Area</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-color space-user-guaranteed"></span>
-            <span className="legend-text">User Guaranteed Space</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-color space-admin-guaranteed"></span>
-            <span className="legend-text">Admin Guaranteed Space</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-color space-admin-potential"></span>
-            <span className="legend-text">Admin Potential Space</span>
-          </div>
-          {selectedCoord && competitorLocations.length > 0 && (
-            <div className="legend-item">
-              <span className="legend-color competitor-preview"></span>
-              <span className="legend-text">Preview Competitors</span>
-            </div>
+          {mapViewMode === 'flood' ? (
+            <>
+              <div className="legend-item">
+                <span className="legend-color flood-critical"></span>
+                <span className="legend-text">Very High Flood Danger</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-color flood-high"></span>
+                <span className="legend-text">High Flood Danger</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-color flood-moderate"></span>
+                <span className="legend-text">Moderate Flood Danger</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="legend-item">
+                <span className="legend-color boundary-line"></span>
+                <span className="legend-text">Scanning Area</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-color space-user-guaranteed"></span>
+                <span className="legend-text">User Guaranteed Space</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-color space-admin-guaranteed"></span>
+                <span className="legend-text">Admin Guaranteed Space</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-color space-admin-potential"></span>
+                <span className="legend-text">Admin Potential Space</span>
+              </div>
+              {selectedCoord && competitorLocations.length > 0 && (
+                <div className="legend-item">
+                  <span className="legend-color competitor-preview"></span>
+                  <span className="legend-text">Preview Competitors</span>
+                </div>
+              )}
+            </>
           )}
         </div>
+      ) : (
+        <button type="button" className="map-legend-pill" onClick={() => setLegendOpen(true)} aria-label="Show map legend">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="m12 2 10 6-10 6L2 8l10-6Z" /><path d="m2 14 10 6 10-6" />
+          </svg>
+          Legend
+        </button>
       )}
 
       <div className="map-mode-toggle" role="tablist" aria-label="Map view mode">

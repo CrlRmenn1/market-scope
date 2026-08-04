@@ -4,6 +4,7 @@ import { parseCoordinatePairText } from '../utils/coordinates';
 import MapPicker from '../components/MapPicker';
 const ZoningManager = React.lazy(() => import('../components/ZoningManager'));
 const FloodZoneManager = React.lazy(() => import('../components/FloodZoneManager'));
+const AhpWeightsManager = React.lazy(() => import('../components/AhpWeightsManager'));
 
 const defaultMsmeForm = {
   name: '',
@@ -621,6 +622,14 @@ export default function AdminPanel({ adminSession, activeTab: controlledActiveTa
         </div>
       )}
 
+      {activeTab === 'ahp' && (
+        <div className="mt-6">
+          <React.Suspense fallback={<div className="data-card admin-card">Loading AHP weights manager…</div>}>
+            <AhpWeightsManager token={token} businessTypeOptions={BUSINESS_TYPE_OPTIONS} />
+          </React.Suspense>
+        </div>
+      )}
+
       {activeTab === 'spaces' && (
         <>
           <div className="data-card admin-card admin-tools-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 24 }}>
@@ -800,7 +809,7 @@ export default function AdminPanel({ adminSession, activeTab: controlledActiveTa
                                 key={index}
                                 src={photoUrl}
                                 alt={`Submission ${item.title} photo ${index + 1}`}
-                                style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid #ddd' }}
+                                style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border-color)' }}
                               />
                             ))}
                           </div>
@@ -809,12 +818,12 @@ export default function AdminPanel({ adminSession, activeTab: controlledActiveTa
                         {normalizedStatus === 'pending' ? (
                           <div className="admin-actions-row">
                             <button className="admin-action-btn admin-action-btn-edit" onClick={() => reviewUserSubmission(item.id, 'approved')}>Approve</button>
-                            <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Reject</button>
+                            <button className="admin-action-btn" style={{ border: '1px solid var(--border-color)', background: 'var(--trend-neutral-bg)', color: 'var(--trend-neutral)' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Reject</button>
                             <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
                           </div>
                         ) : normalizedStatus === 'approved' ? (
                           <div className="admin-actions-row">
-                            <button className="admin-action-btn" style={{ border: '1px solid rgba(250,204,21,0.35)', background: 'rgba(250,204,21,0.12)', color: '#facc15' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Move to Rejected</button>
+                            <button className="admin-action-btn" style={{ border: '1px solid var(--border-color)', background: 'var(--trend-neutral-bg)', color: 'var(--trend-neutral)' }} onClick={() => reviewUserSubmission(item.id, 'rejected')}>Move to Rejected</button>
                             <button className="admin-action-btn admin-action-btn-delete" onClick={() => reviewUserSubmission(item.id, 'archived')}>Archive</button>
                           </div>
                         ) : (

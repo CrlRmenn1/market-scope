@@ -6,12 +6,12 @@ import Profile from './pages/Profile';
 import History from './pages/History';
 import Trends from './pages/Trends';
 import BottomNav from './components/BottomNav';
-import BottomSheet from './components/BottomSheet';
 import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
 import AdminNavbar from './components/AdminNavbar';
 import OnboardingModal from './components/OnboardingModal';
 import SpaceSubmissionModal from './components/SpaceSubmissionModal';
+import { apiUrl } from './api';
 import './App.css';
 
 const REQUIRED_TREND_FIELDS = [
@@ -36,7 +36,6 @@ export default function App() {
   const validTabs = ['home', 'trends', 'profile', 'history'];
   const OPEN_REPORT_KEY = 'marketscope_open_report';
   const ADMIN_SESSION_KEY = 'marketscope_admin_session';
-  const ONBOARDING_SUPPRESS_KEY = 'marketscope_onboarding_suppress';
   const appShellClass = 'relative flex h-[100svh] w-full flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-300';
   const appContentClass = 'relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto antialiased';
   const adminContentClass = 'pt-[88px]';
@@ -48,10 +47,7 @@ export default function App() {
     return validTabs.includes(savedTab) ? savedTab : 'home';
   });
   const [theme, setTheme] = useState(() => localStorage.getItem('marketscope_theme') || 'light');
-  const [showBottomSheet, setShowBottomSheet] = useState(false);
   const [selectedCoords, setSelectedCoords] = useState(null);
-  const [sheetInitialBusinessType, setSheetInitialBusinessType] = useState('');
-  const [sheetInitialRadius, setSheetInitialRadius] = useState(500);
   const [reportData, setReportData] = useState(null);
   const [mapPreviewSelection, setMapPreviewSelection] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
@@ -59,6 +55,7 @@ export default function App() {
   const [showSpaceSubmissionModal, setShowSpaceSubmissionModal] = useState(false);
   const [missingTrendPreferences, setMissingTrendPreferences] = useState([]);
   const [isSpaceDetailOpen, setIsSpaceDetailOpen] = useState(false);
+  const [tourActive, setTourActive] = useState(false);
 
   const saveOpenReport = (data, coords) => {
     localStorage.setItem(OPEN_REPORT_KEY, JSON.stringify({ data, coords }));
@@ -108,8 +105,8 @@ export default function App() {
       return;
     }
 
-    const suppressOnboarding = localStorage.getItem(ONBOARDING_SUPPRESS_KEY) === '1';
-    setShowOnboarding(!suppressOnboarding);
+    // Per-account flag persisted on the user record (not device-wide storage).
+    setShowOnboarding(!session.onboarding_seen);
   }, [session]);
 
   useEffect(() => {
@@ -125,11 +122,31 @@ export default function App() {
     setMissingTrendPreferences(sessionMissing);
   }, [session]);
 
-  const handleCloseOnboarding = (doNotShowAgain = false) => {
-    if (doNotShowAgain) {
-      localStorage.setItem(ONBOARDING_SUPPRESS_KEY, '1');
-    }
+  // Persist the per-account "seen" flag on the backend and in the cached session.
+  const markOnboardingSeen = () => {
     setShowOnboarding(false);
+    if (!session || session.onboarding_seen) return;
+
+    const userId = session.user_id || session.id;
+    if (userId) {
+      fetch(apiUrl(`/users/${userId}/onboarding-seen`), { method: 'POST' }).catch(() => {});
+    }
+
+    const nextSession = { ...session, onboarding_seen: true };
+    localStorage.setItem('marketscope_session', JSON.stringify(nextSession));
+    setSession(nextSession);
+  };
+
+  const handleCloseOnboarding = () => {
+    markOnboardingSeen();
+  };
+
+  // Kick off the hands-on scan tutorial on the map page.
+  const handleStartTour = () => {
+    markOnboardingSeen();
+    setReportData(null);
+    setActiveTab('home');
+    setTourActive(true);
   };
 
   useEffect(() => {
@@ -140,7 +157,6 @@ export default function App() {
       setSelectedCoords(coords);
       setReportData(payload);
       saveOpenReport(payload, coords);
-      setShowBottomSheet(false);
       setActiveTab('history');
     };
 
@@ -216,23 +232,15 @@ export default function App() {
     localStorage.setItem('marketscope_theme', newTheme);
   };
 
-  const handleMapTap = (coords, options = {}) => {
-    setSelectedCoords(coords);
-    setSheetInitialBusinessType(options?.prefillBusinessType || '');
-    setSheetInitialRadius(Number(options?.prefillRadius || 500));
-    setShowBottomSheet(true);
-  };
-
   const handleViewReport = (data) => {
     const coords = data?.target_coords || selectedCoords || null;
     setSelectedCoords(coords);
-    setSheetInitialBusinessType('');
     setReportData(data);
     saveOpenReport(data, coords);
-    setShowBottomSheet(false);
   };
 
-  const handlePreviewCompetitors = ({ coords, businessType, radius }) => {
+  // Land on the map with the scan dock prefilled (used by Trends CTAs).
+  const handleOpenScanOnMap = ({ coords, businessType, radius }) => {
     if (!coords) return;
 
     const nextCoords = {
@@ -241,8 +249,6 @@ export default function App() {
     };
 
     setSelectedCoords(nextCoords);
-    setSheetInitialBusinessType('');
-    setSheetInitialRadius(500);
     setMapPreviewSelection({
       id: Date.now(),
       coords: nextCoords,
@@ -250,7 +256,6 @@ export default function App() {
       radius: Number(radius || 500)
     });
     setActiveTab('home');
-    setShowBottomSheet(false);
   };
 
   const handleCloseReport = () => {
@@ -310,22 +315,23 @@ export default function App() {
         onGoHome={() => {
           setActiveTab('home');
           handleCloseReport();
-          setShowBottomSheet(false);
-          setSheetInitialRadius(500);
         }}
         userName={session.full_name || session.name}
         userAvatarUrl={session.avatar_url}
         onOpenSpaceSubmission={() => setShowSpaceSubmissionModal(true)}
+        onStartTour={handleStartTour}
       />
 
       <main className={`${appContentClass} ${reportData ? 'overflow-hidden' : ''}`}>
         {activeTab === 'home' && (
           <Home
-            onMapTap={handleMapTap}
+            onViewReport={handleViewReport}
             theme={theme}
             userId={session.user_id || session.id}
             previewSelection={mapPreviewSelection}
             onSpaceDetailOpenChange={setIsSpaceDetailOpen}
+            tourActive={tourActive}
+            onTourEnd={() => setTourActive(false)}
           />
         )}
         
@@ -337,9 +343,7 @@ export default function App() {
             missingTrendPreferences={missingTrendPreferences}
             onPreferencesSaved={handleProfileUpdate}
             onRunAnalysis={(coords, businessType) => {
-              setSelectedCoords(coords);
-              setSheetInitialBusinessType(businessType);
-              setShowBottomSheet(true);
+              handleOpenScanOnMap({ coords, businessType, radius: 500 });
             }}
           />
         )}
@@ -349,24 +353,7 @@ export default function App() {
           setSelectedCoords(coords);
           setReportData(payload);
           saveOpenReport(payload, coords);
-          setShowBottomSheet(false);
         }} />}
-
-        {showBottomSheet && (
-          <BottomSheet 
-            coords={selectedCoords} 
-            onClose={() => {
-              setShowBottomSheet(false);
-              setSheetInitialBusinessType('');
-              setSheetInitialRadius(500);
-            }} 
-            onPreviewCompetitors={handlePreviewCompetitors}
-            onViewReport={handleViewReport}
-            userId={session.user_id || session.id}
-            initialBusinessType={sheetInitialBusinessType}
-            initialRadius={sheetInitialRadius}
-          />
-        )}
 
         {reportData && (
           <Report 
@@ -377,11 +364,11 @@ export default function App() {
         )}
       </main>
 
-      {!showBottomSheet && !reportData && !showSpaceSubmissionModal && !isSpaceDetailOpen && (
+      {!reportData && !showSpaceSubmissionModal && !isSpaceDetailOpen && (
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       )}
 
-      <OnboardingModal isOpen={showOnboarding} onClose={handleCloseOnboarding} />
+      <OnboardingModal isOpen={showOnboarding} onClose={handleCloseOnboarding} onStartTour={handleStartTour} />
 
       <SpaceSubmissionModal
         isOpen={showSpaceSubmissionModal}

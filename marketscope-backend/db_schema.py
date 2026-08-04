@@ -7,6 +7,9 @@ from email.message import EmailMessage
 import bcrypt
 import psycopg2
 from fastapi import HTTPException
+from psycopg2.extras import Json
+
+from ahp import build_consistent_matrix_from_weights, solve_ahp
 
 
 ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
@@ -77,6 +80,8 @@ def create_app_tables(db_config):
             ensure_admin_space_submissions_table(cursor)
             ensure_password_reset_codes_table(cursor, user_pk_column)
             ensure_trend_scan_snapshots_table(cursor)
+            ensure_ahp_weight_configs_table(cursor)
+            ensure_ahp_seed_data(cursor)
             ensure_default_admin_user(cursor)
 
             conn.commit()
@@ -116,6 +121,7 @@ def ensure_history_table_columns(cursor):
     cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS competitors_found INTEGER")
     cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS competitor_locations JSONB")
     cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS breakdown JSONB")
+    cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS ahp_methodology JSONB")
 
 
 def ensure_users_profile_columns(cursor):
@@ -130,6 +136,7 @@ def ensure_users_profile_columns(cursor):
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_setup VARCHAR(50)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS time_commitment VARCHAR(50)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS target_payback_months INTEGER")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_seen BOOLEAN DEFAULT FALSE")
 
 
 def ensure_custom_msme_table(cursor):
@@ -302,6 +309,119 @@ def ensure_trend_scan_snapshots_table(cursor):
         ON trend_scan_snapshots(radius, updated_at DESC)
         """
     )
+
+
+# ==========================================
+# AHP WEIGHT CONFIGS
+# ==========================================
+
+AHP_GLOBAL_CATEGORY_SENTINEL = "__global__"
+AHP_SEED_ADMIN_LABEL = "system-seed-migration"
+
+# Seed weights mirror the static defaults this application used before AHP was
+# introduced (main.py: top-level composite at perform_analysis, and per-category
+# saturation weights in MSME_CATEGORY_PROFILES). Reconstructing these as perfectly
+# consistent (CR=0) pairwise matrices means /analyze scores are unchanged on first
+# deploy, until an admin enters real Saaty judgments via the AHP admin UI.
+AHP_SEED_CRITERIA_LABELS = ["zoning", "hazard", "saturation"]
+AHP_SEED_CRITERIA_WEIGHTS = [0.30, 0.20, 0.50]
+
+AHP_SEED_SATURATION_LABELS = ["competition", "road", "anchor", "building"]
+AHP_SEED_SATURATION_WEIGHTS_BY_CATEGORY = {
+    "coffee": [0.47, 0.20, 0.19, 0.14],
+    "print": [0.42, 0.23, 0.18, 0.17],
+    "laundry": [0.43, 0.20, 0.19, 0.18],
+    "carwash": [0.39, 0.28, 0.16, 0.17],
+    "kiosk": [0.44, 0.18, 0.22, 0.16],
+    "water": [0.36, 0.22, 0.18, 0.24],
+    "bakery": [0.44, 0.20, 0.19, 0.17],
+    "pharmacy": [0.43, 0.21, 0.22, 0.14],
+    "barber": [0.45, 0.19, 0.20, 0.16],
+    "moto": [0.40, 0.30, 0.14, 0.16],
+    "internet": [0.41, 0.21, 0.20, 0.18],
+    "meat": [0.42, 0.20, 0.20, 0.18],
+    "hardware": [0.40, 0.30, 0.14, 0.16],
+}
+
+
+def ensure_ahp_weight_configs_table(cursor):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ahp_weight_configs (
+            id SERIAL PRIMARY KEY,
+            level VARCHAR(20) NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            criteria_labels JSONB NOT NULL,
+            pairwise_matrix JSONB NOT NULL,
+            priority_vector JSONB NOT NULL,
+            lambda_max DOUBLE PRECISION NOT NULL,
+            consistency_index DOUBLE PRECISION NOT NULL,
+            random_index DOUBLE PRECISION NOT NULL,
+            consistency_ratio DOUBLE PRECISION NOT NULL,
+            is_consistent BOOLEAN NOT NULL,
+            updated_by_admin_email TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CHECK (level IN ('criteria', 'saturation')),
+            CONSTRAINT ahp_weight_configs_level_category_unique UNIQUE (level, category)
+        )
+        """
+    )
+    cursor.execute("ALTER TABLE ahp_weight_configs ADD COLUMN IF NOT EXISTS updated_by_admin_email TEXT")
+    cursor.execute("ALTER TABLE ahp_weight_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ahp_weight_configs_level ON ahp_weight_configs(level)")
+
+
+def _upsert_ahp_weight_config(cursor, level, category, criteria_labels, weights, updated_by_admin_email):
+    matrix = build_consistent_matrix_from_weights(weights)
+    solved = solve_ahp(matrix)
+    cursor.execute(
+        """
+        INSERT INTO ahp_weight_configs (
+            level, category, criteria_labels, pairwise_matrix, priority_vector,
+            lambda_max, consistency_index, random_index, consistency_ratio,
+            is_consistent, updated_by_admin_email
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (level, category) DO NOTHING
+        """,
+        (
+            level,
+            category,
+            Json(criteria_labels),
+            Json(matrix),
+            Json(solved["priority_vector"]),
+            solved["lambda_max"],
+            solved["ci"],
+            solved["ri"],
+            solved["cr"],
+            solved["is_consistent"],
+            updated_by_admin_email,
+        ),
+    )
+
+
+def ensure_ahp_seed_data(cursor):
+    """Idempotently seeds ahp_weight_configs with matrices reconstructed from this
+    app's pre-existing static weights, so /analyze scores are unchanged on first
+    deploy. Uses ON CONFLICT DO NOTHING so it never overwrites an admin's real
+    judgments on subsequent restarts."""
+    _upsert_ahp_weight_config(
+        cursor,
+        "criteria",
+        AHP_GLOBAL_CATEGORY_SENTINEL,
+        AHP_SEED_CRITERIA_LABELS,
+        AHP_SEED_CRITERIA_WEIGHTS,
+        AHP_SEED_ADMIN_LABEL,
+    )
+    for category, weights in AHP_SEED_SATURATION_WEIGHTS_BY_CATEGORY.items():
+        _upsert_ahp_weight_config(
+            cursor,
+            "saturation",
+            category,
+            AHP_SEED_SATURATION_LABELS,
+            weights,
+            AHP_SEED_ADMIN_LABEL,
+        )
 
 
 def ensure_default_admin_user(cursor):

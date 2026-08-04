@@ -120,13 +120,13 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
   };
 
   return (
-    <div className="trend-pref-modal fixed inset-0 z-[2200] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="trend-pref-title">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/15 bg-slate-900 p-5 text-left shadow-2xl sm:p-6">
+    <div className="trend-pref-modal fixed inset-0 z-[2200] flex items-center justify-center bg-[var(--overlay-scrim)] p-4" role="dialog" aria-modal="true" aria-labelledby="trend-pref-title">
+      <div className="max-h-[calc(100svh-32px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 text-left shadow-lg sm:p-6">
         {step === 'intro' ? (
           <div className="animate-[fadeIn_220ms_ease-out]">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Trend Page Guide</p>
-            <h2 id="trend-pref-title" className="text-xl font-semibold text-white sm:text-2xl">How the Trends page works</h2>
-            <div className="mt-3 space-y-2 text-sm text-slate-300">
+            <p className="eyebrow-label mb-2">Trend Page Guide</p>
+            <h2 id="trend-pref-title" className="text-xl font-semibold text-[var(--text-main)] sm:text-2xl">How the Trends page works</h2>
+            <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
               <p>MarketScope uses your preferences plus citywide scan signals to rank MSME opportunities.</p>
               <p>You will see score-based recommendations, best-fit business types, and hotspot suggestions.</p>
               <p>To generate accurate results, complete your preference profile first.</p>
@@ -135,14 +135,14 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]"
                 onClick={() => onLater?.()}
               >
                 Fill this later
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500"
+                className="rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
                 onClick={() => setStep('form')}
               >
                 Next
@@ -151,14 +151,14 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
           </div>
         ) : (
           <form className="animate-[slideInUp_220ms_ease-out]" onSubmit={handleSave}>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">Required Setup</p>
-            <h2 id="trend-pref-title" className="text-xl font-semibold text-white sm:text-2xl">Complete your Trend Preferences</h2>
-            <p className="mt-2 text-sm text-slate-300">Fill the required fields below, then press Done.</p>
+            <p className="eyebrow-label mb-2">Required Setup</p>
+            <h2 id="trend-pref-title" className="text-xl font-semibold text-[var(--text-main)] sm:text-2xl">Complete your Trend Preferences</h2>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Fill the required fields below, then press Done.</p>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <label className="text-sm text-slate-200">
-                <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Primary Business Interest</span>
-                <select className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.primary_business} onChange={(e) => updateField('primary_business', e.target.value)}>
+              <label className="text-sm text-[var(--text-main)]">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Primary Business Interest</span>
+                <select className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.primary_business} onChange={(e) => updateField('primary_business', e.target.value)}>
                   <option value="">Select...</option>
                   {BUSINESS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -166,14 +166,14 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
                 </select>
               </label>
 
-              <label className="text-sm text-slate-200">
-                <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Startup Capital (PHP)</span>
-                <input type="number" min="0" step="1000" className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.startup_capital} onChange={(e) => updateField('startup_capital', e.target.value)} />
+              <label className="text-sm text-[var(--text-main)]">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Startup Capital (PHP)</span>
+                <input type="number" min="0" step="1000" className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.startup_capital} onChange={(e) => updateField('startup_capital', e.target.value)} />
               </label>
 
-              <label className="text-sm text-slate-200">
-                <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Preferred Setup</span>
-                <select className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.preferred_setup} onChange={(e) => updateField('preferred_setup', e.target.value)}>
+              <label className="text-sm text-[var(--text-main)]">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Preferred Setup</span>
+                <select className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.preferred_setup} onChange={(e) => updateField('preferred_setup', e.target.value)}>
                   <option value="">Select...</option>
                   <option value="kiosk">Kiosk</option>
                   <option value="storefront">Storefront</option>
@@ -183,38 +183,38 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
                 </select>
               </label>
 
-              <label className="text-sm text-slate-200">
-                <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Target Payback (Months)</span>
-                <input type="number" min="1" max="120" className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-400" value={formValues.target_payback_months} onChange={(e) => updateField('target_payback_months', e.target.value)} />
+              <label className="text-sm text-[var(--text-main)]">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Target Payback (Months)</span>
+                <input type="number" min="1" max="120" className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.target_payback_months} onChange={(e) => updateField('target_payback_months', e.target.value)} />
               </label>
             </div>
 
             {effectiveMissingFields.length > 0 && (
-              <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              <p className="mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-neutral-bg)] px-3 py-2 text-xs text-[var(--trend-neutral)]">
                 Missing: {effectiveMissingFields.map((field) => FIELD_LABELS[field] || field).join(', ')}
               </p>
             )}
 
             {error && (
-              <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>
+              <p className="mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-down-bg)] px-3 py-2 text-sm text-[var(--trend-down)]">{error}</p>
             )}
 
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]"
                 onClick={() => setStep('intro')}
               >
                 Back
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]"
                 onClick={() => onLater?.()}
               >
                 Fill later
               </button>
-              <button type="submit" className="rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-70" disabled={saving}>
+              <button type="submit" className="rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)] disabled:cursor-not-allowed disabled:opacity-70" disabled={saving}>
                 {saving ? 'Saving...' : 'Done'}
               </button>
             </div>

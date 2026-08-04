@@ -8,7 +8,7 @@
   min-height: 100svh;
   height: 100svh;
   width: 100%;
-  background-color: #0b1120; /* Very dark slate/navy */
+  background-color: var(--bg-app);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
   overflow: hidden;
   overflow-x: hidden;
@@ -26,10 +26,10 @@
   display: none;
   position: relative;
   flex: 1.2;
-  background-color: #3b0764; /* Deep purple base */
-  background-image: 
-    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-color: #17102e;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: center center;
   color: white;
@@ -47,10 +47,10 @@
   justify-content: center;
   gap: 10px;
   padding: 6px 12px;
-  background-color: rgba(168, 85, 247, 0.15);
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 6px;
-  color: #d8b4fe;
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 1px;
@@ -85,7 +85,7 @@
 
 .hero-text p {
   font-size: 1.1rem;
-  color: #d8b4fe;
+  color: rgba(255, 255, 255, 0.72);
   opacity: 0.9;
   line-height: 1.6;
 }
@@ -136,7 +136,7 @@
 .remember-me-row input {
   width: 16px;
   height: 16px;
-  accent-color: #a855f7;
+  accent-color: var(--accent);
 }
 
 .forgot-password-link {
@@ -145,7 +145,7 @@
   margin-bottom: 14px;
   border: none;
   background: transparent;
-  color: #c4b5fd;
+  color: var(--text-muted);
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
@@ -159,14 +159,14 @@
 .forgot-password-panel {
   margin-bottom: 16px;
   padding: 12px;
-  border: 1px solid rgba(168, 85, 247, 0.28);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  background-color: rgba(88, 28, 135, 0.16);
+  background-color: var(--accent-hover);
 }
 
 .forgot-password-note {
   margin: 0 0 10px;
-  color: #e9d5ff;
+  color: var(--text-muted);
   font-size: 0.86rem;
 }
 
@@ -197,99 +197,24 @@
 
 .mobile-hero-text p {
   font-size: 1rem;
-  color: #d8b4fe;
+  color: rgba(255, 255, 255, 0.72);
   line-height: 1.5;
 }
 
-/* Registration form select: ensure readable text color (white) */
-.auth-form-wrapper select,
-.auth-form-wrapper select option {
-  color: #fff !important;
-}
-
-/* Enforce dark background and white text for all auth form controls */
+/* Auth form controls follow theme tokens */
 .auth-form-wrapper .input-group input,
 .auth-form-wrapper .input-group select,
 .auth-form-wrapper .input-group textarea,
 .auth-form-wrapper .input-group select option {
-  color: #fff !important;
-  background-color: #0f172a !important;
-  border-color: rgba(255,255,255,0.12) !important;
-}
-
-/* Stronger rule: make the Primary Business select consistent with other fields */
-.auth-form-wrapper .input-group select[name="primary_business"],
-.auth-form-wrapper .input-group select[name="primary_business"] option,
-.auth-form-wrapper .input-group select[name="primary_business"]::-ms-expand {
-  background-color: #0f172a !important;
-  color: #fff !important;
-  border-color: rgba(255,255,255,0.12) !important;
+  color: var(--text-main);
+  background-color: var(--bg-sheet);
+  border-color: var(--border-color);
 }
 
 .auth-form-wrapper .input-group input::placeholder,
 .auth-form-wrapper .input-group select::placeholder,
 .auth-form-wrapper .input-group textarea::placeholder {
-  color: #94a3b8 !important;
-}
-
-/* Trend Preferences Gate: force selects and option list to dark theme */
-/* Trend Preferences Gate selects follow active theme variables */
-html:not([data-theme="light"]) .trend-pref-modal select,
-html:not([data-theme="light"]) .trend-pref-modal select option {
-  background: var(--bg-sheet) !important;
-  color: var(--text-main) !important;
-  border-color: var(--border-color) !important;
-}
-
-html[data-theme="light"] .trend-pref-modal select,
-html[data-theme="light"] .trend-pref-modal select option {
-  background: var(--bg-sheet) !important;
-  color: var(--text-main) !important;
-  border-color: var(--border-color) !important;
-}
-
-/* Ensure the empty placeholder option is readable in dark theme */
-html:not([data-theme="light"]) .trend-pref-modal select option[value=""],
-html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
-  color: var(--text-main) !important;
-}
-
-/* Focus state uses theme accent */
-.trend-pref-modal select:focus {
-  outline: none !important;
-  border-color: var(--accent) !important;
-  box-shadow: 0 10px 30px rgba(168,85,247,0.12) !important;
-}
-
-/* Modal card: dark grey background and purple-accent border/shadow */
-.trend-pref-modal > div {
-  background: var(--bg-sheet) !important;
-  border: 1px solid rgba(168,85,247,0.12) !important;
-  box-shadow: 0 28px 70px rgba(6, 4, 12, 0.6) !important;
-}
-
-/* Overlay backdrop: use dark grey with subtle purple tint and stronger blur (override Tailwind class) */
-.trend-pref-modal {
-  background: linear-gradient(rgba(11,11,13,0.72), rgba(11,11,13,0.72)) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-}
-
-/* Modal action buttons: purple-tinted instead of bluish/white */
-.trend-pref-modal .rounded-lg.bg-white\/5,
-.trend-pref-modal .rounded-lg.border-white\/15.bg-white\/5 {
-  background: rgba(168,85,247,0.06) !important;
-  border-color: rgba(168,85,247,0.16) !important;
-  color: var(--text-main) !important;
-}
-
-.trend-pref-modal .rounded-lg.bg-white\/5:hover {
-  background: rgba(168,85,247,0.1) !important;
-}
-
-/* Keep primary Done button in purple gradient matching theme */
-.trend-pref-modal .bg-violet-600 {
-  background: linear-gradient(90deg, var(--accent), #7a2fd1) !important;
+  color: var(--text-muted);
 }
 
 /* Required fields highlight with theme accent */
@@ -302,9 +227,9 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 .auth-form-wrapper .input-group input:focus,
 .auth-form-wrapper .input-group select:focus,
 .auth-form-wrapper .input-group textarea:focus {
-  outline: none !important;
-  border-color: var(--accent) !important;
-  box-shadow: 0 8px 30px rgba(168,85,247,0.12) !important;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 /* Small tweak: when label shows required state, tint small border */
@@ -324,13 +249,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
     align-items: flex-end;
     padding: calc(26px + env(safe-area-inset-top)) 18px 22px;
     min-height: 215px;
-    background-color: #22073a;
-    background-image: 
-      radial-gradient(circle at top left, rgba(168, 85, 247, 0.25), transparent 42%),
-      radial-gradient(circle at top right, rgba(59, 7, 100, 0.72), transparent 42%),
-      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
-    background-size: auto, auto, 24px 24px, 24px 24px;
+    background-color: #17102e;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 24px 24px, 24px 24px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
@@ -352,11 +275,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
     max-width: 320px;
     font-size: 0.96rem;
     line-height: 1.45;
-    color: rgba(237, 223, 255, 0.9);
+    color: rgba(255, 255, 255, 0.72);
   }
 
   .auth-container.view-landing {
-    background-color: #0b1120;
+    background-color: var(--bg-app);
     background-image: none;
   }
 
@@ -447,7 +370,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
     align-items: center;
     justify-content: center;
     padding-top: 24px;
-    background-color: #0b1120;
+    background-color: var(--bg-app);
   }
 
   .auth-container.view-landing .auth-form-wrapper {
@@ -474,11 +397,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 .auth-card {
   width: 100%;
   max-width: 440px;
-  background-color: #151e2e;
+  background-color: var(--bg-sheet);
   padding: 48px 40px;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.05);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--surface-1-shadow);
   transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
 }
 
@@ -488,11 +411,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   font-family: var(--font-display, "Segoe UI", sans-serif);
   font-size: 2rem;
   font-weight: 800;
-  color: white;
+  color: var(--text-main);
   margin-bottom: 8px;
   letter-spacing: -0.5px;
 }
-.auth-header p { font-size: 1rem; color: #94a3b8; }
+.auth-header p { font-size: 1rem; color: var(--text-muted); }
 
 .hero-side-back-btn {
   position: absolute;
@@ -516,20 +439,20 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .hero-side-back-btn:hover {
-  color: #d8b4fe;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .back-link {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   padding: 0;
   transition: color 0.2s;
 }
-.back-link:hover { color: white; }
+.back-link:hover { color: var(--text-main); }
 
 /* =========================================
    3. FORMS & INPUTS
@@ -543,40 +466,34 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 .input-group label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--text-muted);
   margin-bottom: 8px;
 }
 
 .input-group input {
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--border-color);
   font-size: 1rem;
-  color: white;
-  background-color: #0b1120;
-  transition: all 0.2s ease;
+  color: var(--text-main);
+  background-color: var(--bg-sheet);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .input-group input:focus {
   outline: none;
-  border-color: #a855f7;
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .field-hint {
   margin-top: 6px;
   margin-bottom: 8px;
   font-size: 0.82rem;
-  color: #c4b5fd;
+  color: var(--text-muted);
   line-height: 1.35;
 }
 
-.input-group input[type="date"] {
-  color-scheme: dark;
-}
-
 .input-group input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: brightness(0) invert(1) !important;
-  opacity: 1 !important;
   cursor: pointer;
 }
 
@@ -585,8 +502,8 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
    ========================================= */
 .btn-primary {
   flex: 1;
-  background: #a855f7;
-  color: white;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   padding: 16px;
   border: none;
   border-radius: 12px;
@@ -595,15 +512,15 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   cursor: pointer;
   transition: background-color 0.2s, transform 0.1s;
 }
-.btn-primary:hover { background-color: #9333ea; }
+.btn-primary:hover { background-color: var(--btn-primary-hover); }
 .btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 
 .btn-secondary {
-  background: transparent;
-  color: #e9d5ff;
+  background: var(--bg-sheet);
+  color: var(--text-main);
   padding: 12px;
-  border: 1px solid rgba(216, 180, 254, 0.5);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   font-size: 0.92rem;
   font-weight: 600;
@@ -611,7 +528,8 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .btn-secondary:hover {
-  background: rgba(168, 85, 247, 0.12);
+  background: var(--accent-hover);
+  border-color: var(--border-strong);
 }
 
 .btn-secondary:disabled {
@@ -630,7 +548,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 .strength-meter {
   flex: 1;
   height: 4px;
-  background-color: #334155;
+  background-color: var(--border-color);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -644,11 +562,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 .auth-footer {
   text-align: center;
   font-size: 0.95rem;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .auth-footer span {
-  color: #a855f7;
+  color: var(--text-main);
   font-weight: 600;
   cursor: pointer;
   margin-left: 6px;
@@ -656,9 +574,9 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 .auth-footer span:hover { text-decoration: underline; }
 
 .error-alert {
-  background-color: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
+  background-color: var(--trend-down-bg);
+  border: 1px solid var(--border-color);
+  color: var(--trend-down);
   padding: 14px 16px;
   border-radius: 10px;
   margin-bottom: 24px;
@@ -667,9 +585,9 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .info-alert {
-  background-color: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.28);
-  color: #bfdbfe;
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 1px solid var(--border-color);
+  color: #2563eb;
   padding: 12px 14px;
   border-radius: 10px;
   font-size: 0.88rem;
@@ -709,17 +627,18 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   right: 12px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: 12px;
+  margin-right: -8px;
   transition: color 0.2s ease;
 }
 
 .password-toggle-btn:hover {
-  color: #a855f7; /* MarketScope Purple */
+  color: var(--text-main);
 }
 
 .password-toggle-btn svg {
@@ -736,13 +655,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   flex: 1;
   padding: 0;
   border-right: none;
-  background-color: #22073a;
+  background-color: #17102e;
   background-image:
-    radial-gradient(circle at top left, rgba(168, 85, 247, 0.25), transparent 42%),
-    radial-gradient(circle at top right, rgba(59, 7, 100, 0.72), transparent 42%),
-    linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
-  background-size: auto, auto, 24px 24px, 24px 24px;
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px;
   background-position: center center;
 }
 
@@ -824,7 +741,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .hero-logo-highlight {
-  color: #a855f7;
+  color: var(--brand);
 }
 
 /* Burger Menu Button */
@@ -858,8 +775,8 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   top: calc(100% + 8px);
   right: 10px;
   z-index: 140;
-  background-color: #1b0a2e;
-  border: 1px solid rgba(168, 85, 247, 0.38);
+  background-color: #221741;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
   overflow: hidden;
   min-width: 200px;
@@ -890,7 +807,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   cursor: pointer;
   font-size: 0.95rem;
   transition: background-color 0.2s ease;
-  border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .burger-item:last-child {
@@ -898,11 +815,11 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .burger-item:hover {
-  background-color: rgba(168, 85, 247, 0.2);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .burger-item:active {
-  background-color: rgba(168, 85, 247, 0.3);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 /* Hero Content */
@@ -939,7 +856,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 
 .hero-description {
   font-size: 1.1rem;
-  color: #d8b4fe;
+  color: rgba(255, 255, 255, 0.72);
   line-height: 1.6;
   margin: 0;
   max-width: 500px;
@@ -947,12 +864,12 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 
 .hero-instruction {
   margin: -8px 0 4px;
-  color: #f5e8ff;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 0.95rem;
   line-height: 1.45;
   font-weight: 600;
-  background: rgba(168, 85, 247, 0.14);
-  border: 1px solid rgba(216, 180, 254, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   padding: 8px 14px;
 }
@@ -962,19 +879,19 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
   padding: 14px 40px;
   font-size: 1.05rem;
   font-weight: 600;
-  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 55%, #a855f7 100%);
-  color: white;
+  background: #ffffff;
+  color: #171717;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(147, 51, 234, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   margin-top: 12px;
 }
 
 .get-started-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
+  background: #e5e5e5;
 }
 
 .get-started-btn:active {
@@ -998,7 +915,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .back-btn:hover {
-  color: #a855f7;
+  color: rgba(255, 255, 255, 0.7);
   transform: translateX(4px);
 }
 
@@ -1109,13 +1026,13 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 
 .upload-trigger {
   appearance: none;
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  border: 1px solid var(--border-color);
   display: inline-flex;
   align-items: center;
   gap: 10px;
   width: fit-content;
-  background: rgba(168, 85, 247, 0.14);
-  color: #f5e9ff;
+  background: var(--bg-sheet);
+  color: var(--text-main);
   font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -1127,9 +1044,8 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 
 .upload-trigger:hover {
   transform: translateY(-1px);
-  background: rgba(168, 85, 247, 0.22);
-  border-color: rgba(168, 85, 247, 0.5);
-  box-shadow: 0 8px 18px rgba(8, 10, 30, 0.3);
+  background: var(--accent-hover);
+  border-color: var(--border-strong);
 }
 
 .upload-trigger:active {
@@ -1137,7 +1053,7 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 }
 
 .upload-trigger:focus-visible {
-  outline: 2px solid rgba(168, 85, 247, 0.55);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1148,9 +1064,22 @@ html:not([data-theme="light"]) .trend-pref-modal select option[disabled] {
 
 .upload-file-name {
   margin-top: 8px;
-  color: #d1d5db;
+  color: var(--text-muted);
   font-size: 0.84rem;
   line-height: 1.35;
   word-break: break-all;
   min-height: 1.2em;
+}
+
+/* Short viewports: reclaim vertical space on the mobile auth flow */
+@media (max-height: 640px) and (max-width: 1023px) {
+  .mobile-auth-hero {
+    min-height: 130px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-bottom: 14px;
+  }
+
+  .auth-form-wrapper {
+    padding-bottom: max(56px, calc(env(safe-area-inset-bottom) + 56px));
+  }
 }

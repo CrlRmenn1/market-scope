@@ -44,6 +44,16 @@ const NAV_ITEMS = [
         <path d="M12 17h.01" />
       </svg>
     )
+  },
+  {
+    id: 'ahp',
+    label: 'AHP Weights',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 17l6-6 4 4 8-8" />
+        <path d="M14 7h7v7" />
+      </svg>
+    )
   }
 ];
 

@@ -1,82 +1,46 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
-const steps = [
+const highlights = [
   {
-    title: 'Welcome to MarketScope',
-    description: 'MarketScope analyzes business-location viability using map, risk, demand, and competitor signals.',
+    title: 'Tap the map, get a verdict',
+    description: 'Any spot in Panabo scored 0-100 for business viability in about ten seconds.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M8 12h8" />
-        <path d="M12 8v8" />
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+        <circle cx="12" cy="10" r="3" />
       </svg>
     )
   },
   {
-    title: '1. Sign In and Complete Profile Setup',
-    description: 'After login, fill the required profile fields (business interest, capital, risk, setup, time commitment, and payback). This is required before using trends and analysis.',
+    title: 'Know before you commit',
+    description: 'Zoning rules, flood risk, nearby competitors, and demand signals — checked in one scan.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 2c-3.31 0-6 2.69-6 6 0 4.2 4.64 9.14 5.89 10.41a1.5 1.5 0 0 0 2.12 0C13.36 17.14 18 12.2 18 8c0-3.31-2.69-6-6-6z" />
-        <circle cx="12" cy="8" r="2.5" />
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="m9 12 2 2 4-4" />
       </svg>
     )
   },
   {
-    title: '2. Choose a Location and Business Type',
-    description: 'Go to Home, select a map point, choose the business type, and set your scan radius.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
-        <path d="M20 21a8 8 0 0 0-16 0" />
-      </svg>
-    )
-  },
-  {
-    title: '3. Run Analysis',
-    description: 'Tap Analyze to generate your viability score and factor breakdown (zoning, hazard, demand, saturation).',
+    title: 'Compare your options',
+    description: 'Every scan lands in History, so you can weigh spot A against spot B with real numbers.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M3 3v18h18" />
-        <path d="M7 14l3-3 3 2 4-5" />
-        <circle cx="7" cy="14" r="1" />
-        <circle cx="10" cy="11" r="1" />
-        <circle cx="13" cy="13" r="1" />
-        <circle cx="17" cy="8" r="1" />
-      </svg>
-    )
-  },
-  {
-    title: '4. Review and Save Results',
-    description: 'Open the report for insights and recommendations. Your scan is saved in History so you can compare later.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <path d="M14 2v6h6" />
-        <path d="M9 13h6" />
-        <path d="M9 17h6" />
+        <path d="m19 9-5 5-4-4-3 3" />
       </svg>
     )
   }
 ];
 
-export default function OnboardingModal({ isOpen, onClose }) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [doNotShowAgain, setDoNotShowAgain] = useState(false);
+export default function OnboardingModal({ isOpen, onClose, onStartTour }) {
   const [isVisible, setIsVisible] = useState(false);
-
-  const step = useMemo(() => steps[stepIndex], [stepIndex]);
-  const isLastStep = stepIndex === steps.length - 1;
 
   useEffect(() => {
     if (isOpen) {
-      setStepIndex(0);
-      setDoNotShowAgain(false);
-
       const frame = window.requestAnimationFrame(() => {
         setIsVisible(true);
       });
-
       return () => {
         window.cancelAnimationFrame(frame);
       };
@@ -88,62 +52,55 @@ export default function OnboardingModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className={`onboarding-overlay ${isVisible ? 'is-visible' : ''}`} role="presentation" onClick={() => onClose(doNotShowAgain)}>
+    <div className={`onboarding-overlay ${isVisible ? 'is-visible' : ''}`} role="presentation" onClick={() => onClose()}>
       <div className="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" onClick={(event) => event.stopPropagation()}>
-        <div key={stepIndex} className="onboarding-step-card">
-          <div className="onboarding-progress" aria-hidden="true">
-            {steps.map((_, idx) => (
-              <span key={idx} className={`onboarding-dot ${idx === stepIndex ? 'active' : ''}`} />
-            ))}
+        <div className="onboarding-step-card">
+          <div className="brand-mark mx-auto mb-4" aria-hidden="true">
+            <div className="lens-left" />
+            <div className="lens-center">
+              <div className="lens-reflection" />
+            </div>
+            <div className="lens-right" />
           </div>
 
-          <div className="onboarding-icon-wrap">{step.icon}</div>
-          <p className="onboarding-step-label">Quick Start Guide</p>
+          <p className="eyebrow-label mb-2 text-center">Welcome to MarketScope</p>
+          <h3 id="onboarding-title" className="onboarding-title text-center">
+            Find your next business location — with proof, not guesswork.
+          </h3>
 
-          {stepIndex === 0 ? (
-            <>
-              <h3 id="onboarding-title" className="onboarding-title">Welcome to MarketScope</h3>
-              <p className="onboarding-hero-sub">
-                MarketScope removes guesswork from choosing business locations by combining map data, hazard risk, demand signals, and competitor presence into one clear, actionable scan.
-              </p>
-
-              <ul className="onboarding-benefits">
-                <li><strong>Evidence-based:</strong> combines geospatial, hazard, and market signals.</li>
-                <li><strong>Actionable:</strong> gives a numeric viability score and quick recommendations.</li>
-                <li><strong>Compare & Save:</strong> store scans in History to track changes over time.</li>
-              </ul>
-            </>
-          ) : (
-            <>
-              <h3 id="onboarding-title" className="onboarding-title">{step.title}</h3>
-              <p className="onboarding-description">{step.description}</p>
-            </>
-          )}
+          <div className="onboarding-highlights mt-5 flex flex-col gap-3 text-left">
+            {highlights.map((item) => (
+              <div key={item.title} className="flex items-start gap-3">
+                <span className="onboarding-highlight-icon" aria-hidden="true">{item.icon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text-main)]">{item.title}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-[var(--text-muted)]">{item.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <label className="onboarding-checkbox-row">
-          <input
-            type="checkbox"
-            checked={doNotShowAgain}
-            onChange={(event) => setDoNotShowAgain(event.target.checked)}
-          />
-          <span>Do not show me again</span>
-        </label>
-
-        <div className="onboarding-actions">
-          <button type="button" className="onboarding-btn secondary" onClick={() => onClose(doNotShowAgain)}>Skip</button>
-          {stepIndex > 0 && (
-            <button type="button" className="onboarding-btn ghost" onClick={() => setStepIndex((prev) => Math.max(0, prev - 1))}>
-              Back
+        <div className="onboarding-actions mt-5 flex flex-col gap-2">
+          {onStartTour && (
+            <button
+              type="button"
+              className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-[var(--btn-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
+              onClick={onStartTour}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+              </svg>
+              Show me — run my first scan
             </button>
           )}
-          {isLastStep ? (
-            <button type="button" className="onboarding-btn primary" onClick={() => onClose(doNotShowAgain)}>Got It</button>
-          ) : (
-            <button type="button" className="onboarding-btn primary" onClick={() => setStepIndex((prev) => Math.min(steps.length - 1, prev + 1))}>
-              Next
-            </button>
-          )}
+          <button
+            type="button"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)] hover:text-[var(--text-main)]"
+            onClick={() => onClose()}
+          >
+            I'll explore on my own
+          </button>
         </div>
       </div>
     </div>

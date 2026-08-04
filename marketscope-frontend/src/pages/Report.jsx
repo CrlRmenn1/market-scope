@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { apiUrl } from '../api';
 import { getBusinessTypeLabel } from '../utils/businessTypes';
 
@@ -116,7 +117,8 @@ export default function Report({ data, targetCoords, onClose }) {
         maxBoundsViscosity: 1.0
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer(getTileUrl(), {
+        attribution: TILE_ATTRIBUTION,
         keepBuffer: 8,
         updateWhenIdle: true,
         crossOrigin: true,
@@ -129,7 +131,7 @@ export default function Report({ data, targetCoords, onClose }) {
 
       // Draw Dynamic Radius
       L.circle([resolvedTargetCoords.lat, resolvedTargetCoords.lng], {
-        color: '#a855f7', fillColor: '#a855f7', fillOpacity: 0.15, radius: data.radius_meters || 340
+        color: getMapInk(), fillColor: getMapInk(), fillOpacity: 0.08, radius: data.radius_meters || 340
       }).addTo(elementsGroup);
 
       // Draw Target Pin
@@ -137,9 +139,9 @@ export default function Report({ data, targetCoords, onClose }) {
         className: 'custom-pin-wrapper',
         html: `
           <svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
-            <circle cx="17" cy="17" r="15" fill="rgba(168,85,247,0.18)" stroke="rgba(168,85,247,0.65)" stroke-width="2" />
-            <circle cx="17" cy="17" r="6" fill="var(--accent)" stroke="white" stroke-width="2" />
-            <circle cx="17" cy="17" r="1.5" fill="white" />
+            <circle cx="17" cy="17" r="15" fill="${getMapInk()}26" stroke="${getMapInk()}99" stroke-width="2" />
+            <circle cx="17" cy="17" r="6" fill="${getMapInk()}" stroke="${getMapInk() === '#171717' ? 'white' : '#171717'}" stroke-width="2" />
+            <circle cx="17" cy="17" r="1.5" fill="${getMapInk() === '#171717' ? 'white' : '#171717'}" />
           </svg>
         `,
         iconSize: [34, 34],
@@ -267,9 +269,9 @@ export default function Report({ data, targetCoords, onClose }) {
   };
 
   const getScoreColor = (score) => {
-    if (score >= 20) return '#4ade80'; 
-    if (score >= 10) return '#facc15'; 
-    return '#f87171'; 
+    if (score >= 20) return 'var(--trend-up)';
+    if (score >= 10) return 'var(--trend-neutral)';
+    return 'var(--trend-down)';
   };
 
   const formatListingMode = (value) => {
@@ -575,9 +577,9 @@ export default function Report({ data, targetCoords, onClose }) {
   return (
     <div ref={reportExportRef} className="report-page slide-up bg-[var(--bg-app)]">
       <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-4 py-4 backdrop-blur-md sm:px-5">
-        <h2 className="report-title text-lg font-semibold text-[var(--text-main)]">Analysis Dossier</h2>
+        <h2 className="report-title min-w-0 flex-1 truncate text-lg font-semibold text-[var(--text-main)]">Analysis Dossier</h2>
 
-        <div className="pdf-hide flex items-center gap-2">
+        <div className="pdf-hide flex flex-none items-center gap-2">
           <button
             className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             onClick={handleGenerateAiReport}
@@ -611,7 +613,7 @@ export default function Report({ data, targetCoords, onClose }) {
       </div>
 
       {isPdfSettingsOpen && (
-        <div className="pdf-hide fixed inset-0 z-[8000] flex items-center justify-center bg-black/70 px-4" role="dialog" aria-modal="true" aria-label="PDF export settings">
+        <div className="pdf-hide fixed inset-0 z-[8000] flex items-center justify-center bg-[var(--overlay-scrim)] px-4" role="dialog" aria-modal="true" aria-label="PDF export settings">
           <div className="w-full max-w-md rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-2xl">
             <h3 className="text-base font-semibold text-[var(--text-main)]">Export PDF Settings</h3>
             <p className="mt-1 text-sm text-[var(--text-muted)]">The exported file always uses a white report theme.</p>
@@ -693,7 +695,7 @@ export default function Report({ data, targetCoords, onClose }) {
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white"
+                className="rounded-lg bg-[var(--btn-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
                 onClick={handlePrint}
                 disabled={isExportingPdf}
               >
@@ -704,33 +706,54 @@ export default function Report({ data, targetCoords, onClose }) {
         </div>
       )}
 
-      <div className="report-scroll-content mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6">
+      <div className="report-scroll-content mx-auto w-full max-w-5xl px-4 pb-28 pt-5 sm:px-6">
         
-        <div className="main-score-card fade-in rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-6 shadow-sm">
-          <p className="section-heading mb-3 text-center text-sm font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">{businessLabel}</p>
-          <div className="score-ring-large flex h-32 w-32 items-center justify-center rounded-full border-4 border-[var(--border-color)] bg-[var(--bg-app)]">
-            <span className="big-score text-4xl font-bold leading-none text-[var(--text-main)]">{viability_score}</span>
+        <div className="bento-score-row grid gap-4 sm:grid-cols-[auto_1fr]">
+          <div className="main-score-card fade-in flex flex-col items-center justify-center p-6">
+            <p className="eyebrow-label mb-3 text-center">{businessLabel}</p>
+            <div
+              className="score-ring-large flex h-32 w-32 items-center justify-center rounded-full"
+              role="img"
+              aria-label={`Suitability score ${viability_score} out of 100`}
+            >
+              <span className="big-score leading-none">{viability_score}</span>
+            </div>
+            <p className="score-label mt-4 text-sm font-medium text-[var(--text-muted)]">Suitability Score</p>
+            <span className={`trends-score-badge mt-2 ${Number(viability_score || 0) >= 75 ? 'high' : Number(viability_score || 0) >= 55 ? 'medium' : 'low'}`}>
+              {Number(viability_score || 0) >= 75 ? 'Prime Location' : Number(viability_score || 0) >= 55 ? 'Viable Site' : 'Proceed with Caution'}
+            </span>
           </div>
-          <p className="score-label mt-4 text-sm font-medium text-[var(--text-muted)]">Suitability Score</p>
+
+          <div className="quick-facts-card data-card flex flex-col justify-center gap-3 p-5">
+            <h4 className="eyebrow-label">Quick Facts</h4>
+            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 pl-3" style={{ borderColor: getScoreColor(breakdown?.zoning?.score ?? 0) }}>
+              <span className="text-sm text-[var(--text-muted)]">Zoning Fit</span>
+              <span className="text-sm font-semibold" style={{ color: getScoreColor(breakdown?.zoning?.score ?? 0) }}>{breakdown?.zoning?.status || '-'}</span>
+            </div>
+            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 pl-3" style={{ borderColor: getScoreColor(breakdown?.hazard?.score ?? 0) }}>
+              <span className="text-sm text-[var(--text-muted)]">Hazard Exposure</span>
+              <span className="text-sm font-semibold" style={{ color: getScoreColor(breakdown?.hazard?.score ?? 0) }}>{breakdown?.hazard?.status || '-'}</span>
+            </div>
+            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 border-[var(--border-strong)] pl-3">
+              <span className="text-sm text-[var(--text-muted)]">Search Radius</span>
+              <span className="text-sm font-semibold text-[var(--text-main)]">{radius_meters}m</span>
+            </div>
+          </div>
         </div>
 
         {/* STRATEGIC INSIGHT BOX */}
-        <div className="insight-box mt-5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
-          <h4 className="insight-title mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
-            Strategic Recommendation
-          </h4>
+        <div className="report-insights-grid grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="insight-box data-card mt-5 p-5 lg:mt-0 lg:mb-0">
+          <h4 className="eyebrow-label mb-3">Strategic Recommendation</h4>
           <p className="insight-text text-sm leading-6 text-[var(--text-main)]">
             {insight ? insight : "Processing strategic recommendation based on geospatial parameters..."}
           </p>
         </div>
 
-        <div className="insight-box mt-5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
-          <h4 className="insight-title mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">
-            AI Feasibility Narrative
-          </h4>
+        <div className="insight-box data-card mt-5 p-5 lg:mt-0 lg:mb-0">
+          <h4 className="eyebrow-label mb-3">AI Feasibility Narrative</h4>
           {aiError && (
-            <p className="mb-3 text-sm text-red-500">{aiError}</p>
+            <p className="mb-3 text-sm text-[var(--trend-down)]">{aiError}</p>
           )}
               {aiNarrative ? (
             <div className="space-y-3">
@@ -756,11 +779,13 @@ export default function Report({ data, targetCoords, onClose }) {
           )}
         </div>
 
+        </div>
+
         {/* SPATIAL CONTEXT MAP */}
-        <h3 className="section-heading mt-6 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Spatial Context ({radius_meters}m)</h3>
-        <div className="report-map-container mt-3 overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] shadow-sm">
+        <h3 className="section-heading eyebrow-label mt-6">Spatial Context ({radius_meters}m)</h3>
+        <div className="report-map-container mt-3 overflow-hidden">
           <div ref={mapRef} style={{ width: '100%', height: '220px' }}></div>
-          
+
           <div className="report-map-legend flex flex-wrap items-center gap-4 border-t border-[var(--border-color)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium text-[var(--text-muted)]">
             <span className="inline-flex items-center gap-2"><span className="legend-dot target"></span> Proposed Site</span>
             <span className="inline-flex items-center gap-2"><span className="legend-dot competitor"></span> Competitors ({strictCompetitorsFound})</span>
@@ -768,11 +793,12 @@ export default function Report({ data, targetCoords, onClose }) {
         </div>
 
         {/* METRIC BREAKDOWN PROGRESS BARS */}
-        <h3 className="section-heading mt-6 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Metric Breakdown</h3>
-        <div className="data-card mt-3 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
+        <h3 className="section-heading eyebrow-label mt-6">Metric Breakdown</h3>
+        <div className="data-card mt-3 p-5">
           <p className="factor-desc mb-4 text-sm text-[var(--text-muted)]">Tap any factor header to expand an actionable explanation for that score.</p>
-          {breakdown && Object.entries(breakdown).map(([key, factor]) => (
-            <div className="progress-group mb-5 last:mb-0" key={key}>
+          <div className="metric-breakdown-grid grid gap-x-6 gap-y-5 sm:grid-cols-2">
+          {breakdown && Object.entries(breakdown).map(([key, factor], index) => (
+            <div className="progress-group card-stagger-item" style={{ '--stagger-index': index }} key={key}>
               <button
                 type="button"
                 className="progress-labels detail-toggle flex w-full items-center justify-between gap-3 rounded-lg bg-transparent px-0 py-2 text-left transition hover:bg-[var(--accent-hover)]"
@@ -787,8 +813,8 @@ export default function Report({ data, targetCoords, onClose }) {
                   <span className="metric-status text-xs font-medium" style={{ color: getScoreColor(factor.score) }}>
                     {factor.status}
                   </span>
-                  <span className={`detail-chevron ${expandedDetail === key ? 'open' : ''}`}>
-                    ▾
+                  <span className={`detail-chevron ${expandedDetail === key ? 'open' : ''}`} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>
                   </span>
                 </div>
               </button>
@@ -803,11 +829,13 @@ export default function Report({ data, targetCoords, onClose }) {
               </div>
             </div>
           ))}
+          </div>
         </div>
 
+
         {spaceContext && (
-          <div className="data-card mt-6 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
-            <h3 className="section-heading mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-main)]">Pinned Space Details</h3>
+          <div className="data-card mt-6 p-5">
+            <h3 className="section-heading eyebrow-label mb-3">Pinned Space Details</h3>
             <p className="mb-4 text-sm text-[var(--text-muted)]">The report below reflects the exact space pinned on the map.</p>
 
             <div className="space-report-grid grid gap-3 sm:grid-cols-2">
@@ -851,7 +879,7 @@ export default function Report({ data, targetCoords, onClose }) {
         )}
 
         {/* DISCLAIMER */}
-        <div className="data-card disclaimer-card mt-6 mb-10 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-sm">
+        <div className="disclaimer-card mt-6 mb-10">
           <p><strong>Disclaimer:</strong> This dossier is generated via automated MCDA geospatial models. Please secure BPLO clearances from Panabo City Hall before investment.</p>
         </div>
 

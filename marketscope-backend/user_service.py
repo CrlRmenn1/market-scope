@@ -90,12 +90,29 @@ async def get_user_profile(pool, user_id: int):
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
                 startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
+                time_commitment, target_payback_months, onboarding_seen
             FROM users
             WHERE {user_pk_column} = $1
             """,
             user_id,
         )
+
+
+async def mark_user_onboarding_seen(pool, user_id: int):
+    async with pool.acquire() as conn:
+        user_pk_column = await get_users_primary_key_column_async(conn)
+        updated = await conn.fetchrow(
+            f"""
+            UPDATE users
+            SET onboarding_seen = TRUE
+            WHERE {user_pk_column} = $1
+            RETURNING {user_pk_column} AS user_id, onboarding_seen
+            """,
+            user_id,
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="User not found")
+        return updated
 
 
 async def update_user_profile(pool, user_id: int, payload):

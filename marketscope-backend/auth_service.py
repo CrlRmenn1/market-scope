@@ -65,7 +65,7 @@ async def register_user(pool, payload):
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
                 startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
+                time_commitment, target_payback_months, onboarding_seen
             """,
             payload.full_name,
             payload.email,
@@ -100,6 +100,7 @@ async def register_user(pool, payload):
         "preferred_setup": new_user[12],
         "time_commitment": new_user[13],
         "target_payback_months": new_user[14],
+        "onboarding_seen": bool(new_user[15]),
     }
     missing_preferences = get_missing_trend_preferences(user_payload)
 
@@ -122,7 +123,7 @@ async def login_user(pool, payload):
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
                 startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
+                time_commitment, target_payback_months, onboarding_seen
             FROM users
             WHERE email = $1
             """,
@@ -150,6 +151,7 @@ async def login_user(pool, payload):
         "preferred_setup": db_user.get("preferred_setup"),
         "time_commitment": db_user.get("time_commitment"),
         "target_payback_months": db_user.get("target_payback_months"),
+        "onboarding_seen": bool(db_user.get("onboarding_seen")),
     }
     missing_preferences = get_missing_trend_preferences(user_payload)
 

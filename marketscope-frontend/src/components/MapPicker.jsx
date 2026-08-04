@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
+import { getTileUrl, TILE_ATTRIBUTION } from '../utils/mapTheme';
 // Fix for Vite + Leaflet image bug (same approach as Home.jsx)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -21,8 +22,8 @@ export default function MapPicker({ initialLat = 7.3109675, initialLng = 125.685
     let map;
     try {
       map = L.map(containerRef.current, { center: [initialLat, initialLng], zoom: 15 });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+      L.tileLayer(getTileUrl(), {
+        attribution: TILE_ATTRIBUTION
       }).addTo(map).on('load', () => setLoading(false)).on('tileerror', () => setLoading(false));
 
       // create a visible div icon for the picker pin (SVG ensures display without external images)
