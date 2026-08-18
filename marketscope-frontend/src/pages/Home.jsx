@@ -261,7 +261,23 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
 
       tileLayerRef.current = L.tileLayer(getTileUrl(), {
         attribution: TILE_ATTRIBUTION,
-        maxZoom: 19
+        maxZoom: 19,
+        // Keep a wide ring of already-loaded tiles around the viewport so
+        // normal panning within an already-explored area doesn't expose
+        // blank tiles as often (Leaflet's default keepBuffer is just 2).
+        keepBuffer: 8,
+        // Only fetch new tiles once a pan/zoom gesture ends instead of
+        // continuously mid-drag - on a slow connection, firing many
+        // concurrent tile requests while actively dragging is what causes
+        // the visible lag/stutter, not just the eventual blank tile.
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        crossOrigin: true,
+        // Transparent fallback so a still-loading/failed tile blends with
+        // the app background instead of flashing white - this also
+        // inherits the dark-mode CSS filter like any other tile, so it
+        // stays theme-correct without extra logic.
+        errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='
       }).addTo(mapInstance.current);
 
       const boundaryCoords = [
