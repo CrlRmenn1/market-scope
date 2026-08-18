@@ -1105,7 +1105,7 @@ html[data-theme="light"] .map-quick-panel {
 }
 
 .bottom-sheet {
-  background: var(--surface-3-bg); backdrop-filter: blur(var(--surface-3-blur)); -webkit-backdrop-filter: blur(var(--surface-3-blur)); padding: 35px 24px;
+  background: var(--surface-modal-bg); backdrop-filter: blur(var(--surface-modal-blur)); -webkit-backdrop-filter: blur(var(--surface-modal-blur)); padding: 35px 24px;
   border-top-left-radius: 35px; border-top-right-radius: 35px;
   border-top: 1px solid var(--surface-3-border); box-shadow: var(--surface-3-shadow); width: 100%;
   animation: slideUp 0.42s var(--ease-standard); position: relative;
@@ -4383,9 +4383,9 @@ html[data-theme="light"] .trends-score-badge.low {
   overflow-y: auto;
 
   width: min(92vw, 430px);
-  background: var(--surface-2-bg);
-  backdrop-filter: blur(var(--surface-2-blur));
-  -webkit-backdrop-filter: blur(var(--surface-2-blur));
+  background: var(--surface-modal-bg);
+  backdrop-filter: blur(var(--surface-modal-blur));
+  -webkit-backdrop-filter: blur(var(--surface-modal-blur));
   border: 1px solid var(--border-color);
   border-radius: 20px;
   padding: 18px;
