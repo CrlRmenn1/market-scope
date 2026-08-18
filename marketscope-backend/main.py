@@ -153,9 +153,23 @@ async def lifespan(app: FastAPI):
     
     # Create asyncpg pool with retry logic
     app.state.db_pool = await connect_with_retry()
-    preload_hazard_layer_cache()
-    preload_pbf_competitor_cache()
-    preload_pbf_spatial_context_cache()
+
+    # The geopandas/PBF preloads below are the slow part of startup (parsing
+    # panabo.pbf and the hazard shapefile can take well over a minute on a
+    # low-CPU host). Running them synchronously here blocks the port from
+    # opening at all, which reads as a hung/failed deploy on hosts like
+    # Render. Run them in the background instead so the server starts
+    # accepting connections immediately; each cache already has its own
+    # lazy-load-on-first-use fallback (hazard, PBF competitors) or a
+    # clearly-labeled neutral score for callers that land before it's ready
+    # (road/building spatial context), so this is safe.
+    def _preload_geo_caches():
+        preload_hazard_layer_cache()
+        preload_pbf_competitor_cache()
+        preload_pbf_spatial_context_cache()
+
+    Thread(target=_preload_geo_caches, daemon=True).start()
+
     _load_ahp_weights_cache()
     stop_event = Event()
     auto_refresh_thread = Thread(
