@@ -254,8 +254,9 @@ class AnalysisRequest(BaseModel):
     lat: float
     lon: float
     business_type: str
-    radius: int = 340 
+    radius: int = 340
     user_id: int | None = None
+    history_id: int | None = None
 
 
 class CompetitorPreviewRequest(BaseModel):
@@ -4349,28 +4350,69 @@ def perform_analysis(data: AnalysisRequest):
 
             conn = psycopg2.connect(**DB_CONFIG)
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO analysis_history (
-                    user_id, business_type, viability_score,
-                    target_lat, target_lon, radius_used, insight,
-                    competitors_found, competitor_locations, breakdown, ahp_methodology
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    data.user_id,
-                    business_key,
-                    int(total_score),
-                    data.lat,
-                    data.lon,
-                    data.radius,
-                    generated_insight,
-                    competitors_found,
-                    Json(sanitized_competitors_list),
-                    Json(breakdown_payload),
-                    Json(ahp_methodology_payload)
+
+            updated_existing = False
+            if data.history_id is not None:
+                # Re-scan of an already-saved report (e.g. opened from History) should
+                # refresh that row in place instead of inserting a duplicate.
+                history_pk_column = get_analysis_history_pk_column(cursor)
+                cursor.execute(
+                    f"""
+                    UPDATE analysis_history
+                    SET business_type = %s,
+                        viability_score = %s,
+                        target_lat = %s,
+                        target_lon = %s,
+                        radius_used = %s,
+                        insight = %s,
+                        competitors_found = %s,
+                        competitor_locations = %s,
+                        breakdown = %s,
+                        ahp_methodology = %s
+                    WHERE user_id = %s AND {history_pk_column} = %s
+                    """,
+                    (
+                        business_key,
+                        int(total_score),
+                        data.lat,
+                        data.lon,
+                        data.radius,
+                        generated_insight,
+                        competitors_found,
+                        Json(sanitized_competitors_list),
+                        Json(breakdown_payload),
+                        Json(ahp_methodology_payload),
+                        data.user_id,
+                        data.history_id,
+                    )
                 )
-            )
+                updated_existing = cursor.rowcount > 0
+
+            if not updated_existing:
+                # Fresh scan (or the referenced saved record no longer exists) - insert a new row.
+                cursor.execute(
+                    """
+                    INSERT INTO analysis_history (
+                        user_id, business_type, viability_score,
+                        target_lat, target_lon, radius_used, insight,
+                        competitors_found, competitor_locations, breakdown, ahp_methodology
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        data.user_id,
+                        business_key,
+                        int(total_score),
+                        data.lat,
+                        data.lon,
+                        data.radius,
+                        generated_insight,
+                        competitors_found,
+                        Json(sanitized_competitors_list),
+                        Json(breakdown_payload),
+                        Json(ahp_methodology_payload)
+                    )
+                )
+
             conn.commit()
             cursor.close()
             conn.close()

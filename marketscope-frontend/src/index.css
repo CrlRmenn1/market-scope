@@ -13,7 +13,7 @@
   /* Core surfaces & ink */
   --bg-app: #fafafa;
   --bg-sheet: #ffffff;
-  --bg-glass: #ffffff; /* legacy name — now solid */
+  --bg-glass: rgba(255, 255, 255, 0.7); /* frosted chrome surface */
   --text-main: #171717;
   --text-muted: #6b7280;
   --border-color: #e5e5e5;
@@ -47,24 +47,30 @@
   --trend-down: #dc2626;
   --trend-down-bg: #fef2f2;
 
-  /* === ELEVATION SYSTEM (solid, minimal) === */
+  /* === ELEVATION SYSTEM (frosted glass accent) === */
   --surface-0-bg: var(--bg-app);
   --surface-0-blur: 0px;
 
-  --surface-1-bg: #ffffff;
-  --surface-1-border: #e5e5e5;
-  --surface-1-blur: 0px;
+  --surface-1-bg: rgba(255, 255, 255, 0.6);
+  --surface-1-border: rgba(255, 255, 255, 0.7);
+  --surface-1-blur: 16px;
   --surface-1-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 
-  --surface-2-bg: #ffffff;
-  --surface-2-border: #e5e5e5;
-  --surface-2-blur: 0px;
+  --surface-2-bg: rgba(255, 255, 255, 0.55);
+  --surface-2-border: rgba(255, 255, 255, 0.7);
+  --surface-2-blur: 20px;
   --surface-2-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 
-  --surface-3-bg: #ffffff;
-  --surface-3-border: #e5e5e5;
-  --surface-3-blur: 0px;
+  --surface-3-bg: rgba(255, 255, 255, 0.75);
+  --surface-3-border: rgba(255, 255, 255, 0.8);
+  --surface-3-blur: 22px;
   --surface-3-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+  /* Solid-ish surface for modal dialogs (guides, confirmations) - needs to
+     stay readable over busy page content behind it, unlike the airier
+     surface-1/2 glass used for nav bars and ambient cards. */
+  --surface-modal-bg: rgba(255, 255, 255, 0.94);
+  --surface-modal-blur: 28px;
 }
 
 :root[data-theme="dark"] {
@@ -72,7 +78,7 @@
 
   --bg-app: #0a0a0a;
   --bg-sheet: #151515;
-  --bg-glass: #151515;
+  --bg-glass: rgba(21, 21, 21, 0.6);
   --text-main: #ededed;
   --text-muted: #8f8f8f;
   --border-color: #262626;
@@ -106,18 +112,21 @@
   --surface-0-bg: var(--bg-app);
   --surface-0-blur: 0px;
 
-  --surface-1-bg: #151515;
-  --surface-1-border: #262626;
-  --surface-1-blur: 0px;
+  --surface-1-bg: rgba(21, 21, 21, 0.55);
+  --surface-1-border: rgba(255, 255, 255, 0.08);
+  --surface-1-blur: 16px;
   --surface-1-shadow: none;
 
-  --surface-2-bg: #171717;
-  --surface-2-border: #262626;
-  --surface-2-blur: 0px;
+  --surface-2-bg: rgba(23, 23, 23, 0.5);
+  --surface-2-border: rgba(255, 255, 255, 0.1);
+  --surface-2-blur: 20px;
   --surface-2-shadow: none;
 
-  --surface-3-bg: #151515;
-  --surface-3-border: #262626;
-  --surface-3-blur: 0px;
+  --surface-3-bg: rgba(21, 21, 21, 0.68);
+  --surface-3-border: rgba(255, 255, 255, 0.12);
+  --surface-3-blur: 22px;
   --surface-3-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  --surface-modal-bg: rgba(18, 18, 18, 0.92);
+  --surface-modal-blur: 28px;
 }

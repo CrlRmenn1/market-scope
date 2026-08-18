@@ -530,6 +530,8 @@ html[data-theme="light"] .zoning-empty-state {
   overflow: hidden;
   border: 1px solid var(--border-color);
   background: var(--zoning-surface);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
 }
 
@@ -555,6 +557,8 @@ html[data-theme="light"] .zoning-empty-state {
   padding: 16px 18px;
   border-radius: 22px;
   background: var(--zoning-surface);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
   color: var(--zoning-text);
   border: 1px solid var(--zoning-border);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);

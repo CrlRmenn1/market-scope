@@ -437,8 +437,30 @@ export default function Report({ data, targetCoords, onClose }) {
                 --text-main: #111827 !important;
                 --text-muted: #4b5563 !important;
                 --border-color: #e5e7eb !important;
+                --surface-1-bg: #ffffff !important;
+                --surface-1-border: #e5e7eb !important;
+                --surface-1-blur: 0px !important;
+                --surface-2-bg: #ffffff !important;
+                --surface-2-border: #e5e7eb !important;
+                --surface-2-blur: 0px !important;
+                --surface-3-bg: #ffffff !important;
+                --surface-3-border: #e5e7eb !important;
+                --surface-3-blur: 0px !important;
                 background: #ffffff !important;
                 color: #111827 !important;
+              }
+              /* Glassmorphism tokens above are re-solidified for export, but
+                 belt-and-suspenders: html2canvas has poor/no backdrop-filter
+                 support, so also strip it explicitly on every card-family and
+                 header surface that could carry it. */
+              .data-card,
+              .main-score-card,
+              .disclaimer-card,
+              .report-map-container,
+              .insight-box,
+              .report-header {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
               }
               .report-page {
                 position: static !important;

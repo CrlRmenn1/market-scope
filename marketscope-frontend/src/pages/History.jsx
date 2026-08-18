@@ -74,6 +74,8 @@ export default function History({ user, onOpenReport }) {
   const [deleteError, setDeleteError] = useState('');
   const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const getCompetitorCount = (item) => {
     if (typeof item?.competitors_found === 'number') return item.competitors_found;
@@ -145,6 +147,7 @@ export default function History({ user, onOpenReport }) {
   useEffect(() => {
     if (!deleteMode) {
       setSelectedHistoryIds([]);
+      setShowBulkDeleteConfirm(false);
     }
   }, [deleteMode]);
 
@@ -191,7 +194,8 @@ export default function History({ user, onOpenReport }) {
                 lon: payload.target_coords?.lng,
                 business_type: payload.business_type,
                 radius: payload.radius_meters || 340,
-                user_id: userId
+                user_id: userId,
+                history_id: item.history_id
               })
             });
 
@@ -331,13 +335,8 @@ export default function History({ user, onOpenReport }) {
   const handleBulkDelete = async () => {
     if (!userId || selectedVisibleHistoryIds.length === 0) return;
 
-    const confirmMessage = selectedVisibleHistoryIds.length === 1
-      ? 'Delete the selected saved analysis?'
-      : `Delete ${selectedVisibleHistoryIds.length} selected saved analyses?`;
-
-    if (!window.confirm(confirmMessage)) return;
-
     setDeleteError('');
+    setBulkDeleting(true);
 
     try {
       const results = await Promise.all(selectedVisibleHistoryIds.map(async (historyId) => {
@@ -363,10 +362,12 @@ export default function History({ user, onOpenReport }) {
         return next;
       });
       setSelectedHistoryIds((current) => current.filter((historyId) => !selectedVisibleHistoryIds.includes(historyId)));
+      setShowBulkDeleteConfirm(false);
+      setDeleteMode(false);
     } catch (error) {
       setDeleteError(error.message || 'Unable to delete selected history items');
     } finally {
-      setDeleteMode(false);
+      setBulkDeleting(false);
     }
   };
 
@@ -432,6 +433,29 @@ export default function History({ user, onOpenReport }) {
     </div>
   ) : null;
 
+  const bulkDeleteConfirmDialog = showBulkDeleteConfirm ? (
+    <div className="history-confirm-overlay" role="presentation" onClick={() => { if (!bulkDeleting) setShowBulkDeleteConfirm(false); }}>
+      <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-bulk-delete-title" onClick={(event) => event.stopPropagation()}>
+        <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Confirm deletion</p>
+        <h3 id="history-bulk-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">
+          Delete {selectedVisibleHistoryIds.length} selected {selectedVisibleHistoryIds.length === 1 ? 'analysis' : 'analyses'}?
+        </h3>
+        <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
+          This removes the selected saved analyses from your history. You can run the same sites again later, but these saved copies will be gone.
+        </p>
+        {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-down-bg)] p-3 text-sm text-[var(--trend-down)]">{deleteError}</p>}
+        <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
+          <button type="button" className="edit-btn inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60" onClick={() => setShowBulkDeleteConfirm(false)} disabled={bulkDeleting}>
+            Cancel
+          </button>
+          <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" onClick={handleBulkDelete} disabled={bulkDeleting || selectedVisibleHistoryIds.length === 0}>
+            {bulkDeleting ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const renderHistoryCard = (item, index) => (
                   <div
                     className={`data-card history-card card-stagger-item p-4 ${selectedHistoryIds.includes(item.history_id) ? 'ring-2 ring-[var(--focus-ring)]' : ''} ${expandedHistoryId === item.history_id ? 'history-card-expanded' : ''}`}
@@ -450,16 +474,12 @@ export default function History({ user, onOpenReport }) {
                       </label>
                     )}
 
-                    <button
-                      type="button"
-                      className="history-card-top history-card-button -m-1 flex w-full items-start justify-between gap-4 rounded-xl p-1 text-left transition hover:bg-[var(--accent-hover)]"
-                      onClick={() => openSavedReport(item)}
-                    >
+                    <div className="history-card-top flex w-full items-start justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="history-title text-lg font-semibold text-[var(--text-main)]">{getBusinessTypeLabel(item.business_type)}</h3>
                         <p className="history-meta mt-0.5 text-sm text-[var(--text-muted)]">{formatDate(item.created_at)}</p>
                       </div>
-                      <div className="flex flex-none flex-col items-end gap-1">
+                      <div className="history-score-block flex flex-none flex-col items-end gap-1">
                         <span
                           className="text-2xl font-bold tabular-nums leading-none text-[var(--text-main)]"
                           aria-label={`Viability score ${item.viability_score} out of 100`}
@@ -468,7 +488,7 @@ export default function History({ user, onOpenReport }) {
                         </span>
                         <span className={`trends-score-badge ${getScoreTone(item.viability_score)}`}>{getScoreLabel(item.viability_score)}</span>
                       </div>
-                    </button>
+                    </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-color)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--text-muted)]">
@@ -649,7 +669,7 @@ export default function History({ user, onOpenReport }) {
                 <button
                   type="button"
                   className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--trend-down-bg)] px-4 py-2.5 text-sm font-medium text-[var(--trend-down)] transition hover:border-[var(--trend-down)] disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={handleBulkDelete}
+                  onClick={() => { setDeleteError(''); setShowBulkDeleteConfirm(true); }}
                   disabled={selectedVisibleHistoryIds.length === 0}
                 >
                   Delete selected
@@ -708,6 +728,7 @@ export default function History({ user, onOpenReport }) {
       )}
 
       {typeof document !== 'undefined' && deleteConfirmDialog && createPortal(deleteConfirmDialog, document.body)}
+      {typeof document !== 'undefined' && bulkDeleteConfirmDialog && createPortal(bulkDeleteConfirmDialog, document.body)}
       </div>
     </div>
   );

@@ -120,8 +120,8 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
   };
 
   return (
-    <div className="trend-pref-modal fixed inset-0 z-[2200] flex items-center justify-center bg-[var(--overlay-scrim)] p-4" role="dialog" aria-modal="true" aria-labelledby="trend-pref-title">
-      <div className="max-h-[calc(100svh-32px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 text-left shadow-lg sm:p-6">
+    <div className="trend-pref-modal fixed inset-0 z-[2200] flex items-center justify-center bg-[var(--overlay-scrim)] backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="trend-pref-title">
+      <div className="max-h-[calc(100svh-32px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--surface-modal-bg)] backdrop-blur-[var(--surface-modal-blur)] p-5 text-left shadow-lg sm:p-6">
         {step === 'intro' ? (
           <div className="animate-[fadeIn_220ms_ease-out]">
             <p className="eyebrow-label mb-2">Trend Page Guide</p>

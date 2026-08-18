@@ -239,6 +239,13 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       mapInstance.current.createPane('previewPane');
       mapInstance.current.getPane('previewPane').style.zIndex = 450;
 
+      // Dedicated pane for the city boundary line so it stays visible on the
+      // Normal Map. The default overlay pane (hazard fill, etc.) is deliberately
+      // dimmed to near-invisible outside Flood Zones mode - see .leaflet-overlay-pane
+      // in App.css - but the boundary line should always show.
+      mapInstance.current.createPane('boundaryPane');
+      mapInstance.current.getPane('boundaryPane').style.zIndex = 410;
+
       tileLayerRef.current = L.tileLayer(getTileUrl(), {
         attribution: TILE_ATTRIBUTION,
         maxZoom: 19
@@ -253,6 +260,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       ];
 
       boundaryLayerRef.current = L.polygon(boundaryCoords, {
+        pane: 'boundaryPane',
         color: getMapInk(),
         weight: 3,
         opacity: 0.8,

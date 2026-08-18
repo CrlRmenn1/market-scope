@@ -137,6 +137,8 @@ a svg,
   background: var(--surface-1-bg);
   border: 1px solid var(--surface-1-border);
   box-shadow: var(--surface-1-shadow);
+  backdrop-filter: blur(var(--surface-1-blur));
+  -webkit-backdrop-filter: blur(var(--surface-1-blur));
   margin-bottom: 22px;
   transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
 }
@@ -148,6 +150,8 @@ a svg,
   background: var(--surface-2-bg);
   border: 1px solid var(--surface-2-border);
   box-shadow: var(--surface-2-shadow);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
   margin-bottom: 22px;
   transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
 }
@@ -207,7 +211,9 @@ a svg,
   position: absolute;
   top: 0; left: 0; right: 0;
   z-index: 1000;
-  background: var(--bg-sheet);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
   padding: max(16px, env(safe-area-inset-top)) 20px 16px;
   border-bottom: 1px solid var(--border-color);
   display: flex; justify-content: space-between; align-items: center;
@@ -311,11 +317,18 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
 
 .settings-dropdown {
   position: absolute; right: 0; top: 100%; margin-top: 12px; width: 220px;
-  background-color: var(--bg-sheet); border: 1px solid var(--border-color);
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid var(--border-color);
   border-radius: 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden; z-index: 50;
   animation: dropPopover 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: top right;
+}
+
+html[data-theme="dark"] .settings-dropdown {
+  background-color: rgba(21, 21, 21, 0.88);
 }
 
 .dropdown-menu { padding: 8px 0; }
@@ -369,7 +382,9 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
    ========================================= */
 .bottom-navbar {
   position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-  width: 92%; max-width: 420px; background: var(--bg-sheet);
+  width: 92%; max-width: 420px; background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   border-radius: 50px;
   border: 1px solid var(--border-color); padding: 8px;
   z-index: 1000; display: flex; box-shadow: var(--surface-3-shadow);
@@ -398,10 +413,20 @@ html[data-theme="light"] .gear-btn:hover, html[data-theme="light"] .gear-btn.act
 /* =========================================
    6. OPEN STREET MAPS & MAP OVERLAYS
    ========================================= */
-/* Map tiles are theme-aware (CARTO light/dark) — no CSS filter needed */
+/* Map tiles are plain colorful OSM raster tiles in both themes; dark mode is
+   achieved with a CSS filter below rather than a separate tile provider. */
 
 html[data-theme="light"] .osm-map-wrapper .leaflet-tile-pane {
   filter: none; transition: filter 0.3s ease;
+}
+
+/* Dark-mode map tiles: invert + hue-rotate flips the colorful OSM basemap to a
+   dark background while keeping roads/water/parks/buildings color-distinct.
+   No API key needed - only affects raster tile images, not our overlay pins,
+   boundary line, or hazard layer (those live in separate Leaflet panes). */
+html[data-theme="dark"] .osm-map-wrapper .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.85) saturate(1.15);
+  transition: filter 0.3s ease;
 }
 
 .leaflet-marker-pane { z-index: 600; }
@@ -409,7 +434,9 @@ html[data-theme="light"] .osm-map-wrapper .leaflet-tile-pane {
 /* Map Legend (collapsible) */
 .map-legend {
   position: absolute; top: 78px; left: 15px; z-index: 400;
-  background: var(--bg-sheet);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   border: 1px solid var(--border-color); padding: 10px 14px 12px;
   border-radius: 12px; box-shadow: var(--surface-3-shadow);
   pointer-events: auto;
@@ -489,7 +516,9 @@ html[data-theme="light"] .osm-map-wrapper .leaflet-tile-pane {
   padding: 3px;
   border-radius: 999px;
   border: 1px solid var(--border-color);
-  background: var(--bg-sheet);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   box-shadow: var(--surface-3-shadow);
   transition: transform 180ms ease, opacity 180ms ease;
 }
@@ -698,7 +727,9 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   z-index: 2600;
   width: min(460px, calc(100vw - 24px));
   border: 1px solid var(--border-color);
-  background: var(--bg-sheet);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   box-shadow: var(--surface-3-shadow);
   border-radius: 16px;
   padding: 16px 18px;
@@ -720,7 +751,9 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid var(--border-color);
-  background: var(--bg-sheet);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 600;
@@ -824,7 +857,7 @@ html[data-theme="light"] .map-quick-panel.is-collapsed:hover {
 }
 
 html[data-theme="light"] .map-quick-panel {
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--bg-glass);
   border-color: rgba(15, 23, 42, 0.08);
 }
 
@@ -1066,12 +1099,13 @@ html[data-theme="light"] .map-quick-panel {
 .sheet-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: var(--overlay-scrim);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   z-index: 20000; display: flex; flex-direction: column;
   justify-content: flex-end; transition: opacity var(--motion-normal) var(--ease-standard);
 }
 
 .bottom-sheet {
-  background: var(--surface-3-bg); backdrop-filter: blur(var(--surface-3-blur)); padding: 35px 24px;
+  background: var(--surface-3-bg); backdrop-filter: blur(var(--surface-3-blur)); -webkit-backdrop-filter: blur(var(--surface-3-blur)); padding: 35px 24px;
   border-top-left-radius: 35px; border-top-right-radius: 35px;
   border-top: 1px solid var(--surface-3-border); box-shadow: var(--surface-3-shadow); width: 100%;
   animation: slideUp 0.42s var(--ease-standard); position: relative;
@@ -1268,7 +1302,8 @@ html[data-theme="light"] .wizard-back-btn {
   justify-content: center;
   padding: 18px;
   background: rgba(2, 6, 23, 0.44);
- 
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   animation: fadeIn 200ms ease-out;
 }
 
@@ -1277,7 +1312,9 @@ html[data-theme="light"] .wizard-back-btn {
   max-height: min(84svh, 760px);
   overflow: hidden;
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(9, 13, 22, 0.96));
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.8), rgba(9, 13, 22, 0.75));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--border-color);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
   position: relative;
@@ -2096,7 +2133,8 @@ html[data-theme="light"] .submission-status-pill.status-archived {
   align-items: center;
   padding: 20px;
   background: var(--bg-glass);
- 
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
@@ -2487,6 +2525,8 @@ html[data-theme="light"] .task-item { background: rgba(0,0,0,0.03); }
 .insight-box {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   padding: 20px;
   border-radius: 16px;
   margin-bottom: 24px;
@@ -2584,6 +2624,25 @@ html[data-theme="light"] .task-item { background: rgba(0,0,0,0.03); }
     --text-main: #111827 !important;
     --text-muted: #6b7280 !important;
     --border-color: #e5e7eb !important;
+    --surface-1-bg: #ffffff !important;
+    --surface-1-border: #e5e7eb !important;
+    --surface-1-blur: 0px !important;
+    --surface-2-bg: #ffffff !important;
+    --surface-2-border: #e5e7eb !important;
+    --surface-2-blur: 0px !important;
+    --surface-3-bg: #ffffff !important;
+    --surface-3-border: #e5e7eb !important;
+    --surface-3-blur: 0px !important;
+  }
+
+  .data-card,
+  .main-score-card,
+  .disclaimer-card,
+  .report-map-container,
+  .insight-box,
+  .report-header {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* Hide UI elements that shouldn't be on paper */
@@ -2947,7 +3006,6 @@ html[data-theme="light"] .task-item { background: rgba(0,0,0,0.03); }
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.history-page .history-card-button:hover,
 .admin-page .admin-tab-btn.active,
 .profile-page .settings-item:hover,
 .history-page .history-open-btn:hover {
@@ -2980,7 +3038,8 @@ html[data-theme="light"] .task-item { background: rgba(0,0,0,0.03); }
   border: 1px solid var(--border-color);
   border-radius: 999px;
   background: var(--bg-glass);
- 
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -3372,9 +3431,11 @@ html[data-theme="light"] .admin-success-alert {
 }
 
 html[data-theme="light"] .profile-card {
-  background: var(--bg-sheet);
+  background: var(--surface-2-bg);
   border-color: var(--surface-2-border);
   box-shadow: var(--surface-2-shadow);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
 }
 
 .profile-hero-card {
@@ -3771,6 +3832,30 @@ html[data-theme="light"] .admin-page .input-group input[type="date"]::-webkit-ca
   gap: 12px;
 }
 
+/* .input-group input/select (legacy admin-form styling) has higher CSS
+   specificity than the Tailwind size utilities on these two controls, so it
+   was overriding their padding and inflating them taller than the 44px
+   Delete button next to them. Pin the intended sizing back so all three
+   controls in this row line up. */
+.history-tools-grid .history-search-input,
+.history-tools-grid .app-select {
+  min-height: 44px;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+}
+
+.history-tools-grid .history-search-input {
+  padding-left: 2.5rem;
+}
+
+.history-tools-grid .app-select {
+  padding-right: 2.375rem;
+}
+
 .history-tools-card .input-group label,
 .admin-tools-card .input-group label {
   color: var(--text-muted);
@@ -3884,15 +3969,6 @@ html[data-theme="dark"] .text-slate-500 {
 
 .history-card {
   text-align: left;
-}
-
-.history-card-button {
-  width: 100%;
-  background: transparent;
-  border: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
 }
 
 .history-card-top {
@@ -4214,7 +4290,8 @@ html[data-theme="light"] .trends-score-badge.low {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
- 
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4226,7 +4303,9 @@ html[data-theme="light"] .trends-score-badge.low {
   width: min(92vw, 420px);
   max-height: calc(100svh - 32px);
   overflow-y: auto;
-  background: var(--bg-sheet);
+  background: var(--surface-modal-bg);
+  backdrop-filter: blur(var(--surface-modal-blur));
+  -webkit-backdrop-filter: blur(var(--surface-modal-blur));
   border: 1px solid var(--border-color);
   border-radius: 20px;
   padding: 18px;
@@ -4282,19 +4361,21 @@ html[data-theme="light"] .trends-score-badge.low {
   inset: 0;
   z-index: 13000;
   background: rgba(2, 6, 23, 0.62);
- 
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   opacity: 0;
- 
+
   transition: opacity 320ms var(--ease-standard), backdrop-filter 320ms var(--ease-standard);
 }
 
 .onboarding-overlay.is-visible {
   opacity: 1;
- 
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .onboarding-modal {
@@ -4302,7 +4383,9 @@ html[data-theme="light"] .trends-score-badge.low {
   overflow-y: auto;
 
   width: min(92vw, 430px);
-  background: var(--bg-sheet);
+  background: var(--surface-2-bg);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
   border: 1px solid var(--border-color);
   border-radius: 20px;
   padding: 18px;
@@ -4620,10 +4703,6 @@ html[data-theme="light"] .trends-score-badge.low {
     border-radius: 20px;
   }
 
-  .history-card-top {
-    flex-direction: column;
-  }
-
   .history-actions-row {
     flex-direction: row;
     gap: 8px;
@@ -4632,10 +4711,28 @@ html[data-theme="light"] .trends-score-badge.low {
   .history-open-btn,
   .history-delete-btn {
     min-width: 0;
-    flex: 1 1 calc(50% - 4px);
     padding: 8px 10px;
     font-size: 0.78rem;
     border-radius: 10px;
+  }
+
+  /* Swap visual order/sizing on mobile only: Open report + Delete share the
+     top row (Open slightly bigger), Breakdown takes the full-width row below.
+     DOM order stays Open/Breakdown/Delete, so desktop (.history-delete-btn
+     keeps ml-auto there) is unaffected. */
+  .history-open-btn {
+    flex: 3 1 0%;
+  }
+
+  .history-delete-btn {
+    flex: 2 1 0%;
+    order: 2;
+  }
+
+  .history-breakdown-toggle {
+    flex: 1 1 100%;
+    order: 3;
+    justify-content: center;
   }
 
   .profile-badge {
@@ -4723,7 +4820,9 @@ html[data-theme="light"] .trends-score-badge.low {
   margin: 0 auto;
   width: min(340px, calc(100vw - 24px));
   z-index: 2700;
-  background: var(--bg-sheet);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
   border: 1px solid var(--border-color);
   border-radius: 14px;
   box-shadow: var(--surface-3-shadow);
