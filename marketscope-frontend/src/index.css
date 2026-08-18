@@ -13,7 +13,7 @@
   /* Core surfaces & ink */
   --bg-app: #fafafa;
   --bg-sheet: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.92); /* frosted chrome surface */
+  --bg-glass: rgba(255, 255, 255, 0.7); /* frosted chrome surface */
   --text-main: #171717;
   --text-muted: #6b7280;
   --border-color: #e5e5e5;
@@ -58,12 +58,12 @@
 
   --surface-2-bg: rgba(255, 255, 255, 0.55);
   --surface-2-border: rgba(255, 255, 255, 0.7);
-  --surface-2-blur: 20px;
+  --surface-2-blur: 36px;
   --surface-2-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 
   --surface-3-bg: rgba(255, 255, 255, 0.75);
   --surface-3-border: rgba(255, 255, 255, 0.8);
-  --surface-3-blur: 22px;
+  --surface-3-blur: 40px;
   --surface-3-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 
   /* Solid-ish surface for modal dialogs (guides, confirmations) - needs to
@@ -78,7 +78,7 @@
 
   --bg-app: #0a0a0a;
   --bg-sheet: #151515;
-  --bg-glass: rgba(21, 21, 21, 0.92);
+  --bg-glass: rgba(21, 21, 21, 0.6);
   --text-main: #ededed;
   --text-muted: #8f8f8f;
   --border-color: #262626;
@@ -119,12 +119,12 @@
 
   --surface-2-bg: rgba(23, 23, 23, 0.5);
   --surface-2-border: rgba(255, 255, 255, 0.1);
-  --surface-2-blur: 20px;
+  --surface-2-blur: 36px;
   --surface-2-shadow: none;
 
   --surface-3-bg: rgba(21, 21, 21, 0.68);
   --surface-3-border: rgba(255, 255, 255, 0.12);
-  --surface-3-blur: 22px;
+  --surface-3-blur: 40px;
   --surface-3-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 
   --surface-modal-bg: rgba(18, 18, 18, 0.92);
