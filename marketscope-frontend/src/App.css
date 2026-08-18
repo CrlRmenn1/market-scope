@@ -734,6 +734,7 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   background: var(--bg-glass);
   backdrop-filter: blur(var(--surface-3-blur));
   -webkit-backdrop-filter: blur(var(--surface-3-blur));
+  text-shadow: var(--glass-text-shadow);
   box-shadow: var(--surface-3-shadow);
   border-radius: 16px;
   padding: 16px 18px;
@@ -2140,6 +2141,7 @@ html[data-theme="light"] .submission-status-pill.status-archived {
   background: var(--bg-glass);
   backdrop-filter: blur(var(--surface-2-blur));
   -webkit-backdrop-filter: blur(var(--surface-2-blur));
+  text-shadow: var(--glass-text-shadow);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
@@ -3045,6 +3047,7 @@ html[data-theme="light"] .task-item { background: rgba(0,0,0,0.03); }
   background: var(--bg-glass);
   backdrop-filter: blur(var(--surface-3-blur));
   -webkit-backdrop-filter: blur(var(--surface-3-blur));
+  text-shadow: var(--glass-text-shadow);
   overflow-x: auto;
   scrollbar-width: none;
 }
