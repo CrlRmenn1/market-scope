@@ -13,7 +13,7 @@
   /* Core surfaces & ink */
   --bg-app: #fafafa;
   --bg-sheet: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.7); /* frosted chrome surface */
+  --bg-glass: rgba(255, 255, 255, 0.92); /* frosted chrome surface */
   --text-main: #171717;
   --text-muted: #6b7280;
   --border-color: #e5e5e5;
@@ -78,7 +78,7 @@
 
   --bg-app: #0a0a0a;
   --bg-sheet: #151515;
-  --bg-glass: rgba(21, 21, 21, 0.6);
+  --bg-glass: rgba(21, 21, 21, 0.92);
   --text-main: #ededed;
   --text-muted: #8f8f8f;
   --border-color: #262626;
