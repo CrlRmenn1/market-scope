@@ -764,15 +764,21 @@ export default function Report({ data, targetCoords, onClose }) {
         </div>
 
         {/* STRATEGIC INSIGHT BOX */}
-        <div className="report-insights-grid grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div className="insight-box data-card mt-5 p-5 lg:mt-0 lg:mb-0">
+        {/* Stacked full-width rather than a 2-column grid: Strategic Recommendation
+            is always short and the AI narrative can run very long, so forcing them
+            into equal-width columns left a short card sitting next to a much taller
+            one - stacking lets each size to its own content instead. Also avoids
+            ever needing an internal scrollbar on the narrative, which would silently
+            clip content in the PDF export (html2pdf captures this whole section). */}
+        <div className="report-insights-grid flex flex-col gap-4">
+        <div className="insight-box data-card mt-5 p-5">
           <h4 className="eyebrow-label mb-3">Strategic Recommendation</h4>
           <p className="insight-text text-sm leading-6 text-[var(--text-main)]">
             {insight ? insight : "Processing strategic recommendation based on geospatial parameters..."}
           </p>
         </div>
 
-        <div className="insight-box data-card mt-5 p-5 lg:mt-0 lg:mb-0">
+        <div className="insight-box data-card p-5">
           <h4 className="eyebrow-label mb-3">AI Feasibility Narrative</h4>
           {aiError && (
             <p className="mb-3 text-sm text-[var(--trend-down)]">{aiError}</p>
