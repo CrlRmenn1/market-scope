@@ -217,6 +217,7 @@ a svg,
   padding: max(16px, env(safe-area-inset-top)) 20px 16px;
   border-bottom: 1px solid var(--border-color);
   display: flex; justify-content: space-between; align-items: center;
+  text-shadow: var(--glass-text-shadow);
 }
 
 .app-header.app-header-minimal {
@@ -389,6 +390,7 @@ html[data-theme="dark"] .settings-dropdown {
   border: 1px solid var(--border-color); padding: 8px;
   z-index: 1000; display: flex; box-shadow: var(--surface-3-shadow);
   overflow: hidden;
+  text-shadow: var(--glass-text-shadow);
 }
 
 .fluid-indicator {
@@ -440,6 +442,7 @@ html[data-theme="dark"] .osm-map-wrapper .leaflet-tile-pane {
   border: 1px solid var(--border-color); padding: 10px 14px 12px;
   border-radius: 12px; box-shadow: var(--surface-3-shadow);
   pointer-events: auto;
+  text-shadow: var(--glass-text-shadow);
   transform-origin: left top;
   animation: modeSlideIn 220ms ease both;
 }
@@ -519,6 +522,7 @@ html[data-theme="dark"] .osm-map-wrapper .leaflet-tile-pane {
   background: var(--bg-glass);
   backdrop-filter: blur(var(--surface-3-blur));
   -webkit-backdrop-filter: blur(var(--surface-3-blur));
+  text-shadow: var(--glass-text-shadow);
   box-shadow: var(--surface-3-shadow);
   transition: transform 180ms ease, opacity 180ms ease;
 }
@@ -754,6 +758,7 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   background: var(--bg-glass);
   backdrop-filter: blur(var(--surface-3-blur));
   -webkit-backdrop-filter: blur(var(--surface-3-blur));
+  text-shadow: var(--glass-text-shadow);
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 600;
@@ -4823,6 +4828,7 @@ html[data-theme="light"] .trends-score-badge.low {
   background: var(--bg-glass);
   backdrop-filter: blur(var(--surface-3-blur));
   -webkit-backdrop-filter: blur(var(--surface-3-blur));
+  text-shadow: var(--glass-text-shadow);
   border: 1px solid var(--border-color);
   border-radius: 14px;
   box-shadow: var(--surface-3-shadow);

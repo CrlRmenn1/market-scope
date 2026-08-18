@@ -14,6 +14,9 @@
   --bg-app: #fafafa;
   --bg-sheet: #ffffff;
   --bg-glass: rgba(255, 255, 255, 0.7); /* frosted chrome surface */
+  /* Keeps text legible on glass surfaces regardless of what's blurred behind
+     them - blur alone can't guarantee contrast against a busy map. */
+  --glass-text-shadow: 0 1px 3px rgba(255, 255, 255, 0.65), 0 1px 1px rgba(255, 255, 255, 0.4);
   --text-main: #171717;
   --text-muted: #6b7280;
   --border-color: #e5e5e5;
@@ -79,6 +82,7 @@
   --bg-app: #0a0a0a;
   --bg-sheet: #151515;
   --bg-glass: rgba(21, 21, 21, 0.6);
+  --glass-text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75), 0 1px 1px rgba(0, 0, 0, 0.5);
   --text-main: #ededed;
   --text-muted: #8f8f8f;
   --border-color: #262626;
