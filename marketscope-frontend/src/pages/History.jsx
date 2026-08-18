@@ -1,8 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiUrl } from '../api';
 import { getBusinessTypeKey, getBusinessTypeLabel } from '../utils/businessTypes';
 import useIsDesktop from '../utils/useIsDesktop';
+
+// Floor so a very fast (e.g. cache-adjacent) fetch doesn't flash the loading
+// modal open-and-closed; cache hits skip the modal entirely (see openSavedReport).
+const MIN_OPENING_MODAL_MS = 300;
 
 const formatDate = (value) => {
   if (!value) return 'Unknown date';
@@ -60,7 +64,7 @@ const groupHistoryByDate = (items) => {
   return groups;
 };
 
-export default function History({ user, onOpenReport }) {
+export default function History({ user, onOpenReport, getCachedReport, onCacheReport, onEvictCachedReports }) {
   const userId = user?.user_id || user?.id;
   const [history, setHistory] = useState([]);
   const [historySearchTerm, setHistorySearchTerm] = useState('');
@@ -70,6 +74,8 @@ export default function History({ user, onOpenReport }) {
   const [expandedFactorKeyByHistoryId, setExpandedFactorKeyByHistoryId] = useState({});
   const [deletingHistoryId, setDeletingHistoryId] = useState(null);
   const [openingHistoryId, setOpeningHistoryId] = useState(null);
+  const [isOpeningModalVisible, setIsOpeningModalVisible] = useState(false);
+  const openingStartedAtRef = useRef(0);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
@@ -172,7 +178,17 @@ export default function History({ user, onOpenReport }) {
       return;
     }
 
+    // Already fetched (and fully resolved) this session - skip the network
+    // entirely, no loading modal needed since there's nothing to wait for.
+    const cached = getCachedReport?.(item.history_id);
+    if (cached) {
+      onOpenReport?.(cached);
+      return;
+    }
+
     setOpeningHistoryId(item.history_id);
+    setIsOpeningModalVisible(true);
+    openingStartedAtRef.current = Date.now();
     try {
       const response = await fetch(apiUrl(`/users/${userId}/history/${item.history_id}`), { cache: 'no-store' });
       const data = await response.json();
@@ -201,12 +217,16 @@ export default function History({ user, onOpenReport }) {
 
             const analyzeData = await analyzeResp.json();
             if (analyzeResp.ok && analyzeData) {
+              onCacheReport?.(item.history_id, analyzeData);
               onOpenReport?.(analyzeData);
               return;
             }
           } catch (err) {
-            // Fall back to saved payload below
+            // Legacy re-scan failed - fall back to the saved (still-legacy) payload below,
+            // and deliberately don't cache it, so the next open retries the self-heal.
           }
+        } else {
+          onCacheReport?.(item.history_id, payload);
         }
 
         onOpenReport?.(payload);
@@ -217,6 +237,13 @@ export default function History({ user, onOpenReport }) {
       onOpenReport?.(buildReportPayload(item));
     } finally {
       setOpeningHistoryId(null);
+      const elapsed = Date.now() - openingStartedAtRef.current;
+      const remaining = MIN_OPENING_MODAL_MS - elapsed;
+      if (remaining > 0) {
+        setTimeout(() => setIsOpeningModalVisible(false), remaining);
+      } else {
+        setIsOpeningModalVisible(false);
+      }
     }
   };
 
@@ -294,6 +321,7 @@ export default function History({ user, onOpenReport }) {
       }
 
       setHistory((current) => current.filter((entry) => entry.history_id !== item.history_id));
+      onEvictCachedReports?.(item.history_id);
       setSelectedHistoryIds((current) => current.filter((historyId) => historyId !== item.history_id));
       setExpandedHistoryId((current) => (current === item.history_id ? null : current));
       setExpandedFactorKeyByHistoryId((current) => {
@@ -353,6 +381,7 @@ export default function History({ user, onOpenReport }) {
       }
 
       setHistory((current) => current.filter((entry) => !selectedVisibleHistoryIds.includes(entry.history_id)));
+      onEvictCachedReports?.(selectedVisibleHistoryIds);
       setExpandedHistoryId((current) => (selectedVisibleHistoryIds.includes(current) ? null : current));
       setExpandedFactorKeyByHistoryId((current) => {
         const next = { ...current };
@@ -456,6 +485,22 @@ export default function History({ user, onOpenReport }) {
     </div>
   ) : null;
 
+  const openingReportDialog = isOpeningModalVisible ? (
+    <div className="history-confirm-overlay" role="presentation">
+      <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-opening-title">
+        <div className="map-scan-loading">
+          <p id="history-opening-title" className="map-scan-loading__title">Opening your saved analysis&hellip;</p>
+          <div className="loading-taskbar">
+            <div className="task-item delay-1">
+              <span className="task-text">Fetching saved report</span>
+              <span className="task-spinner" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const renderHistoryCard = (item, index) => (
                   <div
                     className={`data-card history-card card-stagger-item p-4 ${selectedHistoryIds.includes(item.history_id) ? 'ring-2 ring-[var(--focus-ring)]' : ''} ${expandedHistoryId === item.history_id ? 'history-card-expanded' : ''}`}
@@ -512,8 +557,9 @@ export default function History({ user, onOpenReport }) {
                     <div className="history-actions-row mt-4 flex items-center gap-2 border-t border-[var(--border-color)] pt-3">
                       <button
                         type="button"
-                        className="history-open-btn inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
+                        className="history-open-btn inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                         onClick={() => openSavedReport(item)}
+                        disabled={openingHistoryId === item.history_id}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                           <path d="M14 3h7v7" /><path d="M21 3 10 14" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -729,6 +775,7 @@ export default function History({ user, onOpenReport }) {
 
       {typeof document !== 'undefined' && deleteConfirmDialog && createPortal(deleteConfirmDialog, document.body)}
       {typeof document !== 'undefined' && bulkDeleteConfirmDialog && createPortal(bulkDeleteConfirmDialog, document.body)}
+      {typeof document !== 'undefined' && openingReportDialog && createPortal(openingReportDialog, document.body)}
       </div>
     </div>
   );

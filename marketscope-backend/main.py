@@ -785,11 +785,20 @@ def _source_confidence_multiplier(source_name, confidence_score=None):
     return base * confidence_scale
 
 
-def fetch_verified_local_features(feature_kind=None, business_type=None, active_only=True):
+def fetch_verified_local_features(feature_kind=None, business_type=None, active_only=True, cursor=None):
+    # When a cursor is supplied, the caller owns the connection (and is
+    # responsible for having already ensured the table exists) - this lets
+    # callers that need several of these in a row (e.g.
+    # evaluate_layered_market_context) share one connection instead of each
+    # call opening/closing its own. Callers that don't pass one get today's
+    # exact behavior, unchanged.
+    owns_connection = cursor is None
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        ensure_verified_local_features_table(cursor)
+        if owns_connection:
+            conn = psycopg2.connect(**DB_CONFIG)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            ensure_verified_local_features_table(cursor)
 
         query = [
             "SELECT id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at",
@@ -814,8 +823,9 @@ def fetch_verified_local_features(feature_kind=None, business_type=None, active_
         query.append("ORDER BY updated_at DESC, created_at DESC, id DESC")
         cursor.execute("\n".join(query), params)
         rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        if conn is not None:
+            cursor.close()
+            conn.close()
         return rows
     except Exception as e:
         print(f"Verified local feature fetch error: {e}")
@@ -1960,11 +1970,28 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
     verified_anchors = []
     verified_buildings = []
 
+    # Share one DB connection across the several verified-feature/custom-MSME
+    # lookups below instead of each one opening/closing its own (this used to
+    # be up to 5 fresh connections - plus a 13-statement schema-ensure re-run
+    # on every one of them - per /analyze call). If the shared connection
+    # can't be opened, shared_cursor stays None and every call below falls
+    # back to opening its own connection, exactly like before this change.
+    shared_conn = None
+    shared_cursor = None
     try:
-        verified_competitors = fetch_verified_local_features("msme", business_type=business_type)
-        verified_roads = fetch_verified_local_features("road")
-        verified_anchors = fetch_verified_local_features("anchor")
-        verified_buildings = fetch_verified_local_features("building")
+        shared_conn = psycopg2.connect(**DB_CONFIG)
+        shared_cursor = shared_conn.cursor(cursor_factory=RealDictCursor)
+        ensure_verified_local_features_table(shared_cursor)
+    except Exception as exc:
+        print(f"Shared DB connection for market context failed, falling back to per-call connections: {exc}")
+        shared_conn = None
+        shared_cursor = None
+
+    try:
+        verified_competitors = fetch_verified_local_features("msme", business_type=business_type, cursor=shared_cursor)
+        verified_roads = fetch_verified_local_features("road", cursor=shared_cursor)
+        verified_anchors = fetch_verified_local_features("anchor", cursor=shared_cursor)
+        verified_buildings = fetch_verified_local_features("building", cursor=shared_cursor)
 
         for shop in verified_competitors:
             _append_competitor_if_within_radius(
@@ -2006,7 +2033,7 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
 
     custom_competitors = []
     try:
-        custom_competitors = fetch_custom_msmes(business_type)
+        custom_competitors = fetch_custom_msmes(business_type, cursor=shared_cursor)
         for shop in custom_competitors:
             _append_competitor_if_within_radius(
                 competitors_list,
@@ -2019,6 +2046,11 @@ def evaluate_layered_market_context(lat, lon, radius_meters, business_type):
             )
     except Exception as exc:
         print(f"Custom MSME competitor scan error: {exc}")
+    finally:
+        if shared_cursor is not None:
+            shared_cursor.close()
+        if shared_conn is not None:
+            shared_conn.close()
 
     if not competitors_list:
         for competitor in get_name_keyword_pbf_competitors(business_type):
@@ -2352,14 +2384,17 @@ def _append_competitor_if_within_radius(competitors_list, dedupe_keys, source_it
     })
 
 
-def fetch_custom_msmes(business_key):
+def fetch_custom_msmes(business_key, cursor=None):
+    conn = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if cursor is None:
+            conn = psycopg2.connect(**DB_CONFIG)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT name, latitude, longitude FROM custom_msme WHERE business_type = %s", (business_key,))
         results = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        if conn is not None:
+            cursor.close()
+            conn.close()
         return results
     except Exception as e:
         print(f"Database Error: {e}")

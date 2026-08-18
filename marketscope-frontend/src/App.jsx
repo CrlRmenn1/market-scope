@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthPages from './AuthPages';
 import Header from './components/Header';
 import Home from './pages/Home';
@@ -63,6 +63,22 @@ export default function App() {
 
   const clearOpenReport = () => {
     localStorage.removeItem(OPEN_REPORT_KEY);
+  };
+
+  // Session-lived cache of resolved history reports, keyed by history_id.
+  // History unmounts on every tab switch, so this has to live up here to
+  // survive "open a report, check Trends, come back" - a plain useState/ref
+  // inside History itself would be wiped each time.
+  const reportCacheRef = useRef(new Map());
+
+  const getCachedHistoryReport = (historyId) => (historyId ? reportCacheRef.current.get(historyId) || null : null);
+
+  const cacheHistoryReport = (historyId, payload) => {
+    if (historyId) reportCacheRef.current.set(historyId, payload);
+  };
+
+  const evictCachedHistoryReports = (historyIds) => {
+    (Array.isArray(historyIds) ? historyIds : [historyIds]).forEach((id) => reportCacheRef.current.delete(id));
   };
 
   useEffect(() => {
@@ -220,6 +236,7 @@ export default function App() {
     localStorage.removeItem('marketscope_session');
     localStorage.removeItem('marketscope_active_tab');
     clearOpenReport();
+    reportCacheRef.current = new Map();
     setSession(null);
     setShowOnboarding(false);
     setJustLoggedOut(true);
@@ -348,12 +365,18 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'history' && <History user={session} onOpenReport={(payload) => {
-          const coords = payload.target_coords || null;
-          setSelectedCoords(coords);
-          setReportData(payload);
-          saveOpenReport(payload, coords);
-        }} />}
+        {activeTab === 'history' && <History
+          user={session}
+          onOpenReport={(payload) => {
+            const coords = payload.target_coords || null;
+            setSelectedCoords(coords);
+            setReportData(payload);
+            saveOpenReport(payload, coords);
+          }}
+          getCachedReport={getCachedHistoryReport}
+          onCacheReport={cacheHistoryReport}
+          onEvictCachedReports={evictCachedHistoryReports}
+        />}
 
         {reportData && (
           <Report 
