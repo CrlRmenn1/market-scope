@@ -340,7 +340,11 @@ export default function App() {
       />
 
       <main className={`${appContentClass} ${reportData ? 'overflow-hidden' : ''}`}>
-        {activeTab === 'home' && (
+        {/* Kept mounted (hidden via CSS instead of unmounted) whenever the user has a
+            session, so switching tabs and back doesn't tear down and rebuild the whole
+            Leaflet map (tiles, markers, hazard layer) from scratch every time - that
+            was showing up as the map "disappearing" and reloading on every visit. */}
+        <div style={{ display: activeTab === 'home' ? 'block' : 'none', height: '100%' }}>
           <Home
             onViewReport={handleViewReport}
             theme={theme}
@@ -349,9 +353,10 @@ export default function App() {
             onSpaceDetailOpenChange={setIsSpaceDetailOpen}
             tourActive={tourActive}
             onTourEnd={() => setTourActive(false)}
+            isActive={activeTab === 'home'}
           />
-        )}
-        
+        </div>
+
         {activeTab === 'profile' && <Profile user={session} onProfileUpdate={handleProfileUpdate} />}
 
         {activeTab === 'trends' && (

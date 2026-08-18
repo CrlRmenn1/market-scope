@@ -56,7 +56,7 @@ const getHazardStyle = (hazardVar) => {
   };
 };
 
-export default function Home({ onViewReport, theme, userId, previewSelection, onSpaceDetailOpenChange, tourActive = false, onTourEnd }) {
+export default function Home({ onViewReport, theme, userId, previewSelection, onSpaceDetailOpenChange, tourActive = false, onTourEnd, isActive = true }) {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
@@ -119,6 +119,19 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     setMapViewMode('normal');
     setLocationUpdated(true);
   }, [previewSelection]);
+
+  // Home now stays mounted (hidden via CSS) instead of unmounting on tab
+  // switch, so the Leaflet map instance survives. Leaflet can't measure a
+  // display:none container correctly, so it needs an explicit nudge to
+  // recompute its size whenever this tab becomes visible again - otherwise
+  // the map renders with stale/zero dimensions until the user pans or zooms.
+  useEffect(() => {
+    if (!isActive || !mapInstance.current) return;
+    const timer = setTimeout(() => {
+      mapInstance.current?.invalidateSize();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [isActive]);
 
   const normalizePhotoUrls = (marker) => {
     const rawPhotos = Array.isArray(marker?.photo_urls) ? marker.photo_urls : [];
