@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import Modal from './Modal';
 
 const highlights = [
   {
@@ -34,26 +35,15 @@ const highlights = [
 ];
 
 export default function OnboardingModal({ isOpen, onClose, onStartTour }) {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      const frame = window.requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-      return () => {
-        window.cancelAnimationFrame(frame);
-      };
-    }
-
-    setIsVisible(false);
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
   return (
-    <div className={`onboarding-overlay ${isVisible ? 'is-visible' : ''}`} role="presentation" onClick={() => onClose()}>
-      <div className="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" onClick={(event) => event.stopPropagation()}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      variant="center"
+      overlayClassName="onboarding-overlay"
+      panelClassName="onboarding-modal"
+      ariaLabelledBy="onboarding-title"
+    >
         <div className="onboarding-step-card">
           <div className="brand-mark mx-auto mb-4" aria-hidden="true">
             <div className="lens-left" />
@@ -102,7 +92,6 @@ export default function OnboardingModal({ isOpen, onClose, onStartTour }) {
             I'll explore on my own
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
