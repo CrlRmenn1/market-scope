@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { apiUrl } from '../api';
+import Modal from './Modal';
 
 const REQUIRED_FIELDS = [
   'primary_business',
@@ -44,7 +45,7 @@ const normalizeField = (value) => {
 
 const getMissingFields = (profile) => REQUIRED_FIELDS.filter((field) => normalizeField(profile?.[field]) === null);
 
-export default function TrendPreferencesGate({ user, missingFields, onSaved, onLater }) {
+export default function TrendPreferencesGate({ isOpen, user, missingFields, onSaved, onLater }) {
   const userId = user?.user_id || user?.id;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -120,8 +121,13 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
   };
 
   return (
-    <div className="trend-pref-modal fixed inset-0 z-[2200] flex items-center justify-center bg-[var(--overlay-scrim)] backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="trend-pref-title">
-      <div className="max-h-[calc(100svh-32px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--surface-modal-bg)] backdrop-blur-[var(--surface-modal-blur)] p-5 text-left shadow-lg sm:p-6">
+    <Modal
+      isOpen={isOpen}
+      variant="center"
+      overlayClassName="trend-pref-modal fixed inset-0 z-[2200] flex items-center justify-center bg-[var(--overlay-scrim)] backdrop-blur-sm p-4"
+      panelClassName="max-h-[calc(100svh-32px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border-color)] bg-[var(--surface-modal-bg)] backdrop-blur-[var(--surface-modal-blur)] p-5 text-left shadow-lg sm:p-6"
+      ariaLabelledBy="trend-pref-title"
+    >
         {step === 'intro' ? (
           <div className="animate-[fadeIn_220ms_ease-out]">
             <p className="eyebrow-label mb-2">Trend Page Guide</p>
@@ -220,7 +226,6 @@ export default function TrendPreferencesGate({ user, missingFields, onSaved, onL
             </div>
           </form>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
