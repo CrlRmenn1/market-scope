@@ -12,7 +12,7 @@
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
   overflow: hidden;
   overflow-x: hidden;
-  transition: background-color 0.3s ease;
+  transition: background-color var(--motion-normal) var(--ease-standard);
   overscroll-behavior: none;
 }
 
@@ -106,19 +106,19 @@
   touch-action: pan-y;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
-  transition: background-color 0.3s ease;
+  transition: background-color var(--motion-normal) var(--ease-standard);
 }
 
-.auth-form-wrapper .fade-in {
+.auth-form-wrapper .auth-card {
   width: 100%;
   max-width: 440px;
 }
 
-.auth-form-wrapper .fade-in > h2 {
+.auth-form-wrapper .auth-card > h2 {
   color: var(--text-main);
 }
 
-.auth-form-wrapper .fade-in > p,
+.auth-form-wrapper .auth-card > p,
 .auth-subtitle {
   color: var(--text-muted);
 }
@@ -292,7 +292,7 @@
     padding-bottom: max(104px, calc(env(safe-area-inset-bottom) + 104px));
   }
 
-  .auth-form-wrapper .fade-in {
+  .auth-form-wrapper .auth-card {
     max-width: none;
     background: transparent;
     border: none;
@@ -303,30 +303,30 @@
     box-shadow: none;
   }
 
-  .auth-form-wrapper .fade-in > h2 {
+  .auth-form-wrapper .auth-card > h2 {
     font-size: 1.65rem;
     margin-bottom: 8px;
   }
 
-  .auth-form-wrapper .fade-in > p {
+  .auth-form-wrapper .auth-card > p {
     margin-bottom: 14px;
   }
 
-  .auth-form-wrapper .fade-in h2 {
+  .auth-form-wrapper .auth-card h2 {
     font-size: 1.7rem;
     line-height: 1.05;
   }
 
-  .auth-form-wrapper .fade-in p {
+  .auth-form-wrapper .auth-card p {
     font-size: 0.95rem;
     line-height: 1.45;
   }
 
-  .input-group {
+  .auth-form-wrapper .input-group {
     margin-bottom: 16px;
   }
 
-  .input-group input {
+  .auth-form-wrapper .input-group input {
     padding: 12px 13px;
     border-radius: 13px;
     font-size: 0.94rem;
@@ -382,7 +382,7 @@
     padding-right: 28px;
   }
 
-  .auth-container.view-landing .auth-form-wrapper .fade-in {
+  .auth-container.view-landing .auth-form-wrapper .auth-card {
     margin-top: 0;
     margin-bottom: 0;
   }
@@ -395,14 +395,16 @@
    2. CARDS & TYPOGRAPHY
    ========================================= */
 .auth-card {
-  width: 100%;
-  max-width: 440px;
-  background-color: var(--bg-sheet);
-  padding: 48px 40px;
+  /* Sizing/spacing stays owned by the Tailwind classes on authPanelClass
+     (w-full max-w-[520px] p-6 sm:p-8) — this class only owns the surface
+     identity, so it doesn't fight those or drift out of sync with them. */
+  background: var(--surface-modal-bg);
+  backdrop-filter: blur(var(--surface-modal-blur));
+  -webkit-backdrop-filter: blur(var(--surface-modal-blur));
   border-radius: 16px;
   border: 1px solid var(--border-color);
-  box-shadow: var(--surface-1-shadow);
-  transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  transition: background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard);
 }
 
 .landing-brand-container { text-align: center; }
@@ -450,36 +452,34 @@
   font-weight: 600;
   cursor: pointer;
   padding: 0;
-  transition: color 0.2s;
+  transition: color var(--motion-normal) var(--ease-standard);
 }
 .back-link:hover { color: var(--text-main); }
 
 /* =========================================
    3. FORMS & INPUTS
    ========================================= */
-.input-group {
+/* Scoped to .auth-form-wrapper: these used to be bare/global, which both
+   let App.css's own bare .input-group rules win the cascade tie on this
+   page (Auth.css loads first in the bundle, so on equal specificity the
+   later App.css rule wins) and leaked Auth.css's values onto every other
+   page's .input-group (Home's quick-panel, SpaceSubmissionModal, etc). */
+.auth-form-wrapper .input-group {
   display: flex;
   flex-direction: column;
   margin-bottom: 24px;
 }
 
-.input-group label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.input-group input {
+.auth-form-wrapper .input-group input {
   padding: 16px;
   border-radius: 12px;
   border: 1px solid var(--border-color);
   font-size: 1rem;
   color: var(--text-main);
   background-color: var(--bg-sheet);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
 }
-.input-group input:focus {
+.auth-form-wrapper .input-group input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--focus-ring);
@@ -493,7 +493,7 @@
   line-height: 1.35;
 }
 
-.input-group input[type="date"]::-webkit-calendar-picker-indicator {
+.auth-form-wrapper .input-group input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
@@ -510,7 +510,7 @@
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  transition: background-color var(--motion-normal) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
 }
 .btn-primary:hover { background-color: var(--btn-primary-hover); }
 .btn-primary:active { transform: scale(0.98); }
@@ -556,7 +556,7 @@
 .strength-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.3s ease, background-color 0.3s ease;
+  transition: width var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
 }
 
 .auth-footer {
@@ -601,11 +601,7 @@
 .mt-2 { margin-top: 8px; }
 .mt-4 { margin-top: 16px; }
 
-.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}/* =========================================
+/* =========================================
    6. PASSWORD REVEAL TOGGLE
    ========================================= */
 .password-input-wrapper {
@@ -634,7 +630,7 @@
   justify-content: center;
   padding: 12px;
   margin-right: -8px;
-  transition: color 0.2s ease;
+  transition: color var(--motion-normal) var(--ease-standard);
 }
 
 .password-toggle-btn:hover {
@@ -667,28 +663,8 @@
   display: none;
 }
 
-.view-register .auth-hero {
-  display: flex;
-}
-
-.view-register .auth-form-wrapper {
-  display: flex;
-  animation: slideInFromRight 0.4s ease-out forwards;
-}
-
 .view-login .auth-form-wrapper {
   display: flex;
-}
-
-@keyframes slideInFromRight {
-  from {
-    opacity: 0;
-    transform: translateX(100px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 /* Hero Container */
@@ -753,7 +729,7 @@
   border: none;
   cursor: pointer;
   padding: 8px;
-  transition: transform 0.3s ease;
+  transition: transform var(--motion-normal) var(--ease-standard);
 }
 
 .burger-menu-btn:hover {
@@ -766,7 +742,7 @@
   height: 3px;
   background-color: white;
   border-radius: 2px;
-  transition: all 0.3s ease;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
 }
 
 /* Burger Menu Dropdown */
@@ -782,18 +758,7 @@
   min-width: 200px;
   box-shadow: 0 22px 44px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(8px);
-  animation: slideDownMenu 0.3s ease-out;
-}
-
-@keyframes slideDownMenu {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  /* Open/close animation is now driven by Framer Motion in AuthPages.jsx. */
 }
 
 .burger-item {
@@ -806,7 +771,7 @@
   text-align: left;
   cursor: pointer;
   font-size: 0.95rem;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--motion-normal) var(--ease-standard);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -884,7 +849,7 @@
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   margin-top: 12px;
 }
@@ -910,7 +875,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard);
   z-index: 50;
 }
 
@@ -1039,7 +1004,7 @@
   padding: 10px 14px;
   border-radius: 12px;
   cursor: pointer;
-  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: transform var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .upload-trigger:hover {
