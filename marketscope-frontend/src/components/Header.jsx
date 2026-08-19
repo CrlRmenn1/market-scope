@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
   Cog8ToothIcon,
@@ -9,7 +8,8 @@ import {
   AcademicCapIcon,
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/solid';
-import { SPACE_SUBMISSION_TRIGGER_ID } from '../constants/layoutIds';
+import Modal from './Modal';
+import { SPACE_SUBMISSION_TRIGGER_ID, LOGOUT_CONFIRM_TRIGGER_ID } from '../constants/layoutIds';
 
 export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl, onOpenSpaceSubmission, onStartTour }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -18,42 +18,42 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
   // Get first letter of name for a fallback avatar
   const userInitial = userName ? userName.charAt(0).toUpperCase() : 'G';
 
-  const logoutConfirmDialog = showLogoutConfirm ? (
-    <div className="history-confirm-overlay" role="presentation" onClick={() => setShowLogoutConfirm(false)}>
-      <div
-        className="history-confirm-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="logout-confirm-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Sign out</p>
-        <h3 id="logout-confirm-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">Log out of MarketScope?</h3>
-        <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
-          Your saved analyses stay in your account. You will need to sign in again to run new scans.
-        </p>
-        <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]"
-            onClick={() => setShowLogoutConfirm(false)}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-            onClick={() => {
-              setShowLogoutConfirm(false);
-              if (onLogout) onLogout();
-            }}
-          >
-            <ArrowRightOnRectangleIcon className="h-4 w-4" aria-hidden="true" /> Log Out
-          </button>
-        </div>
+  const logoutConfirmDialog = (
+    <Modal
+      isOpen={showLogoutConfirm}
+      onClose={() => setShowLogoutConfirm(false)}
+      layoutId={LOGOUT_CONFIRM_TRIGGER_ID}
+      variant="center"
+      overlayClassName="history-confirm-overlay"
+      panelClassName="history-confirm-modal"
+      ariaLabelledBy="logout-confirm-title"
+    >
+      <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Sign out</p>
+      <h3 id="logout-confirm-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">Log out of MarketScope?</h3>
+      <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
+        Your saved analyses stay in your account. You will need to sign in again to run new scans.
+      </p>
+      <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
+        <button
+          type="button"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+          onClick={() => {
+            setShowLogoutConfirm(false);
+            if (onLogout) onLogout();
+          }}
+        >
+          <ArrowRightOnRectangleIcon className="h-4 w-4" aria-hidden="true" /> Log Out
+        </button>
       </div>
-    </div>
-  ) : null;
+    </Modal>
+  );
 
   return (
     <header className="app-header">
@@ -144,7 +144,8 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
 
               <div className="dropdown-divider"></div>
 
-              <button
+              <motion.button
+                layoutId={LOGOUT_CONFIRM_TRIGGER_ID}
                 onClick={() => {
                   setIsDropdownOpen(false);
                   setShowLogoutConfirm(true);
@@ -152,13 +153,13 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
                 className="dropdown-item logout"
               >
                 <ArrowRightOnRectangleIcon className="dropdown-icon" /> Log Out
-              </button>
+              </motion.button>
             </div>
           </div>
         )}
       </div>
 
-      {typeof document !== 'undefined' && logoutConfirmDialog && createPortal(logoutConfirmDialog, document.body)}
+      {logoutConfirmDialog}
     </header>
   );
 }
