@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'framer-motion';
 import {
   Cog8ToothIcon,
   SunIcon,
@@ -8,6 +9,7 @@ import {
   AcademicCapIcon,
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/solid';
+import { SPACE_SUBMISSION_TRIGGER_ID } from '../constants/layoutIds';
 
 export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl, onOpenSpaceSubmission, onStartTour }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -108,7 +110,16 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
               </button>
 
               {onOpenSpaceSubmission && (
-                <button
+                <motion.button
+                  // Matches the layoutId on the Modal panel in
+                  // SpaceSubmissionModal so it can morph out of this
+                  // button's rect on desktop. Both state updates below fire
+                  // synchronously in this one click handler, so React
+                  // batches them into a single commit and Framer Motion
+                  // measures a clean, settled rect for this button — if the
+                  // dropdown ever gains its own close animation, revisit
+                  // this assumption.
+                  layoutId={SPACE_SUBMISSION_TRIGGER_ID}
                   onClick={() => {
                     setIsDropdownOpen(false);
                     onOpenSpaceSubmission();
@@ -116,7 +127,7 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
                   className="dropdown-item"
                 >
                   <MapPinIcon className="dropdown-icon" /> Submit Space Listing
-                </button>
+                </motion.button>
               )}
 
               {onStartTour && (
