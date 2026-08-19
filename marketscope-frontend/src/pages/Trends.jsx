@@ -450,17 +450,16 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
         )}
       </div>
 
-      {hasMissingPreferences && showPreferenceGate && (
-        <TrendPreferencesGate
-          user={user}
-          missingFields={activeMissingPreferences}
-          onSaved={(updatedUser) => {
-            onPreferencesSaved?.(updatedUser);
-            setShowPreferenceGate(false);
-          }}
-          onLater={() => setShowPreferenceGate(false)}
-        />
-      )}
+      <TrendPreferencesGate
+        isOpen={Boolean(hasMissingPreferences && showPreferenceGate)}
+        user={user}
+        missingFields={activeMissingPreferences}
+        onSaved={(updatedUser) => {
+          onPreferencesSaved?.(updatedUser);
+          setShowPreferenceGate(false);
+        }}
+        onLater={() => setShowPreferenceGate(false)}
+      />
     </div>
   );
 }

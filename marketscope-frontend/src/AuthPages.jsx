@@ -1,6 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import './Auth.css';
 import { apiUrl } from './api';
+
+// Matches the app's --ease-standard CSS token, for JS-driven Framer Motion
+// transitions to feel consistent with the rest of the UI's motion.
+const EASE_STANDARD = [0.16, 1, 0.3, 1];
 
 const PRIMARY_BUSINESS_OPTIONS = [
   { value: 'coffee', label: 'Coffee Shops / Cafes' },
@@ -63,6 +68,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
     return 'hero';
   };
 
+  const shouldReduceMotion = useReducedMotion();
   const [currentView, setCurrentView] = useState(getInitialAuthView);
   const [isBurgerOpen, setIsBurgerOpen] = useState(false);
   const [password, setPassword] = useState('');
@@ -95,11 +101,10 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   const viewportBaselineRef = useRef(0);
   const keyboardOpenRef = useRef(false);
 
-  const authPanelClass = 'fade-in w-full max-w-[520px] space-y-5 rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-6 shadow-sm sm:p-8';
+  const authPanelClass = 'auth-card w-full max-w-[520px] space-y-5 p-6 sm:p-8';
   const authSectionTitleClass = 'text-3xl font-semibold tracking-tight text-[var(--text-main)] sm:text-[2.15rem]';
   const authSectionSubtitleClass = 'text-sm text-[var(--text-muted)]';
-  const authLabelClass = 'mb-2 block text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]';
-  const authInputClass = 'mt-0 w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-3 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]';
+  const authInputClass ='mt-0 w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-3 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]';
   const authPrimaryButtonClass = 'btn-primary w-full rounded-xl bg-[var(--btn-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]';
   const authSecondaryButtonClass = 'btn-secondary w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-3 text-sm font-semibold text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]';
 
@@ -488,21 +493,29 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           <span></span>
           <span></span>
         </button>
-        {isBurgerOpen && (
-          <div className="burger-menu">
-            <button
-              className="burger-item"
-              onClick={() => {
-                setCurrentView('login');
-                setIsBurgerOpen(false);
-              }}
+        <AnimatePresence>
+          {isBurgerOpen && (
+            <motion.div
+              className="burger-menu"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.14, ease: EASE_STANDARD }}
             >
-              Login
-            </button>
-            <button className="burger-item">About Us</button>
-            <button className="burger-item">How Does This Work</button>
-          </div>
-        )}
+              <button
+                className="burger-item"
+                onClick={() => {
+                  setCurrentView('login');
+                  setIsBurgerOpen(false);
+                }}
+              >
+                Login
+              </button>
+              <button className="burger-item">About Us</button>
+              <button className="burger-item">How Does This Work</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="hero-content relative z-10 flex max-w-[680px] flex-col items-center gap-5 px-4 py-8 sm:gap-6 sm:px-6 lg:py-0">
@@ -518,22 +531,34 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
   );
 
   const renderLogin = () => (
-    <div className={authPanelClass}>
+    <>
       <h2 className={authSectionTitleClass}>Welcome Back</h2>
       <p className={authSectionSubtitleClass}>Access your MarketScope dashboard.</p>
-      
-      {errorMsg && <div className="error-alert">{errorMsg}</div>}
+
+      <AnimatePresence>
+        {errorMsg && (
+          <motion.div
+            className="error-alert"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.14, ease: EASE_STANDARD }}
+          >
+            {errorMsg}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <form onSubmit={handleLogin} className="mt-6 space-y-4">
         <div className="input-group">
-          <label className={authLabelClass}>Email Address</label>
+          <label className="input-label">Email Address<span className="required-indicator">*</span></label>
           <input className={authInputClass} type="email" name="email" placeholder="msme@panabo.com" defaultValue={rememberedLogin.email} autoComplete="username" required />
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Password</label>
+          <label className="input-label">Password<span className="required-indicator">*</span></label>
           <div className="password-input-wrapper">
-            <input 
+            <input
               className={authInputClass}
               type={showPassword ? "text" : "password"} 
               name="password" 
@@ -577,62 +602,99 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           {showForgotPassword ? 'Hide password reset' : 'Forgot password?'}
         </button>
 
-        {showForgotPassword && (
-          <div className="forgot-password-panel rounded-xl border border-[var(--border-color)] bg-[var(--accent-hover)] p-3">
-            <p className="forgot-password-note text-xs text-[var(--text-muted)]">Enter your account email and set a new password.</p>
-            <div className="input-group forgot-input-group">
-              <label className={authLabelClass}>Reset Email</label>
-              <input
-                className={authInputClass}
-                type="email"
-                name="forgotEmail"
-                placeholder="msme@panabo.com"
-                value={forgotEmail}
-                onChange={(event) => setForgotEmail(event.target.value)}
-                autoComplete="email"
-                required
-              />
-            </div>
-
-            <div className="input-group forgot-input-group">
-              <label className={authLabelClass}>New Password</label>
-              <input
-                className={authInputClass}
-                type="password"
-                name="forgotNewPassword"
-                placeholder="At least 6 characters"
-                value={forgotNewPassword}
-                onChange={(event) => setForgotNewPassword(event.target.value)}
-                autoComplete="new-password"
-              />
-            </div>
-
-            <div className="input-group forgot-input-group">
-              <label className={authLabelClass}>Confirm New Password</label>
-              <input
-                className={authInputClass}
-                type="password"
-                name="forgotConfirmPassword"
-                placeholder="Repeat new password"
-                value={forgotConfirmPassword}
-                onChange={(event) => setForgotConfirmPassword(event.target.value)}
-                autoComplete="new-password"
-              />
-            </div>
-
-            <button
-              type="button"
-              className={authSecondaryButtonClass}
-              disabled={isResetLoading}
-              onClick={handleResetPassword}
+        <AnimatePresence>
+          {showForgotPassword && (
+            <motion.div
+              key="forgot-password"
+              style={{ overflow: 'hidden' }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: EASE_STANDARD }}
             >
-              {isResetLoading ? 'Resetting password...' : 'Reset Password'}
-            </button>
+              <div className="forgot-password-panel rounded-xl border border-[var(--border-color)] bg-[var(--accent-hover)] p-3">
+                <p className="forgot-password-note text-xs text-[var(--text-muted)]">Enter your account email and set a new password.</p>
+                <div className="input-group forgot-input-group">
+                  <label className="input-label">Reset Email<span className="required-indicator">*</span></label>
+                  <input
+                    className={authInputClass}
+                    type="email"
+                    name="forgotEmail"
+                    placeholder="msme@panabo.com"
+                    value={forgotEmail}
+                    onChange={(event) => setForgotEmail(event.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
 
-            {forgotMsg && <div className="info-alert mt-2">{forgotMsg}</div>}
-            {forgotError && <div className="error-alert mt-2">{forgotError}</div>}
-          </div>
-        )}
+                <div className="input-group forgot-input-group">
+                  <label className="input-label">New Password</label>
+                  <input
+                    className={authInputClass}
+                    type="password"
+                    name="forgotNewPassword"
+                    placeholder="At least 6 characters"
+                    value={forgotNewPassword}
+                    onChange={(event) => setForgotNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div className="input-group forgot-input-group">
+                  <label className="input-label">Confirm New Password</label>
+                  <input
+                    className={authInputClass}
+                    type="password"
+                    name="forgotConfirmPassword"
+                    placeholder="Repeat new password"
+                    value={forgotConfirmPassword}
+                    onChange={(event) => setForgotConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className={authSecondaryButtonClass}
+                  disabled={isResetLoading}
+                  onClick={handleResetPassword}
+                >
+                  {isResetLoading ? 'Resetting password...' : 'Reset Password'}
+                </button>
+
+                <AnimatePresence>
+                  {forgotMsg && (
+                    <motion.div
+                      key="forgot-msg"
+                      className="info-alert mt-2"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: shouldReduceMotion ? 0 : 0.14, ease: EASE_STANDARD }}
+                    >
+                      {forgotMsg}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {forgotError && (
+                    <motion.div
+                      key="forgot-error"
+                      className="error-alert mt-2"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: shouldReduceMotion ? 0 : 0.14, ease: EASE_STANDARD }}
+                    >
+                      {forgotError}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <button type="submit" className={authPrimaryButtonClass} disabled={isLoading}>
           {isLoading ? 'Authenticating...' : 'Log In'}
@@ -642,39 +704,51 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           New to MarketScope? <span className="!text-[var(--text-main)] font-semibold" onClick={() => setCurrentView('register')}>Create Account</span>
         </p>
       </form>
-    </div>
+    </>
   );
 
   const renderRegister = () => (
-    <div className={authPanelClass}>
+    <>
       <h2 className={authSectionTitleClass}>Create Account</h2>
       <p className={authSectionSubtitleClass}>Start analyzing Panabo's markets today.</p>
 
-      {errorMsg && <div className="error-alert">{errorMsg}</div>}
+      <AnimatePresence>
+        {errorMsg && (
+          <motion.div
+            className="error-alert"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.14, ease: EASE_STANDARD }}
+          >
+            {errorMsg}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <form onSubmit={handleRegister} className="mt-6 space-y-4">
         <div className="input-group">
-          <label className={authLabelClass}>Full Name</label>
+          <label className="input-label">Full Name<span className="required-indicator">*</span></label>
           <input className={authInputClass} type="text" name="full_name" placeholder="Juan Dela Cruz" required />
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Email Address</label>
+          <label className="input-label">Email Address<span className="required-indicator">*</span></label>
           <input className={authInputClass} type="email" name="email" placeholder="juan@business.com" required />
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Cellphone Number</label>
+          <label className="input-label">Cellphone Number</label>
           <input className={authInputClass} type="tel" name="cellphone_number" placeholder="09XX XXX XXXX" />
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Address</label>
+          <label className="input-label">Address</label>
           <input className={authInputClass} type="text" name="address" placeholder="Barangay, City" />
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Primary Business Interest</label>
+          <label className="input-label">Primary Business Interest<span className="required-indicator">*</span></label>
           <select
             className={authInputClass}
             name="primary_business"
@@ -690,7 +764,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Birthday</label>
+          <label className="input-label">Birthday</label>
           <div className="field-hint" id="birthday-hint">Tap the field to open the calendar</div>
           <input
             className={authInputClass}
@@ -704,7 +778,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Age</label>
+          <label className="input-label">Age</label>
           <input
             className={authInputClass}
             type="number"
@@ -718,7 +792,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Profile Picture</label>
+          <label className="input-label">Profile Picture</label>
           <input
             className="upload-input-hidden"
             ref={registerAvatarInputRef}
@@ -768,7 +842,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Password</label>
+          <label className="input-label">Password<span className="required-indicator">*</span></label>
           <div className="password-input-wrapper">
             <input 
               className={authInputClass}
@@ -795,7 +869,7 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
         </div>
 
         <div className="input-group">
-          <label className={authLabelClass}>Confirm Password</label>
+          <label className="input-label">Confirm Password<span className="required-indicator">*</span></label>
           <div className="password-input-wrapper">
             <input 
               className={authInputClass}
@@ -822,57 +896,98 @@ export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initial
           Already have an account? <span className="!text-[var(--text-main)] font-semibold" onClick={() => setCurrentView('login')}>Log In</span>
         </p>
       </form>
-    </div>
+    </>
   );
 
-  if (currentView === 'hero') {
-    return (
-      <div className="auth-container view-hero" ref={authContainerRef}>
-        <div className="auth-hero">
-          {renderHero()}
-        </div>
-      </div>
-    );
-  }
+  const viewTransition = { duration: shouldReduceMotion ? 0 : 0.22, ease: EASE_STANDARD };
 
   return (
-    <div className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`} ref={authContainerRef}>
-      <div className="mobile-auth-hero">
-        {currentView === 'register' && (
-          <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-          </button>
-        )}
-        <div className="mobile-hero-text">
-          {renderMarketScopeBadge('mb-4')}
-          <h2>Discover<br />Panabo's<br />Hidden Markets.</h2>
-          <p>The geospatial viability engine built for local entrepreneurs and MSMEs.</p>
-        </div>
-      </div>
+    <AnimatePresence mode="wait">
+      {currentView === 'hero' ? (
+        <motion.div
+          key="hero"
+          className="auth-container view-hero"
+          ref={authContainerRef}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={viewTransition}
+        >
+          <div className="auth-hero">
+            {renderHero()}
+          </div>
+        </motion.div>
+      ) : (
+        <motion.div
+          key="shell"
+          className={`auth-container ${currentView === 'login' ? 'view-login' : 'view-landing'}`}
+          ref={authContainerRef}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={viewTransition}
+        >
+          <div className="mobile-auth-hero">
+            {currentView === 'register' && (
+              <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </button>
+            )}
+            <div className="mobile-hero-text">
+              {renderMarketScopeBadge('mb-4')}
+              <h2>Discover<br />Panabo's<br />Hidden Markets.</h2>
+              <p>The geospatial viability engine built for local entrepreneurs and MSMEs.</p>
+            </div>
+          </div>
 
-      <div className="auth-hero">
-        {currentView === 'register' && (
-          <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-          </button>
-        )}
-        <div className="hero-text">
-          {renderMarketScopeBadge('mb-6')}
-          <h1>Discover<br/>Panabo's<br/>Hidden Markets.</h1>
-          <p>The ultimate geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
-        </div>
-      </div>
+          <div className="auth-hero">
+            {currentView === 'register' && (
+              <button className="hero-side-back-btn" onClick={() => setCurrentView('hero')} aria-label="Back to landing">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </button>
+            )}
+            <div className="hero-text">
+              {renderMarketScopeBadge('mb-6')}
+              <h1>Discover<br/>Panabo's<br/>Hidden Markets.</h1>
+              <p>The ultimate geospatial viability engine designed<br/>exclusively for local entrepreneurs and MSMEs.</p>
+            </div>
+          </div>
 
-      <div className="auth-form-wrapper" ref={authFormWrapperRef}>
-        {currentView === 'register' && renderRegister()}
-        {currentView === 'login' && renderLogin()}
-      </div>
-    </div>
+          <div className="auth-form-wrapper" ref={authFormWrapperRef}>
+            <AnimatePresence mode="wait">
+              {currentView === 'register' ? (
+                <motion.div
+                  key="register"
+                  className={authPanelClass}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: EASE_STANDARD }}
+                >
+                  {renderRegister()}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="login"
+                  className={authPanelClass}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: EASE_STANDARD }}
+                >
+                  {renderLogin()}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

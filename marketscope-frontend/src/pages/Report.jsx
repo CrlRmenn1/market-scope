@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { motion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { apiUrl } from '../api';
 import { getBusinessTypeLabel } from '../utils/businessTypes';
+import Modal from '../components/Modal';
+import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -611,7 +614,8 @@ export default function Report({ data, targetCoords, onClose }) {
             {isGeneratingAiReport ? 'Generating AI...' : 'Generate AI'}
           </button>
 
-          <button
+          <motion.button
+            layoutId={PDF_SETTINGS_TRIGGER_ID}
             className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             onClick={() => setIsPdfSettingsOpen(true)}
             title={isExportingPdf ? 'Generating PDF...' : 'Save as PDF'}
@@ -622,7 +626,7 @@ export default function Report({ data, targetCoords, onClose }) {
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
               <rect x="6" y="14" width="12" height="8"></rect>
             </svg>
-          </button>
+          </motion.button>
 
           <button className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onClose} title="Close Report">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -634,9 +638,15 @@ export default function Report({ data, targetCoords, onClose }) {
         </div>
       </div>
 
-      {isPdfSettingsOpen && (
-        <div className="pdf-hide fixed inset-0 z-[8000] flex items-center justify-center bg-[var(--overlay-scrim)] px-4" role="dialog" aria-modal="true" aria-label="PDF export settings">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-2xl">
+      <Modal
+        isOpen={isPdfSettingsOpen}
+        onClose={() => setIsPdfSettingsOpen(false)}
+        layoutId={PDF_SETTINGS_TRIGGER_ID}
+        variant="center"
+        overlayClassName="pdf-hide fixed inset-0 z-[8000] flex items-center justify-center bg-[var(--overlay-scrim)] px-4"
+        panelClassName="w-full max-w-md rounded-2xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-5 shadow-2xl"
+        ariaLabel="PDF export settings"
+      >
             <h3 className="text-base font-semibold text-[var(--text-main)]">Export PDF Settings</h3>
             <p className="mt-1 text-sm text-[var(--text-muted)]">The exported file always uses a white report theme.</p>
 
@@ -724,9 +734,7 @@ export default function Report({ data, targetCoords, onClose }) {
                 {isExportingPdf ? 'Generating...' : 'Generate PDF'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       <div className="report-scroll-content mx-auto w-full max-w-5xl px-4 pb-28 pt-5 sm:px-6">
         

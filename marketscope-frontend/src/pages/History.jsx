@@ -1,12 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { motion } from 'framer-motion';
 import { apiUrl } from '../api';
 import { getBusinessTypeKey, getBusinessTypeLabel } from '../utils/businessTypes';
 import useIsDesktop from '../utils/useIsDesktop';
+import AnalysisLoader from '../components/AnalysisLoader';
+import Modal from '../components/Modal';
+import { BULK_DELETE_CONFIRM_TRIGGER_ID } from '../constants/layoutIds';
 
 // Floor so a very fast (e.g. cache-adjacent) fetch doesn't flash the loading
 // modal open-and-closed; cache hits skip the modal entirely (see openSavedReport).
 const MIN_OPENING_MODAL_MS = 300;
+
+// Module-level (stable reference) so AnalysisLoader's timer-loop effect
+// doesn't restart every time this component re-renders.
+const OPENING_REPORT_LABELS = [
+  'Locating your saved pin',
+  'Rebuilding the market snapshot',
+  'Refreshing your suitability score',
+  'Preparing your report',
+];
 
 const formatDate = (value) => {
   if (!value) return 'Unknown date';
@@ -441,65 +453,79 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     return factor?.description || 'Score derived from the report algorithm.';
   };
 
-  const deleteConfirmDialog = deleteCandidate ? (
-    <div className="history-confirm-overlay" role="presentation" onClick={() => setDeleteCandidate(null)}>
-      <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-delete-title" onClick={(event) => event.stopPropagation()}>
-        <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Confirm deletion</p>
-        <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">Delete {getBusinessTypeLabel(deleteCandidate.business_type)}?</h3>
-        <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
-          This removes the saved analysis from your history. You can run the same site again later, but this saved copy will be gone.
-        </p>
-        {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-down-bg)] p-3 text-sm text-[var(--trend-down)]">{deleteError}</p>}
-        <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
-          <button type="button" className="edit-btn inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]" onClick={() => setDeleteCandidate(null)}>
-            Cancel
-          </button>
-          <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteHistory(deleteCandidate)} disabled={deletingHistoryId === deleteCandidate.history_id}>
-            {deletingHistoryId === deleteCandidate.history_id ? 'Deleting...' : 'Delete'}
-          </button>
-        </div>
+  const deleteConfirmDialog = (
+    <Modal
+      isOpen={Boolean(deleteCandidate)}
+      onClose={() => setDeleteCandidate(null)}
+      // No layoutId/morph here on purpose: this dialog opens from one of
+      // many near-identical per-row buttons, and sharing a layoutId with a
+      // list item is the one case that showed a stray "reconcile" animation
+      // on the button after closing (a first-shared-transition rough edge
+      // under React StrictMode) — not worth chasing for a small icon
+      // button, so it just gets the plain center fade+scale instead.
+      variant="center"
+      overlayClassName="history-confirm-overlay"
+      panelClassName="history-confirm-modal"
+      ariaLabelledBy="history-delete-title"
+    >
+      <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Confirm deletion</p>
+      <h3 id="history-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">Delete {getBusinessTypeLabel(deleteCandidate?.business_type)}?</h3>
+      <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
+        This removes the saved analysis from your history. You can run the same site again later, but this saved copy will be gone.
+      </p>
+      {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-down-bg)] p-3 text-sm text-[var(--trend-down)]">{deleteError}</p>}
+      <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
+        <button type="button" className="edit-btn inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)]" onClick={() => setDeleteCandidate(null)}>
+          Cancel
+        </button>
+        <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteHistory(deleteCandidate)} disabled={Boolean(deleteCandidate) && deletingHistoryId === deleteCandidate.history_id}>
+          {deleteCandidate && deletingHistoryId === deleteCandidate.history_id ? 'Deleting...' : 'Delete'}
+        </button>
       </div>
-    </div>
-  ) : null;
+    </Modal>
+  );
 
-  const bulkDeleteConfirmDialog = showBulkDeleteConfirm ? (
-    <div className="history-confirm-overlay" role="presentation" onClick={() => { if (!bulkDeleting) setShowBulkDeleteConfirm(false); }}>
-      <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-bulk-delete-title" onClick={(event) => event.stopPropagation()}>
-        <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Confirm deletion</p>
-        <h3 id="history-bulk-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">
-          Delete {selectedVisibleHistoryIds.length} selected {selectedVisibleHistoryIds.length === 1 ? 'analysis' : 'analyses'}?
-        </h3>
-        <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
-          This removes the selected saved analyses from your history. You can run the same sites again later, but these saved copies will be gone.
-        </p>
-        {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-down-bg)] p-3 text-sm text-[var(--trend-down)]">{deleteError}</p>}
-        <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
-          <button type="button" className="edit-btn inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60" onClick={() => setShowBulkDeleteConfirm(false)} disabled={bulkDeleting}>
-            Cancel
-          </button>
-          <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" onClick={handleBulkDelete} disabled={bulkDeleting || selectedVisibleHistoryIds.length === 0}>
-            {bulkDeleting ? 'Deleting...' : 'Delete'}
-          </button>
-        </div>
+  const bulkDeleteConfirmDialog = (
+    <Modal
+      isOpen={showBulkDeleteConfirm}
+      onClose={() => { if (!bulkDeleting) setShowBulkDeleteConfirm(false); }}
+      layoutId={BULK_DELETE_CONFIRM_TRIGGER_ID}
+      variant="center"
+      overlayClassName="history-confirm-overlay"
+      panelClassName="history-confirm-modal"
+      ariaLabelledBy="history-bulk-delete-title"
+    >
+      <p className="history-confirm-eyebrow text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--trend-down)]">Confirm deletion</p>
+      <h3 id="history-bulk-delete-title" className="history-confirm-title mt-2 text-xl font-semibold text-[var(--text-main)]">
+        Delete {selectedVisibleHistoryIds.length} selected {selectedVisibleHistoryIds.length === 1 ? 'analysis' : 'analyses'}?
+      </h3>
+      <p className="history-confirm-text mt-3 text-sm leading-6 text-[var(--text-muted)]">
+        This removes the selected saved analyses from your history. You can run the same sites again later, but these saved copies will be gone.
+      </p>
+      {deleteError && <p className="history-confirm-error mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-down-bg)] p-3 text-sm text-[var(--trend-down)]">{deleteError}</p>}
+      <div className="history-confirm-actions mt-5 flex flex-col gap-3 sm:flex-row">
+        <button type="button" className="edit-btn inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60" onClick={() => setShowBulkDeleteConfirm(false)} disabled={bulkDeleting}>
+          Cancel
+        </button>
+        <button type="button" className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl bg-[var(--trend-down)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" onClick={handleBulkDelete} disabled={bulkDeleting || selectedVisibleHistoryIds.length === 0}>
+          {bulkDeleting ? 'Deleting...' : 'Delete'}
+        </button>
       </div>
-    </div>
-  ) : null;
+    </Modal>
+  );
 
-  const openingReportDialog = isOpeningModalVisible ? (
-    <div className="history-confirm-overlay" role="presentation">
-      <div className="history-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="history-opening-title">
-        <div className="map-scan-loading">
-          <p id="history-opening-title" className="map-scan-loading__title">Opening your saved analysis&hellip;</p>
-          <div className="loading-taskbar">
-            <div className="task-item delay-1">
-              <span className="task-text">Fetching saved report</span>
-              <span className="task-spinner" aria-hidden="true" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  ) : null;
+  const openingReportDialog = (
+    <Modal
+      isOpen={isOpeningModalVisible}
+      variant="center"
+      overlayClassName="history-confirm-overlay"
+      panelClassName="history-confirm-modal"
+      ariaLabelledBy="history-opening-title"
+    >
+      <p id="history-opening-title" className="map-scan-loading__title">Opening your saved analysis&hellip;</p>
+      <AnalysisLoader active={isOpeningModalVisible} labels={OPENING_REPORT_LABELS} stageMs={550} />
+    </Modal>
+  );
 
   const renderHistoryCard = (item, index) => (
                   <div
@@ -712,14 +738,15 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
               </button>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-[var(--text-muted)]">{selectedVisibleHistoryIds.length} selected</span>
-                <button
+                <motion.button
                   type="button"
+                  layoutId={BULK_DELETE_CONFIRM_TRIGGER_ID}
                   className="history-delete-btn history-delete-btn-solid inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--trend-down-bg)] px-4 py-2.5 text-sm font-medium text-[var(--trend-down)] transition hover:border-[var(--trend-down)] disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => { setDeleteError(''); setShowBulkDeleteConfirm(true); }}
                   disabled={selectedVisibleHistoryIds.length === 0}
                 >
                   Delete selected
-                </button>
+                </motion.button>
               </div>
             </div>
           </div>
@@ -773,9 +800,9 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
         </div>
       )}
 
-      {typeof document !== 'undefined' && deleteConfirmDialog && createPortal(deleteConfirmDialog, document.body)}
-      {typeof document !== 'undefined' && bulkDeleteConfirmDialog && createPortal(bulkDeleteConfirmDialog, document.body)}
-      {typeof document !== 'undefined' && openingReportDialog && createPortal(openingReportDialog, document.body)}
+      {deleteConfirmDialog}
+      {bulkDeleteConfirmDialog}
+      {openingReportDialog}
       </div>
     </div>
   );

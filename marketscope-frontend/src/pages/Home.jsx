@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { apiUrl } from '../api';
 import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
+import AnalysisLoader from '../components/AnalysisLoader';
+import Modal from '../components/Modal';
+import TourSpotlight from '../components/TourSpotlight';
 
 // Fix for Vite + Leaflet image bug
 delete L.Icon.Default.prototype._getIconUrl;
@@ -19,6 +24,10 @@ const PANABO_BOUNDS = {
   west: 125.636,
   east: 125.742
 };
+
+// Matches the app's --ease-standard CSS token, for JS-driven Framer Motion
+// transitions to feel consistent with the rest of the UI's motion.
+const EASE_STANDARD = [0.16, 1, 0.3, 1];
 
 const hazardNameByVar = {
   1: 'Very High Flood Hazard (5-Year)',
@@ -57,6 +66,7 @@ const getHazardStyle = (hazardVar) => {
 };
 
 export default function Home({ onViewReport, theme, userId, previewSelection, onSpaceDetailOpenChange, tourActive = false, onTourEnd, isActive = true }) {
+  const shouldReduceMotion = useReducedMotion();
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
@@ -66,6 +76,10 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
   const selectedMarkerRef = useRef(null);
   const competitorLayerGroup = useRef(null);
   const competitorCircleRef = useRef(null);
+  const radiusAnimationRef = useRef(null);
+  const businessTypeFieldRef = useRef(null);
+  const radiusFieldRef = useRef(null);
+  const actionsFieldRef = useRef(null);
   const tileLayerRef = useRef(null);
   const boundaryLayerRef = useRef(null);
   const previewRequestIdRef = useRef(0);
@@ -543,8 +557,17 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     };
   }, [selectedCoord]);
 
+  // Draws the scan-radius circle when the pin itself moves. Deliberately
+  // keyed on selectedCoord only (not previewRadius) — radius changes are
+  // handled by the eased tween effect below instead of a remove+recreate,
+  // which is what made every slider tick snap the circle instantly.
   useEffect(() => {
     if (!mapInstance.current || !selectedCoord) return;
+
+    if (radiusAnimationRef.current) {
+      cancelAnimationFrame(radiusAnimationRef.current);
+      radiusAnimationRef.current = null;
+    }
 
     if (competitorCircleRef.current) {
       competitorCircleRef.current.remove();
@@ -563,12 +586,65 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     }).addTo(mapInstance.current);
 
     return () => {
+      if (radiusAnimationRef.current) {
+        cancelAnimationFrame(radiusAnimationRef.current);
+        radiusAnimationRef.current = null;
+      }
       if (competitorCircleRef.current) {
         competitorCircleRef.current.remove();
         competitorCircleRef.current = null;
       }
     };
-  }, [selectedCoord, previewRadius]);
+    // previewRadius is intentionally read only as the circle's *initial*
+    // radius here; see the tween effect below for what drives it on every
+    // later change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCoord]);
+
+  // Eases the circle's radius toward previewRadius on every slider tick,
+  // instead of the plain instant jump a remove+recreate produced. Each
+  // rapid tick redirects the in-flight tween from wherever it currently is
+  // (not from the pre-drag value), so a fast drag reads as the circle
+  // smoothly chasing the slider rather than restarting from scratch.
+  useEffect(() => {
+    const circle = competitorCircleRef.current;
+    if (!circle) return undefined;
+
+    if (radiusAnimationRef.current) {
+      cancelAnimationFrame(radiusAnimationRef.current);
+      radiusAnimationRef.current = null;
+    }
+
+    const startRadius = circle.getRadius();
+    const endRadius = previewRadius;
+
+    if (shouldReduceMotion || startRadius === endRadius) {
+      circle.setRadius(endRadius);
+      return undefined;
+    }
+
+    const durationMs = 220;
+    const startTime = performance.now();
+    // Ease-out cubic, matching the app's --ease-standard decelerate feel —
+    // a literal ease-in would look sluggish since the value is still live-
+    // following the slider while this plays.
+    const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+
+    const step = (now) => {
+      const t = Math.min(1, (now - startTime) / durationMs);
+      circle.setRadius(startRadius + (endRadius - startRadius) * easeOutCubic(t));
+      radiusAnimationRef.current = t < 1 ? requestAnimationFrame(step) : null;
+    };
+
+    radiusAnimationRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (radiusAnimationRef.current) {
+        cancelAnimationFrame(radiusAnimationRef.current);
+        radiusAnimationRef.current = null;
+      }
+    };
+  }, [previewRadius, shouldReduceMotion]);
 
   useEffect(() => {
     if (!mapInstance.current || !competitorLayerGroup.current || !selectedCoord) return;
@@ -738,6 +814,11 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     setPreviewMessage('Drop a pin, then choose an MSME and radius to preview competitors.');
   };
 
+  const coordsText = selectedCoord ? `${selectedCoord.lat.toFixed(5)}, ${selectedCoord.lng.toFixed(5)}` : '';
+  const businessTypeLabel = previewBusinessType
+    ? BUSINESS_TYPE_OPTIONS.find((option) => option.value === previewBusinessType)?.label || previewBusinessType
+    : '';
+
   return (
     <div className={`home-container page-enter ${mapViewMode}-mode`} data-map-mode={mapViewMode}>
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }} />
@@ -748,7 +829,27 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
         </div>
       )}
 
-      {tourActive && (
+      <TourSpotlight
+        active={tourActive && isActive}
+        step={tourStep}
+        mapRef={mapRef}
+        businessTypeRef={businessTypeFieldRef}
+        radiusRef={radiusFieldRef}
+        actionsRef={actionsFieldRef}
+      />
+
+      {tourActive && isActive && typeof document !== 'undefined' && createPortal(
+        // isActive: Home stays mounted-but-hidden (display:none) on other
+        // tabs instead of unmounting, so without this guard the card (and
+        // the spotlight above) would keep floating over whatever page the
+        // user navigated to, pointing at a hidden, zero-size target.
+        // Portaled straight to document.body, same as TourSpotlight's masks
+        // — this card was previously nested inside Home's normal tree, so
+        // if any ancestor (page-transition wrappers, tab-switch styling,
+        // etc.) established its own stacking context, its z-index couldn't
+        // reliably out-rank the portaled masks even though the raw number
+        // (2700 vs 2650) said it should — it ended up visually buried and
+        // unclickable behind them.
         <div className="tour-card" role="status">
           <div className="tour-card__head">
             <p className="eyebrow-label">{analyzing ? 'Almost there' : `Step ${tourStep} of 3`}</p>
@@ -763,12 +864,18 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
           <button type="button" className="tour-card__skip" onClick={() => onTourEnd?.()}>
             Skip tour
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {selectedSpaceMarker && selectedCoord && (
-        <div className="space-detail-overlay" onClick={() => setSelectedSpaceMarker(null)} role="presentation">
-          <div className="space-detail-card" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Space details">
+      <Modal
+        isOpen={Boolean(selectedSpaceMarker && selectedCoord)}
+        onClose={() => setSelectedSpaceMarker(null)}
+        variant="center"
+        overlayClassName="space-detail-overlay"
+        panelClassName="space-detail-card"
+        ariaLabel="Space details"
+      >
             <button type="button" className="space-detail-close" onClick={() => setSelectedSpaceMarker(null)} aria-label="Close space details">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18"></path><path d="M6 6L18 18"></path></svg>
             </button>
@@ -778,7 +885,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                 {selectedSpacePhotos.length > 0 ? (
                   <div className="space-detail-photo-shell">
                     <div className="space-detail-photo-stage">
-                      <img src={selectedSpacePhotoUrl} alt={`${selectedSpaceMarker.title || 'Space'} photo ${selectedSpacePhotoIndex + 1}`} />
+                      <img src={selectedSpacePhotoUrl} alt={`${selectedSpaceMarker?.title || 'Space'} photo ${selectedSpacePhotoIndex + 1}`} />
                     </div>
                     <div className="space-detail-photo-strip" role="list" aria-label="Space photos">
                       {selectedSpacePhotos.map((photoUrl, index) => (
@@ -789,7 +896,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                           onClick={() => setSelectedSpacePhotoIndex(index)}
                           aria-label={`View photo ${index + 1}`}
                         >
-                          <img src={photoUrl} alt={`${selectedSpaceMarker.title || 'Space'} thumbnail ${index + 1}`} />
+                          <img src={photoUrl} alt={`${selectedSpaceMarker?.title || 'Space'} thumbnail ${index + 1}`} />
                         </button>
                       ))}
                     </div>
@@ -802,25 +909,25 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
               <div className="space-detail-body">
                 <div className="space-detail-header">
                   <div>
-                    <p className="space-detail-kicker">{selectedSpaceMarker.listing_mode === 'buy' ? 'For Sale' : 'For Rent'}</p>
-                    <h3>{selectedSpaceMarker.title || 'Space listing'}</h3>
+                    <p className="space-detail-kicker">{selectedSpaceMarker?.listing_mode === 'buy' ? 'For Sale' : 'For Rent'}</p>
+                    <h3>{selectedSpaceMarker?.title || 'Space listing'}</h3>
                   </div>
                   <span className={`space-detail-chip space-detail-chip--${getSpaceMarkerTone(selectedSpaceMarker)}`}>
-                    {selectedSpaceMarker.source_type === 'user' ? 'User' : 'Admin'}
+                    {selectedSpaceMarker?.source_type === 'user' ? 'User' : 'Admin'}
                   </span>
                 </div>
 
                 <div className="space-detail-grid">
-                  <div><span>Property</span><strong>{selectedSpaceMarker.property_type || 'Not specified'}</strong></div>
-                  <div><span>Category</span><strong>{selectedSpaceMarker.business_type || 'Not specified'}</strong></div>
-                  <div><span>Coordinates</span><strong>{Number(selectedSpaceMarker.latitude).toFixed(5)}, {Number(selectedSpaceMarker.longitude).toFixed(5)}</strong></div>
+                  <div><span>Property</span><strong>{selectedSpaceMarker?.property_type || 'Not specified'}</strong></div>
+                  <div><span>Category</span><strong>{selectedSpaceMarker?.business_type || 'Not specified'}</strong></div>
+                  <div><span>Coordinates</span><strong>{Number(selectedSpaceMarker?.latitude).toFixed(5)}, {Number(selectedSpaceMarker?.longitude).toFixed(5)}</strong></div>
                   <div><span>Price</span><strong>{formatSpacePrice(selectedSpaceMarker)}</strong></div>
                 </div>
 
                 <div className="space-detail-list">
-                  <p><span>Address:</span> {selectedSpaceMarker.address_text || 'Not provided'}</p>
-                  <p><span>Contact:</span> {selectedSpaceMarker.contact_info || 'Not provided'}</p>
-                  <p><span>Notes:</span> {selectedSpaceMarker.notes || 'No notes added.'}</p>
+                  <p><span>Address:</span> {selectedSpaceMarker?.address_text || 'Not provided'}</p>
+                  <p><span>Contact:</span> {selectedSpaceMarker?.contact_info || 'Not provided'}</p>
+                  <p><span>Notes:</span> {selectedSpaceMarker?.notes || 'No notes added.'}</p>
                 </div>
               </div>
             </div>
@@ -830,7 +937,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                 type="button"
                 className="primary-btn"
                 onClick={() => {
-                  setPreviewBusinessType(selectedSpaceMarker.business_type || '');
+                  setPreviewBusinessType(selectedSpaceMarker?.business_type || '');
                   setPreviewCollapsed(false);
                   setSelectedSpaceMarker(null);
                 }}
@@ -838,9 +945,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                 Analyze This Space
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {!selectedCoord && !selectedSpaceMarker && (
         <div className="map-scan-hint" role="status">
@@ -851,21 +956,39 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
         </div>
       )}
 
-      {selectedCoord && (
-        <div
-          className={`map-quick-panel ${previewCollapsed ? 'is-collapsed' : ''} ${locationUpdated ? 'location-updated' : ''}`}
+      <AnimatePresence>
+        {selectedCoord && (
+        <motion.div
+          key="map-quick-panel"
+          className={`map-quick-panel ${previewCollapsed ? 'is-collapsed' : ''}`}
           onClick={() => previewCollapsed && setPreviewCollapsed(false)}
           style={{ cursor: previewCollapsed ? 'pointer' : 'default' }}
+          initial={{ opacity: 0, y: 28, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: locationUpdated ? [1, 1.015, 1] : 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.96 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.32, ease: EASE_STANDARD }}
         >
           <div className="map-quick-panel__top">
             {previewCollapsed ? (
               <div className="map-quick-panel__compact-view">
-                <p className="map-quick-panel__coords">{selectedCoord.lat.toFixed(5)}, {selectedCoord.lng.toFixed(5)}</p>
-                {previewBusinessType && (
-                  <p className="map-quick-panel__msme-label">
-                    {BUSINESS_TYPE_OPTIONS.find((opt) => opt.value === previewBusinessType)?.label || previewBusinessType}
-                  </p>
-                )}
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={coordsText}
+                    className="map-quick-panel__coords"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+                  >
+                    {coordsText}
+                  </motion.p>
+                </AnimatePresence>
+                <div className="map-quick-panel__compact-meta">
+                  {previewBusinessType && (
+                    <p className="map-quick-panel__msme-label">{businessTypeLabel}</p>
+                  )}
+                  <span className="map-radius-chip">{previewRadius}m</span>
+                </div>
               </div>
             ) : (
               <div className="map-quick-panel__title">
@@ -876,7 +999,18 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                 </span>
                 <div>
                   <p className="eyebrow-label">Site Scan</p>
-                  <p className="map-quick-panel__coords">{selectedCoord.lat.toFixed(5)}, {selectedCoord.lng.toFixed(5)}</p>
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={coordsText}
+                      className="map-quick-panel__coords"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
+                    >
+                      {coordsText}
+                    </motion.p>
+                  </AnimatePresence>
                 </div>
               </div>
             )}
@@ -914,73 +1048,93 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
             </div>
           </div>
 
-          {!previewCollapsed && (analyzing ? (
-            <div className="map-scan-loading">
-              <p className="map-scan-loading__title">Running full analysis&hellip;</p>
-              <div className="loading-taskbar">
-                {['Verifying CLUP Zoning Regulations', 'Cross-referencing Hazard Risk Overlays', 'Querying Live Market Saturation', 'Calculating Demand Infrastructure'].map((task, index) => (
-                  <div key={task} className={`task-item delay-${index + 1}`}>
-                    <span className="task-text">{task}</span>
-                    <span className="task-spinner" aria-hidden="true" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="input-group">
-                <label className="input-label">Business Type</label>
-                <select className={`styled-select ${tourActive && tourStep === 2 ? 'tour-pulse' : ''}`} value={previewBusinessType} onChange={(event) => setPreviewBusinessType(event.target.value)}>
-                  <option value="">Choose a business type...</option>
-                  {BUSINESS_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <div className="map-radius-row">
-                  <label className="input-label">Scan Radius</label>
-                  <span className="map-radius-chip">{previewRadius}m</span>
-                </div>
-                <input
-                  type="range"
-                  min="100"
-                  max="1500"
-                  step="50"
-                  value={previewRadius}
-                  onChange={(event) => setPreviewRadius(Number(event.target.value))}
-                  className="radius-slider"
-                />
-                <div className="radius-slider-meta">
-                  <span>100m</span>
-                  <span>1500m</span>
-                </div>
-              </div>
-
-              <div className="map-quick-panel__summary">
-                <span>{previewLoading ? 'Scanning nearby competitors...' : previewMessage}</span>
-                {!previewLoading && competitorLocations.length > 0 && (
-                  <span className="map-competitor-chip">{competitorLocations.length} nearby</span>
-                )}
-              </div>
-
-              {previewError && <div className="error-alert" style={{ marginTop: 0 }}>{previewError}</div>}
-
-              <div className="map-quick-panel__actions">
-                <button
-                  type="button"
-                  className={`primary-btn ${tourActive && tourStep === 3 && !analyzing ? 'tour-pulse' : ''}`}
-                  disabled={!previewBusinessType || previewLoading}
-                  onClick={runFullAnalysis}
+          <AnimatePresence>
+            {!previewCollapsed && (
+              <motion.div
+                key="panel-detail"
+                style={{ overflow: 'hidden' }}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.28, ease: EASE_STANDARD }}
+              >
+            <AnimatePresence mode="wait">
+              {analyzing ? (
+                <motion.div
+                  key="loader"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
                 >
-                  Run Full Analysis
-                </button>
-              </div>
-            </>
-          ))}
-        </div>
-      )}
+                  <AnalysisLoader active={analyzing} />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="form"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="input-group" ref={businessTypeFieldRef}>
+                    <label className="input-label">Business Type</label>
+                    <select className="styled-select" value={previewBusinessType} onChange={(event) => setPreviewBusinessType(event.target.value)}>
+                      <option value="">Choose a business type...</option>
+                      {BUSINESS_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="input-group" ref={radiusFieldRef}>
+                    <div className="map-radius-row">
+                      <label className="input-label">Scan Radius</label>
+                      <span className="map-radius-chip">{previewRadius}m</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="100"
+                      max="1500"
+                      step="50"
+                      value={previewRadius}
+                      onChange={(event) => setPreviewRadius(Number(event.target.value))}
+                      className="radius-slider"
+                    />
+                    <div className="radius-slider-meta">
+                      <span>100m</span>
+                      <span>1500m</span>
+                    </div>
+                  </div>
+
+                  <div className="map-quick-panel__summary">
+                    <span>{previewLoading ? 'Scanning nearby competitors...' : previewMessage}</span>
+                    {!previewLoading && competitorLocations.length > 0 && (
+                      <span className="map-competitor-chip">{competitorLocations.length} nearby</span>
+                    )}
+                  </div>
+
+                  {previewError && <div className="error-alert" style={{ marginTop: 0 }}>{previewError}</div>}
+
+                  <div className="map-quick-panel__actions" ref={actionsFieldRef}>
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      disabled={!previewBusinessType || previewLoading}
+                      onClick={runFullAnalysis}
+                    >
+                      Run Full Analysis
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {legendOpen ? (
         <div className="map-legend">

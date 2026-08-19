@@ -116,7 +116,6 @@ a svg,
 .check-icon,
 .warning-icon,
 .loading-icon,
-.task-spinner,
 .pure-pin {
   transform-origin: center;
   transition: transform var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard);
@@ -739,7 +738,7 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   border-radius: 16px;
   padding: 16px 18px;
   transition: width 250ms ease-out;
-  animation: slideUpFade 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Open/close/update animation is now driven by Framer Motion in Home.jsx. */
 }
 
 .map-scan-hint {
@@ -832,19 +831,11 @@ html[data-theme="light"] .leaflet-tooltip-top.space-brief-tooltip:before {
   flex: none;
 }
 
-.map-scan-loading {
-  padding: 6px 2px 2px;
-}
-
 .map-scan-loading__title {
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-main);
   margin-bottom: 12px;
-}
-
-.map-quick-panel.location-updated {
-  animation: locPulse 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .map-quick-panel.is-collapsed {
@@ -924,6 +915,13 @@ html[data-theme="light"] .map-quick-panel {
   font-weight: 600;
   margin: 0;
   line-height: 1.2;
+}
+
+.map-quick-panel__compact-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .map-quick-panel:not(.is-collapsed) .input-group {
@@ -1060,18 +1058,6 @@ html[data-theme="light"] .map-quick-panel {
   }
 }
 
-@keyframes locPulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.02);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
 @keyframes slideInUp {
   from {
     opacity: 0;
@@ -1114,7 +1100,8 @@ html[data-theme="light"] .map-quick-panel {
   background: var(--surface-modal-bg); backdrop-filter: blur(var(--surface-modal-blur)); -webkit-backdrop-filter: blur(var(--surface-modal-blur)); padding: 35px 24px;
   border-top-left-radius: 35px; border-top-right-radius: 35px;
   border-top: 1px solid var(--surface-3-border); box-shadow: var(--surface-3-shadow); width: 100%;
-  animation: slideUp 0.42s var(--ease-standard); position: relative;
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
+  position: relative;
 }
 
 .space-submission-sheet {
@@ -1310,7 +1297,7 @@ html[data-theme="light"] .wizard-back-btn {
   background: rgba(2, 6, 23, 0.44);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  animation: fadeIn 200ms ease-out;
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
 }
 
 .space-detail-card {
@@ -1324,7 +1311,7 @@ html[data-theme="light"] .wizard-back-btn {
   border: 1px solid var(--border-color);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
   position: relative;
-  animation: slideUpFade 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
   display: flex;
   flex-direction: column;
 }
@@ -1887,7 +1874,6 @@ html[data-theme="light"] .submission-status-pill.status-archived {
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pageEnter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes spin { to { transform: rotate(360deg); } }
 @keyframes cardEnter { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .card-stagger-item {
   animation: cardEnter var(--motion-normal) var(--ease-standard) both;
@@ -1932,7 +1918,7 @@ html[data-theme="light"] .submission-status-pill.status-archived {
     max-width: 450px; border-radius: 24px;
     border: 1px solid var(--border-color);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-    animation: modalScale 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
   }
 
   .space-submission-sheet {
@@ -1940,11 +1926,6 @@ html[data-theme="light"] .submission-status-pill.status-archived {
   }
   
   .drag-handle { display: none; }
-
-  @keyframes modalScale {
-    from { opacity: 0; transform: scale(0.95) translateY(20px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
-  }
 }
 
 @media (max-width: 767px) {
@@ -2478,52 +2459,67 @@ html[data-theme="light"] .input-group select {
 }
 
 /* =========================================
-   TASKBAR LOADING ANIMATIONS (BOTTOM SHEET)
+   ANALYSIS LOADER (MAP QUICK PANEL)
+   pin -> radius -> score -> verdict, looping
    ========================================= */
-.loading-taskbar {
+.analysis-loader {
+  padding: 6px 2px 2px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.task-item {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 12px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  opacity: 0;
-  animation: slideInTask 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  text-align: center;
 }
 
-html[data-theme="light"] .task-item { background: rgba(0,0,0,0.03); }
+.analysis-loader__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76px;
+  width: 100%;
+}
 
-.task-text {
+.analysis-loader__icon {
+  width: 38px;
+  height: 38px;
+  color: var(--accent);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));
+}
+
+.analysis-loader__radius {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.analysis-loader__score {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 2.5rem;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.analysis-loader__verdict {
+  width: 44px;
+  height: 44px;
+}
+
+.analysis-loader__verdict--pass { color: var(--trend-up); }
+.analysis-loader__verdict--fail { color: var(--trend-down); }
+
+.analysis-loader__label {
+  margin-top: 10px;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted);
+  min-height: 1.2em;
 }
 
-.task-spinner {
-  width: 16px; height: 16px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Staggered Delays for realism */
-.delay-1 { animation-delay: 0.2s; }
-.delay-2 { animation-delay: 0.8s; }
-.delay-3 { animation-delay: 1.4s; }
-.delay-4 { animation-delay: 2.0s; }
-
-@keyframes slideInTask {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
+.analysis-loader--static .analysis-loader__icon {
+  filter: none;
 }
 
 /* =========================================
@@ -4318,7 +4314,7 @@ html[data-theme="light"] .trends-score-badge.low {
   border-radius: 20px;
   padding: 18px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
-  animation: modalScale 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
 }
 
 .history-confirm-eyebrow {
@@ -4369,21 +4365,13 @@ html[data-theme="light"] .trends-score-badge.low {
   inset: 0;
   z-index: 13000;
   background: rgba(2, 6, 23, 0.62);
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
-  opacity: 0;
-
-  transition: opacity 320ms var(--ease-standard), backdrop-filter 320ms var(--ease-standard);
-}
-
-.onboarding-overlay.is-visible {
-  opacity: 1;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
 }
 
 .onboarding-modal {
@@ -4398,14 +4386,7 @@ html[data-theme="light"] .trends-score-badge.low {
   border-radius: 20px;
   padding: 18px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-  opacity: 0;
-  transform: translateY(24px) scale(0.94);
-  transition: opacity 420ms var(--ease-standard), transform 420ms var(--ease-standard);
-}
-
-.onboarding-overlay.is-visible .onboarding-modal {
-  opacity: 1;
-  transform: translateY(0) scale(1);
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
 }
 
 .onboarding-step-card {
@@ -4899,6 +4880,21 @@ html[data-theme="light"] .trends-score-badge.low {
 
 .tour-card__skip:hover {
   color: var(--text-main);
+}
+
+.tour-spotlight-mask {
+  position: fixed;
+  background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.tour-spotlight-ring {
+  position: fixed;
+  border-radius: 14px;
+  border: 2px solid var(--accent);
+  pointer-events: none;
 }
 
 .tour-pulse {
