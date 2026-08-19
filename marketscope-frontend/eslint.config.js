@@ -23,7 +23,11 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // varsIgnorePattern already tolerates capitalized-only-in-JSX components
+      // (no eslint-plugin-react here, so scope analysis can't see JSX usage).
+      // `motion` needs the same allowance: framer-motion's `<motion.div>` etc.
+      // are JSX member expressions on a lowercase import.
+      'no-unused-vars': ['error', { varsIgnorePattern: '^([A-Z_]|motion$)' }],
     },
   },
 ])

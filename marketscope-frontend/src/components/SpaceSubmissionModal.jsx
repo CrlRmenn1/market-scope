@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../api';
 import { parseCoordinatePairText } from '../utils/coordinates';
 import MapPicker from './MapPicker';
+import Modal from './Modal';
+import { SPACE_SUBMISSION_TRIGGER_ID } from '../constants/layoutIds';
 
 const BUSINESS_TYPE_OPTIONS = [
   { value: '', label: 'Not specific' },
@@ -53,8 +55,15 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     return form.title.trim() && Number.isFinite(latitude) && Number.isFinite(longitude);
   }, [form]);
 
+  // Reset on open (not close) so the form doesn't visibly flash back to blank
+  // while the panel is still mid-exit-animation on close. The component no
+  // longer fully unmounts between opens (Modal keeps it mounted through the
+  // exit animation), so every piece of state that used to be wiped for free
+  // by remounting needs to be listed here explicitly, including
+  // showMapPicker — otherwise closing mid map-pick and reopening would show
+  // the map picker again unprompted.
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
       setStepIndex(0);
       setForm(defaultForm);
       setSelectedPhotoIndex(0);
@@ -62,6 +71,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
       setErrorMessage('');
       setSuccessMessage('');
       setIsSubmitted(false);
+      setShowMapPicker(false);
     }
   }, [isOpen]);
 
@@ -234,8 +244,6 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     return true;
   };
 
-  if (!isOpen) return null;
-
   const handleNext = () => {
     if (stepIndex === 0 && !form.title.trim()) {
       setErrorMessage('Listing Title is required before continuing.');
@@ -262,14 +270,19 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
   };
 
   return (
-    <div className="sheet-overlay" onClick={onClose} role="presentation">
-      <div className="bottom-sheet space-submission-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Submit a space listing">
-        <div className="drag-handle"></div>
-        <button className="close-btn" onClick={onClose}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      layoutId={SPACE_SUBMISSION_TRIGGER_ID}
+      panelClassName="space-submission-sheet"
+      ariaLabel="Submit a space listing"
+    >
+      <div className="drag-handle"></div>
+      <button className="close-btn" onClick={onClose}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
 
-        <div className="sheet-content space-submission-content">
+      <div className="sheet-content space-submission-content">
           <h2 className="sheet-title">Submit Space Listing</h2>
           <p className="sheet-subtitle">Send a guaranteed listing to admin review for map publishing.</p>
 
@@ -447,8 +460,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
               )}
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
