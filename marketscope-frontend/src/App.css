@@ -1114,7 +1114,8 @@ html[data-theme="light"] .map-quick-panel {
   background: var(--surface-modal-bg); backdrop-filter: blur(var(--surface-modal-blur)); -webkit-backdrop-filter: blur(var(--surface-modal-blur)); padding: 35px 24px;
   border-top-left-radius: 35px; border-top-right-radius: 35px;
   border-top: 1px solid var(--surface-3-border); box-shadow: var(--surface-3-shadow); width: 100%;
-  animation: slideUp 0.42s var(--ease-standard); position: relative;
+  /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
+  position: relative;
 }
 
 .space-submission-sheet {
@@ -1932,7 +1933,7 @@ html[data-theme="light"] .submission-status-pill.status-archived {
     max-width: 450px; border-radius: 24px;
     border: 1px solid var(--border-color);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-    animation: modalScale 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Open/close animation is now driven by Framer Motion in Modal.jsx. */
   }
 
   .space-submission-sheet {
