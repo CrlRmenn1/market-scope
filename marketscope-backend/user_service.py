@@ -89,8 +89,8 @@ async def get_user_profile(pool, user_id: int):
                 full_name, email, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months, onboarding_seen
+                startup_capital, preferred_setup,
+                target_payback_months, onboarding_seen
             FROM users
             WHERE {user_pk_column} = $1
             """,
@@ -150,18 +150,16 @@ async def update_user_profile(pool, user_id: int, payload):
                 birthday = $7,
                 primary_business = $8,
                 startup_capital = $9,
-                risk_tolerance = $10,
-                preferred_setup = $11,
-                time_commitment = $12,
-                target_payback_months = $13
-            WHERE {user_pk_column} = $14
+                preferred_setup = $10,
+                target_payback_months = $11
+            WHERE {user_pk_column} = $12
             RETURNING
                 {user_pk_column} AS user_id,
                 full_name, email, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
+                startup_capital, preferred_setup,
+                target_payback_months
             """,
             payload.full_name,
             payload.email,
@@ -172,9 +170,7 @@ async def update_user_profile(pool, user_id: int, payload):
             payload.birthday,
             payload.primary_business or None,
             payload.startup_capital,
-            payload.risk_tolerance or None,
             payload.preferred_setup or None,
-            payload.time_commitment or None,
             payload.target_payback_months,
             user_id,
         )

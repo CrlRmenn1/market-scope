@@ -132,9 +132,7 @@ def ensure_users_profile_columns(cursor):
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday DATE")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_business VARCHAR(120)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS startup_capital INTEGER")
-    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_tolerance VARCHAR(50)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_setup VARCHAR(50)")
-    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS time_commitment VARCHAR(50)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS target_payback_months INTEGER")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_seen BOOLEAN DEFAULT FALSE")
 

@@ -28,9 +28,7 @@ const BUSINESS_OPTIONS = [
 const FIELD_LABELS = {
   primary_business: 'Primary Business Interest',
   startup_capital: 'Startup Capital (PHP)',
-  risk_tolerance: 'Risk Tolerance',
   preferred_setup: 'Preferred Setup',
-  time_commitment: 'Time Commitment',
   target_payback_months: 'Target Payback (Months)'
 };
 

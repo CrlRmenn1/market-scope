@@ -601,34 +601,35 @@ export default function Report({ data, targetCoords, onClose }) {
 
   return (
     <div ref={reportExportRef} className="report-page slide-up bg-[var(--bg-app)]">
-      <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-4 py-4 backdrop-blur-md sm:px-5">
-        <h2 className="report-title min-w-0 flex-1 truncate text-lg font-semibold text-[var(--text-main)]">Analysis Dossier</h2>
+      <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-3 py-3 backdrop-blur-md sm:px-5 sm:py-4">
+        <h2 className="report-title min-w-0 flex-1 truncate text-base font-semibold text-[var(--text-main)] sm:text-lg">Analysis Dossier</h2>
 
-        <div className="pdf-hide flex flex-none items-center gap-2">
+        <div className="pdf-hide flex flex-none items-center gap-1.5 sm:gap-2">
           <button
-            className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-2 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] sm:px-3"
             onClick={handleGenerateAiReport}
             disabled={isGeneratingAiReport}
             title="Generate LLM feasibility narrative"
           >
-            {isGeneratingAiReport ? 'Generating AI...' : 'Generate AI'}
+            <span className="hidden sm:inline">{isGeneratingAiReport ? 'Generating AI...' : 'Generate AI'}</span>
+            <span className="sm:hidden">{isGeneratingAiReport ? '...' : 'AI'}</span>
           </button>
 
           <motion.button
             layoutId={PDF_SETTINGS_TRIGGER_ID}
-            className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            className="icon-btn inline-flex h-9 w-9 flex-none items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] sm:h-10 sm:w-10"
             onClick={() => setIsPdfSettingsOpen(true)}
             title={isExportingPdf ? 'Generating PDF...' : 'Save as PDF'}
             disabled={isExportingPdf}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 6 2 18 2 18 9"></polyline>
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
               <rect x="6" y="14" width="12" height="8"></rect>
             </svg>
           </motion.button>
 
-          <button className="icon-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={onClose} title="Close Report">
+          <button className="icon-btn inline-flex h-9 w-9 flex-none items-center justify-center rounded-full border border-[var(--border-color)] bg-[var(--bg-sheet)] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] sm:h-10 sm:w-10" onClick={onClose} title="Close Report">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>

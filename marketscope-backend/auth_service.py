@@ -14,9 +14,7 @@ from db_schema import (
 REQUIRED_TREND_PREFERENCE_FIELDS = (
     "primary_business",
     "startup_capital",
-    "risk_tolerance",
     "preferred_setup",
-    "time_commitment",
     "target_payback_months",
 )
 
@@ -56,16 +54,16 @@ async def register_user(pool, payload):
                 full_name, email, password_hash,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months
+                startup_capital, preferred_setup,
+                target_payback_months
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING
                 {user_pk_column}, full_name, email, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months, onboarding_seen
+                startup_capital, preferred_setup,
+                target_payback_months, onboarding_seen
             """,
             payload.full_name,
             payload.email,
@@ -77,9 +75,7 @@ async def register_user(pool, payload):
             payload.birthday,
             payload.primary_business or None,
             payload.startup_capital,
-            payload.risk_tolerance or None,
             payload.preferred_setup or None,
-            payload.time_commitment or None,
             payload.target_payback_months,
         )
 
@@ -96,11 +92,9 @@ async def register_user(pool, payload):
         "birthday": new_user[8],
         "primary_business": new_user[9],
         "startup_capital": new_user[10],
-        "risk_tolerance": new_user[11],
-        "preferred_setup": new_user[12],
-        "time_commitment": new_user[13],
-        "target_payback_months": new_user[14],
-        "onboarding_seen": bool(new_user[15]),
+        "preferred_setup": new_user[11],
+        "target_payback_months": new_user[12],
+        "onboarding_seen": bool(new_user[13]),
     }
     missing_preferences = get_missing_trend_preferences(user_payload)
 
@@ -122,8 +116,8 @@ async def login_user(pool, payload):
                 full_name, email, password_hash, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                startup_capital, risk_tolerance, preferred_setup,
-                time_commitment, target_payback_months, onboarding_seen
+                startup_capital, preferred_setup,
+                target_payback_months, onboarding_seen
             FROM users
             WHERE email = $1
             """,
@@ -147,9 +141,7 @@ async def login_user(pool, payload):
         "birthday": db_user.get("birthday"),
         "primary_business": db_user.get("primary_business"),
         "startup_capital": db_user.get("startup_capital"),
-        "risk_tolerance": db_user.get("risk_tolerance"),
         "preferred_setup": db_user.get("preferred_setup"),
-        "time_commitment": db_user.get("time_commitment"),
         "target_payback_months": db_user.get("target_payback_months"),
         "onboarding_seen": bool(db_user.get("onboarding_seen")),
     }

@@ -9,9 +9,7 @@ const mapProfileToFormValues = (value) => ({
   address: value?.address || '',
   primary_business: value?.primary_business || '',
   startup_capital: value?.startup_capital ?? '',
-  risk_tolerance: value?.risk_tolerance || '',
   preferred_setup: value?.preferred_setup || '',
-  time_commitment: value?.time_commitment || '',
   target_payback_months: value?.target_payback_months ?? '',
   birthday: value?.birthday ? String(value.birthday).slice(0, 10) : '',
   age: value?.age ?? '',
@@ -408,18 +406,6 @@ export default function Profile({ user, onProfileUpdate }) {
                   <span className="settings-value">{profile?.startup_capital ? `PHP ${Number(profile.startup_capital).toLocaleString()}` : '-'}</span>
                 )}
               </Row>
-              <Row label="Risk Tolerance">
-                {editingSection === 'business' ? (
-                  <select className={inlineInputClass} value={formValues.risk_tolerance} onChange={updateField('risk_tolerance')}>
-                    <option value="">Not set</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                ) : (
-                  <span className="settings-value capitalize">{profile?.risk_tolerance || '-'}</span>
-                )}
-              </Row>
               <Row label="Preferred Setup">
                 {editingSection === 'business' ? (
                   <select className={inlineInputClass} value={formValues.preferred_setup} onChange={updateField('preferred_setup')}>
@@ -432,17 +418,6 @@ export default function Profile({ user, onProfileUpdate }) {
                   </select>
                 ) : (
                   <span className="settings-value capitalize">{profile?.preferred_setup || '-'}</span>
-                )}
-              </Row>
-              <Row label="Time Commitment">
-                {editingSection === 'business' ? (
-                  <select className={inlineInputClass} value={formValues.time_commitment} onChange={updateField('time_commitment')}>
-                    <option value="">Not set</option>
-                    <option value="part-time">Part-time</option>
-                    <option value="full-time">Full-time</option>
-                  </select>
-                ) : (
-                  <span className="settings-value capitalize">{profile?.time_commitment || '-'}</span>
                 )}
               </Row>
               <Row label="Target Payback (Months)">

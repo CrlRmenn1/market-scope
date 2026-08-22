@@ -38,7 +38,6 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
     target_payback = int(requirement.get("payback_months") or 0)
 
     startup_capital = user_profile.get("startup_capital")
-    risk_tolerance = "medium"
     preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
     target_payback_months = user_profile.get("target_payback_months")
 
@@ -50,14 +49,6 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
             capital_fit_points = 10
         else:
             capital_fit_points = 2
-
-    risk_rank = {"low": 1, "medium": 2, "high": 3}
-    risk_fit_points = 5
-    if risk_tolerance in risk_rank:
-        if risk_rank[risk_tolerance] >= risk_rank.get(business_risk, 2):
-            risk_fit_points = 10
-        else:
-            risk_fit_points = 3
 
     setup_fit_points = 4
     if preferred_setup:
@@ -87,7 +78,6 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
         + user_experience_points
         + interest_points
         + capital_fit_points
-        + risk_fit_points
         + setup_fit_points
         + payback_fit_points,
     )
@@ -100,7 +90,6 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
         "user_experience_points": user_experience_points,
         "interest_points": interest_points,
         "capital_fit_points": capital_fit_points,
-        "risk_fit_points": risk_fit_points,
         "setup_fit_points": setup_fit_points,
         "payback_fit_points": payback_fit_points,
     }
@@ -108,7 +97,7 @@ def score_business_opportunity(profile_key, profile_data, user_profile, global_t
     reasons = [
         f"Market trend average score is {market_avg_score:.1f} across {market_scan_count} recent scans.",
         f"Local competitor estimate is {int(local_competitor_count)} around this business type.",
-        f"The recommendation uses a default medium risk profile and preferred setup is {preferred_setup or 'unset'}.",
+        f"Preferred setup is {preferred_setup or 'unset'}.",
     ]
 
     return {
@@ -149,11 +138,6 @@ def build_trend_upside_downside(recommendation, pre_scanned_report):
     elif scoring.get("capital_fit_points", 0) <= 3:
         downsides.append("Your startup capital may be below the typical range for this business type.")
 
-    if scoring.get("risk_fit_points", 0) >= 8:
-        upsides.append("Risk profile aligns with the operating risk of this business.")
-    elif scoring.get("risk_fit_points", 0) <= 3:
-        downsides.append("Risk mismatch detected between your profile and this business category.")
-
     if pre_scanned_report:
         pre_scan_score = int(pre_scanned_report.get("viability_score") or 0)
         if pre_scan_score >= 70:
@@ -191,23 +175,17 @@ def recommend_trends(user_profile, global_trends):
     recommendations = []
 
     startup_capital = user_profile.get("startup_capital") or 0
-    risk_tolerance = "medium"
     preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
     target_payback_months = user_profile.get("target_payback_months") or 0
 
     for business, requirements in TREND_BUSINESS_REQUIREMENTS.items():
         capital_min = requirements["capital_min"]
         capital_max = requirements["capital_max"]
-        risk = requirements["risk"]
         setup = requirements["setup"]
         payback_months = requirements["payback_months"]
 
         # Check if the business matches the user's profile
         if startup_capital < capital_min or startup_capital > capital_max:
-            continue
-        if risk_tolerance == "low" and risk != "low":
-            continue
-        if risk_tolerance == "medium" and risk not in {"low", "medium"}:
             continue
         if preferred_setup and preferred_setup != setup:
             continue

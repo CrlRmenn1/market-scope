@@ -215,7 +215,7 @@ a svg,
   -webkit-backdrop-filter: blur(var(--surface-2-blur));
   padding: max(16px, env(safe-area-inset-top)) 20px 16px;
   border-bottom: 1px solid var(--border-color);
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
   text-shadow: var(--glass-text-shadow);
 }
 
@@ -225,7 +225,10 @@ a svg,
 
 .brand-wrapper {
   display: flex; align-items: center; gap: 12px;
+  min-width: 0; flex-shrink: 1;
 }
+
+.brand-mark { flex-shrink: 0; }
 
 .brand-home-btn {
   border: none;
@@ -283,6 +286,10 @@ a svg,
   font-family: var(--font-brand);
   color: var(--text-main); /* Shifts to black in light mode */
   letter-spacing: -0.02em; margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .highlight-text { color: var(--accent); }
@@ -290,7 +297,7 @@ a svg,
 /* =========================================
    4. SETTINGS MENU & DROPDOWN
    ========================================= */
-.settings-wrapper { position: relative; }
+.settings-wrapper { position: relative; min-width: 0; flex-shrink: 1; }
 
 .gear-btn {
   background: transparent; border: 1px solid transparent; padding: 8px;
@@ -397,11 +404,18 @@ html[data-theme="dark"] .settings-dropdown {
 }
 
 .nav-item {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center;
   background: transparent; border: none; color: var(--text-muted);
   cursor: pointer; gap: 4px; z-index: 2; padding: 8px 0;
   position: relative;
   transition: transform var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard);
+}
+
+.nav-item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-item.active { color: var(--accent); }
@@ -2001,6 +2015,21 @@ html[data-theme="light"] .submission-status-pill.status-archived {
     height: 24px;
   }
 
+  .app-header .user-settings-btn {
+    gap: 6px;
+    padding: 5px 8px 5px 5px;
+  }
+
+  .app-header .settings-user-name {
+    max-width: 64px;
+    font-size: 0.82rem;
+  }
+
+  .app-header .gear-icon-small {
+    width: 16px;
+    height: 16px;
+  }
+
   .map-legend {
     left: 8px;
     padding: 9px 10px;
@@ -2827,6 +2856,8 @@ html[data-theme="light"] .input-group select {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
   background: var(--bg-sheet);
   border: 1px solid var(--border-color);
   padding: 6px 12px;

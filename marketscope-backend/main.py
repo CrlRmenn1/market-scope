@@ -224,9 +224,7 @@ class RegisterUser(BaseModel):
     birthday: date | None = None
     primary_business: str | None = None
     startup_capital: int | None = None
-    risk_tolerance: str | None = None
     preferred_setup: str | None = None
-    time_commitment: str | None = None
     target_payback_months: int | None = None
 
 class LoginUser(BaseModel):
@@ -259,9 +257,7 @@ class UpdateUserProfile(BaseModel):
     birthday: date | None = None
     primary_business: str | None = None
     startup_capital: int | None = None
-    risk_tolerance: str | None = None
     preferred_setup: str | None = None
-    time_commitment: str | None = None
     target_payback_months: int | None = None
 
 class AnalysisRequest(BaseModel):
@@ -331,9 +327,7 @@ class AdminUpdateUser(BaseModel):
     birthday: date | None = None
     primary_business: str | None = None
     startup_capital: int | None = None
-    risk_tolerance: str | None = None
     preferred_setup: str | None = None
-    time_commitment: str | None = None
     target_payback_months: int | None = None
 
 
@@ -667,9 +661,7 @@ async def get_user_trend_recommendations(user_id: int, limit: int = 5):
             "summary": {
                 "profile_interest": user_profile.get("primary_business") or "Not set",
                 "startup_capital": user_profile.get("startup_capital"),
-                "risk_tolerance": user_profile.get("risk_tolerance") or "Not set",
                 "preferred_setup": user_profile.get("preferred_setup") or "Not set",
-                "time_commitment": user_profile.get("time_commitment") or "Not set",
                 "target_payback_months": user_profile.get("target_payback_months"),
                 "total_options_evaluated": len(recommendations),
                 "preference_business_matches": sorted(list(preference_business_keys)),
@@ -2437,9 +2429,7 @@ def fetch_user_profile_by_id(cursor, user_pk_column: str, user_id: int):
             birthday,
             primary_business,
             startup_capital,
-            risk_tolerance,
             preferred_setup,
-            time_commitment,
             target_payback_months,
             created_at
         FROM users
@@ -2537,9 +2527,7 @@ async def fetch_user_profile_by_id_async(conn, user_pk_column: str, user_id: int
             birthday,
             primary_business,
             startup_capital,
-            risk_tolerance,
             preferred_setup,
-            time_commitment,
             target_payback_months,
             created_at
         FROM users
@@ -3672,9 +3660,7 @@ def fetch_user_for_admin(cursor, user_pk_column: str, user_id: int):
             birthday,
             primary_business,
             startup_capital,
-            risk_tolerance,
             preferred_setup,
-            time_commitment,
             target_payback_months
         FROM users
         WHERE {user_pk_column} = %s
@@ -3810,9 +3796,7 @@ def admin_list_users(x_admin_token: str | None = Header(default=None)):
                 birthday,
                 primary_business,
                 startup_capital,
-                risk_tolerance,
                 preferred_setup,
-                time_commitment,
                 target_payback_months
             FROM users
             ORDER BY created_at DESC, {user_pk_column} DESC
@@ -3873,9 +3857,7 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 birthday = %s,
                 primary_business = %s,
                 startup_capital = %s,
-                risk_tolerance = %s,
                 preferred_setup = %s,
-                time_commitment = %s,
                 target_payback_months = %s
             WHERE {user_pk_column} = %s
             RETURNING
@@ -3890,9 +3872,7 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 birthday,
                 primary_business,
                 startup_capital,
-                risk_tolerance,
                 preferred_setup,
-                time_commitment,
                 target_payback_months
             """,
             (
@@ -3905,9 +3885,7 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 payload.birthday,
                 payload.primary_business or None,
                 payload.startup_capital,
-                payload.risk_tolerance or None,
                 payload.preferred_setup or None,
-                payload.time_commitment or None,
                 payload.target_payback_months,
                 user_id
             )
