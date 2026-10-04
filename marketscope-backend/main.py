@@ -681,7 +681,7 @@ async def get_user_trend_recommendations(user_id: int, limit: int = 5):
 # GEOSPATIAL ANALYSIS ROUTE
 # ==========================================
 BACKEND_DIR = Path(__file__).resolve().parent
-PBF_PATH = BACKEND_DIR / "panabo.pbf"
+PBF_PATH = BACKEND_DIR / "data" / "panabo.pbf"
 PBF_COMPETITOR_CACHE = {}
 PBF_ALL_COMPETITORS = []
 PBF_CACHE_LOADED = False
@@ -923,11 +923,11 @@ def preload_hazard_layer_cache():
             return
 
         candidates = [
-            Path(__file__).resolve().parent / "flood-data" / "panabo_hazard_5yr.geojson",
+            Path(__file__).resolve().parent / "data" / "flood" / "panabo_hazard_5yr.geojson",
             Path(__file__).resolve().parent / "panabo_hazard_5yr.geojson",
             Path(__file__).resolve().parent.parent / "marketscope-frontend" / "public" / "panabo_hazard_5yr.geojson",
-            Path(__file__).resolve().parent / "DavaoDelNorte" / "DavaoDelNorte_Flood_5year.shp",
-            Path(__file__).resolve().parent / "Davao_del_Norte.geojson",
+            Path(__file__).resolve().parent / "data" / "fallback" / "DavaoDelNorte" / "DavaoDelNorte_Flood_5year.shp",
+            Path(__file__).resolve().parent / "data" / "fallback" / "Davao_del_Norte.geojson",
         ]
 
         cache = []
