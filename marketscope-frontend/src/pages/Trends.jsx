@@ -1,46 +1,93 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../lib/api';
 import TrendPreferencesGate from '../components/onboarding/TrendPreferencesGate';
-import useIsDesktop from '../utils/useIsDesktop';
+import TrendSpotCard from '../components/trends/TrendSpotCard';
 import { getMissingTrendPreferenceFields } from '../utils/trendPreferences';
 
-const getScoreTone = (score) => {
-  if (score >= 75) return 'high';
-  if (score >= 55) return 'medium';
-  return 'low';
+// While any business type is queued or scanning, re-read the saved results this often.
+const POLL_INTERVAL_MS = 5000;
+const ACTIVE_SCAN_STATES = ['scanning', 'queued'];
+
+const formatAge = (seconds) => {
+  if (seconds === null || seconds === undefined) return null;
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} h ago`;
+  return `${Math.round(seconds / 86400)} d ago`;
 };
 
-const getScoreLabel = (score) => {
-  if (score >= 75) return 'High Opportunity';
-  if (score >= 55) return 'Promising';
-  return 'Watchlist';
+const readErrorMessage = (data, fallback) => {
+  const detail = data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail?.message && Array.isArray(detail?.missing_fields) && detail.missing_fields.length > 0) {
+    return `${detail.message} Missing: ${detail.missing_fields.join(', ')}`;
+  }
+  return fallback;
 };
 
-const getScoringLabel = (key) => {
-  const labels = {
-    demand_points: 'Demand Analysis',
-    market_gap_points: 'Market Gap',
-    trend_points: 'Market Trends',
-    momentum_points: 'Growth Momentum',
-    user_experience_points: 'Your Experience',
-    interest_points: 'Personal Interest',
-    capital_fit_points: 'Capital Fit',
-    risk_fit_points: 'Risk Fit',
-    setup_fit_points: 'Setup Fit',
-    payback_fit_points: 'Payback Period Fit'
-  };
-  return labels[key] || key.replace(/_/g, ' ');
-};
+function ScanStatus({ scan, minScore }) {
+  const { state, progress } = scan;
+
+  if (state === 'scanning') {
+    const total = progress?.total || 0;
+    const done = progress?.done || 0;
+    return (
+      <div className="mt-3">
+        <p className="text-sm text-[var(--text-muted)]">
+          {total > 0 ? `Scanning spots in the background... ${done} / ${total}` : 'Preparing the background scan...'}
+        </p>
+        <div className="trends-progress mt-2" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+          <span style={{ width: `${total > 0 ? Math.round((done / total) * 100) : 4}%` }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (state === 'queued') {
+    return <p className="mt-3 text-sm text-[var(--text-muted)]">Waiting in the scan queue...</p>;
+  }
+
+  if (state === 'failed') {
+    return <p className="mt-3 text-sm text-[var(--trend-down)]">The last scan failed{scan.error ? `: ${scan.error}` : '.'} Try Rescan now.</p>;
+  }
+
+  if (state === 'missing') {
+    return <p className="mt-3 text-sm text-[var(--text-muted)]">Not scanned yet.</p>;
+  }
+
+  return (
+    <p className="mt-3 text-sm tabular-nums text-[var(--text-muted)]">
+      {scan.scanned_spots} spots scanned · {scan.high_chance_spots} scored {minScore}+ · updated {formatAge(scan.scanned_seconds_ago)}
+      {state === 'stale' && ' (older than the refresh window, a rescan will run soon)'}
+    </p>
+  );
+}
+
+function FitChecks({ fit }) {
+  if (!fit?.checks?.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {fit.checks.map((check) => (
+        <span
+          key={check.label}
+          title={check.detail}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${check.passed ? 'border-[var(--trend-up)] text-[var(--trend-up)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}
+        >
+          {check.passed ? '✓' : '✗'} {check.label}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrendPreferences, onPreferencesSaved }) {
   const userId = user?.user_id || user?.id;
   const [loading, setLoading] = useState(Boolean(userId));
+  const [rescanning, setRescanning] = useState(false);
   const [error, setError] = useState('');
-  const [summary, setSummary] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
-  const [expandedBusinessKey, setExpandedBusinessKey] = useState(null);
-  const [expandedScoringKey, setExpandedScoringKey] = useState(null);
-  const [analyzingBusinessKey, setAnalyzingBusinessKey] = useState(null);
+  const [trends, setTrends] = useState(null);
+  const [openingResultId, setOpeningResultId] = useState(null);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showPreferenceGate, setShowPreferenceGate] = useState(false);
 
   const activeMissingPreferences = useMemo(() => {
@@ -51,58 +98,66 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
   }, [missingTrendPreferences, user]);
 
   const hasMissingPreferences = activeMissingPreferences.length > 0;
+  const sections = useMemo(() => (Array.isArray(trends?.sections) ? trends.sections : []), [trends]);
+  const settings = trends?.settings || {};
+  const minScore = settings.high_chance_min_score ?? 70;
+  const primarySection = sections.find((section) => section.role === 'primary') || null;
+  const fitSections = sections.filter((section) => section.role === 'fit');
+  const isScanActive = sections.some((section) => ACTIVE_SCAN_STATES.includes(section.scan?.state));
 
-  const fetchRecommendations = async () => {
+  // GET only reads saved scan results (it queues a scan when they are missing or old).
+  const loadTrends = useCallback(async ({ silent = false } = {}) => {
     if (!userId) return;
-    setLoading(true);
-    setError('');
+    if (!silent) setLoading(true);
 
     try {
-      const response = await fetch(apiUrl(`/users/${userId}/trend-recommendations?limit=6`), { cache: 'no-store' });
+      const response = await fetch(apiUrl(`/users/${userId}/trends`), { cache: 'no-store' });
       const data = await response.json();
-
-      if (!response.ok) {
-        const detail = data?.detail;
-        if (typeof detail === 'string') {
-          throw new Error(detail);
-        }
-        if (detail?.message && Array.isArray(detail?.missing_fields) && detail.missing_fields.length > 0) {
-          throw new Error(`${detail.message} Missing: ${detail.missing_fields.join(', ')}`);
-        }
-        throw new Error('Unable to load trend recommendations.');
-      }
-
-      setSummary(data?.summary || null);
-      setRecommendations(Array.isArray(data?.recommendations) ? data.recommendations : []);
+      if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to load trend analysis.'));
+      setTrends(data);
+      setError('');
     } catch (fetchError) {
-      setRecommendations([]);
-      setError(fetchError.message || 'Unable to load trend recommendations.');
+      if (!silent) setTrends(null);
+      setError(fetchError.message || 'Unable to load trend analysis.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  }, [userId]);
+
+  const rescanNow = async () => {
+    if (!userId) return;
+    setRescanning(true);
+    try {
+      const response = await fetch(apiUrl(`/users/${userId}/trends/rescan`), { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to start a rescan.'));
+      setTrends(data);
+      setError('');
+    } catch (rescanError) {
+      setError(rescanError.message || 'Unable to start a rescan.');
+    } finally {
+      setRescanning(false);
     }
   };
 
-  const openRecommendationReport = (item) => {
-    if (!onRunAnalysis) return;
+  // The card list only carries a summary; the full saved report is fetched on demand.
+  const viewSpotReport = async (spot) => {
+    if (!onOpenReport) return;
+    setOpeningResultId(spot.result_id);
+    try {
+      const response = await fetch(apiUrl(`/trends/results/${spot.result_id}`), { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to open this report.'));
+      onOpenReport(data.report);
+    } catch (openError) {
+      setError(openError.message || 'Unable to open this report.');
+    } finally {
+      setOpeningResultId(null);
+    }
+  };
 
-    const hotspot = Array.isArray(item.citywide_hotspots) && item.citywide_hotspots.length > 0 ? item.citywide_hotspots[0] : null;
-    const fallbackCoords = item.pre_scanned_location || item.full_report?.target_coords || null;
-
-    const coordsSource = hotspot?.coords || fallbackCoords;
-    if (!coordsSource) return;
-
-    setAnalyzingBusinessKey(item.business_key);
-    
-    const coords = {
-      lat: Number(coordsSource.lat || coordsSource.latitude || 0),
-      lng: Number(coordsSource.lng || coordsSource.lon || coordsSource.longitude || 0)
-    };
-    
-    // Extract business keys from item.business_key (e.g., "coffee" or "coffee+bakery")
-    const businessType = item.business_key || item.business_name;
-    
-    onRunAnalysis(coords, businessType);
-    setTimeout(() => setAnalyzingBusinessKey(null), 500);
+  const showSpotOnMap = (spot, businessKey) => {
+    onRunAnalysis?.({ lat: Number(spot.lat), lng: Number(spot.lng) }, businessKey);
   };
 
   useEffect(() => {
@@ -112,227 +167,45 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
       setShowPreferenceGate(true);
       setLoading(false);
       setError('');
-      setSummary(null);
-      setRecommendations([]);
+      setTrends(null);
       return;
     }
 
     setShowPreferenceGate(false);
-    fetchRecommendations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, hasMissingPreferences]);
+    loadTrends();
+  }, [userId, hasMissingPreferences, loadTrends]);
 
-  const hasRecommendations = useMemo(() => recommendations.length > 0, [recommendations]);
-  const isDesktop = useIsDesktop();
+  useEffect(() => {
+    if (!isScanActive) return undefined;
+    const timer = setTimeout(() => loadTrends({ silent: true }), POLL_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [isScanActive, trends, loadTrends]);
 
-  const renderRecommendationCard = (item, index) => {
-              const score = Number(item?.opportunity_score || 0);
-              const tone = getScoreTone(score);
-              const scoreLabel = getScoreLabel(score);
-              const isExpanded = expandedBusinessKey === item.business_key;
-              const hasHotspots = Array.isArray(item?.citywide_hotspots) && item.citywide_hotspots.length > 0;
-              const hasUpsides = Array.isArray(item?.upsides) && item.upsides.length > 0;
-              const hasDownsides = Array.isArray(item?.downsides) && item.downsides.length > 0;
-              const hasSpaceContext = hasHotspots && item.citywide_hotspots[0]?.space_context;
-              const canRunAnalysis = Boolean(onRunAnalysis && (hasHotspots || item.pre_scanned_location || item.full_report?.target_coords));
+  const renderSpots = (section) => {
+    const spots = Array.isArray(section.spots) ? section.spots : [];
+    if (spots.length === 0) return null;
 
-              return (
-                <div
-                  key={item.business_key}
-                  className="data-card trends-card card-stagger-item p-4"
-                  style={{ '--stagger-index': index }}
-                >
-                  <button
-                    type="button"
-                    className="trends-card-top -m-1 flex w-full items-start justify-between gap-4 rounded-xl p-1 text-left transition hover:bg-[var(--accent-hover)]"
-                    onClick={() => openRecommendationReport(item)}
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span
-                        className={`mt-0.5 inline-flex h-7 w-7 flex-none items-center justify-center rounded-full text-xs font-bold tabular-nums ${index === 0 ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]' : 'bg-[var(--accent-hover)] text-[var(--accent)]'}`}
-                        aria-label={`Rank ${index + 1}`}
-                      >
-                        {index + 1}
-                      </span>
-                      <h3 className="history-title min-w-0 text-lg font-semibold leading-snug text-[var(--text-main)]">{item.business_name}</h3>
-                    </div>
-                    <div className="trends-score-wrap flex flex-none flex-col items-end gap-1">
-                      <span
-                        className="trends-score text-2xl font-bold tabular-nums leading-none text-[var(--text-main)]"
-                        aria-label={`Opportunity score ${score} out of 100`}
-                      >
-                        {score}
-                      </span>
-                      <span className={`trends-score-badge ${tone}`}>{scoreLabel}</span>
-                    </div>
-                  </button>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-color)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--text-muted)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                      </svg>
-                      {item.local_competitor_estimate} competitors
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-color)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--text-muted)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                      </svg>
-                      {item.market_scan_count} scans
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-color)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--text-muted)]">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />
-                      </svg>
-                      Avg viability {item.market_average_viability || '—'}
-                    </span>
-                  </div>
-
-                  {/* Key Reasons */}
-                  <div className="mt-4">
-                    <p className="eyebrow-label mb-2">Why this pick</p>
-                    <ul className="trends-reasons flex flex-col gap-1.5">
-                      {(item.reasons || []).slice(0, 3).map((reason, index) => (
-                        <li key={`${item.business_key}-reason-${index}`} className="text-sm leading-5 text-[var(--text-muted)]">{reason}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Upsides & Downsides */}
-                  {(hasUpsides || hasDownsides) && (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {hasUpsides && (
-                        <div className="rounded-xl bg-[var(--trend-up-bg)] p-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--trend-up)]">Upsides</p>
-                          <ul className="signal-list mt-2">
-                            {item.upsides.map((upside, idx) => (
-                              <li key={idx} className="text-xs leading-4 text-[var(--text-main)]">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[var(--trend-up)]" aria-hidden="true">
-                                  <path d="M20 6 9 17l-5-5" />
-                                </svg>
-                                {upside}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {hasDownsides && (
-                        <div className="rounded-xl bg-[var(--trend-neutral-bg)] p-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--trend-neutral)]">Considerations</p>
-                          <ul className="signal-list mt-2">
-                            {item.downsides.map((downside, idx) => (
-                              <li key={idx} className="text-xs leading-4 text-[var(--text-main)]">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-[var(--trend-neutral)]" aria-hidden="true">
-                                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
-                                </svg>
-                                {downside}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Space Context */}
-                  {hasSpaceContext && (
-                    <div className="mt-3 flex items-start gap-2.5 rounded-xl bg-[var(--accent-hover)] px-3 py-2.5">
-                      <svg className="mt-0.5 flex-none text-[var(--accent)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" /><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" /><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" /><path d="M10 6h4" /><path d="M10 10h4" /><path d="M10 14h4" /><path d="M10 18h4" />
-                      </svg>
-                      <p className="text-sm leading-5 text-[var(--text-main)]">
-                        <span className="font-semibold text-[var(--accent)]">Nearby space: </span>
-                        {item.citywide_hotspots[0].space_context.title || 'Listed property nearby'}
-                        {item.citywide_hotspots[0].space_context.price_min && ` • PHP ${item.citywide_hotspots[0].space_context.price_min.toLocaleString()}`}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Expandable Scoring Breakdown & Profile Match */}
-                  <div className="mt-4 flex items-center gap-2 border-t border-[var(--border-color)] pt-3">
-                    <button
-                      type="button"
-                      className="trends-analyze-btn inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                      onClick={() => openRecommendationReport(item)}
-                      disabled={!canRunAnalysis || analyzingBusinessKey === item.business_key}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-                      </svg>
-                      {analyzingBusinessKey === item.business_key ? 'Running...' : 'Run Analysis'}
-                    </button>
-                    <button
-                      type="button"
-                      className="trends-breakdown-toggle ml-auto inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--accent-hover)] hover:text-[var(--text-main)]"
-                      onClick={() => setExpandedBusinessKey(isExpanded ? null : item.business_key)}
-                      aria-expanded={isExpanded}
-                    >
-                      Details
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="trends-breakdown mt-3 border-t border-[var(--border-color)] pt-3">
-                      {/* Scoring Breakdown */}
-                      {item.scoring && Object.keys(item.scoring).length > 0 && (
-                        <div className="mb-4">
-                          <p className="eyebrow-label mb-2">Opportunity Scoring</p>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {Object.entries(item.scoring).map(([key, value]) => (
-                              <div key={key} className="rounded-lg border border-[var(--border-color)] p-2 text-xs">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-[var(--text-main)]">{getScoringLabel(key)}</span>
-                                  <span className="font-bold tabular-nums text-[var(--text-main)]">{value}</span>
-                                </div>
-                                <div className="h-1.5 rounded-full bg-[var(--accent-hover)]">
-                                  <div className="h-1.5 rounded-full bg-[var(--accent)]" style={{ width: `${Math.max(0, Math.min(100, (value / 25) * 100))}%` }} />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Profile Match */}
-                      {item.profile_match && Object.keys(item.profile_match).length > 0 && (
-                        <div>
-                          <p className="eyebrow-label mb-2">Your Profile Match</p>
-                          <div className="grid gap-2 text-xs sm:grid-cols-2">
-                            {item.profile_match.capital_range && (
-                              <div className="rounded-lg border border-[var(--border-color)] p-2.5">
-                                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Capital Range</p>
-                                <p className="mt-1 font-semibold tabular-nums text-[var(--text-main)]">PHP {item.profile_match.capital_range.min?.toLocaleString()} - {item.profile_match.capital_range.max?.toLocaleString()}</p>
-                              </div>
-                            )}
-                            {item.profile_match.business_risk && (
-                              <div className="rounded-lg border border-[var(--border-color)] p-2.5">
-                                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Business Risk</p>
-                                <p className="mt-1 font-semibold capitalize text-[var(--text-main)]">{item.profile_match.business_risk}</p>
-                              </div>
-                            )}
-                            {item.profile_match.business_setup && (
-                              <div className="rounded-lg border border-[var(--border-color)] p-2.5">
-                                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Typical Setup</p>
-                                <p className="mt-1 font-semibold capitalize text-[var(--text-main)]">{item.profile_match.business_setup}</p>
-                              </div>
-                            )}
-                            {item.profile_match.estimated_payback_months && (
-                              <div className="rounded-lg border border-[var(--border-color)] p-2.5">
-                                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">Payback Period</p>
-                                <p className="mt-1 font-semibold tabular-nums text-[var(--text-main)]">~{item.profile_match.estimated_payback_months} months</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                </div>
-              );
+    const hasHighChance = spots.some((spot) => spot.is_high_chance);
+    return (
+      <>
+        {!hasHighChance && (
+          <p className="mt-3 rounded-xl bg-[var(--trend-neutral-bg)] px-3 py-2.5 text-sm text-[var(--text-main)]">
+            No spot reached the high-chance score of {minScore}. These are the closest matches.
+          </p>
+        )}
+        <div className="mt-3 grid items-start gap-4 lg:grid-cols-2">
+          {spots.map((spot) => (
+            <TrendSpotCard
+              key={spot.result_id}
+              spot={spot}
+              isOpening={openingResultId === spot.result_id}
+              onViewReport={viewSpotReport}
+              onShowOnMap={(item) => showSpotOnMap(item, section.business_key)}
+            />
+          ))}
+        </div>
+      </>
+    );
   };
 
   return (
@@ -343,42 +216,45 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
             <div>
               <p className="eyebrow-label mb-2">Market Radar</p>
               <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-[var(--text-main)] sm:text-3xl">Business Trends</h2>
-              <p className="profile-email text-sm text-[var(--text-muted)]">MSME opportunities ranked for your profile.</p>
+              <p className="profile-email text-sm text-[var(--text-muted)]">
+                High-chance spots found by background scans for your business preferences.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              {!loading && hasRecommendations && (
-                <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border-color)] bg-[var(--accent-hover)] px-3 py-1.5 text-xs font-semibold tabular-nums text-[var(--accent)]">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" />
-                  </svg>
-                  {recommendations.length} picks
-                </span>
-              )}
-              <button
-                type="button"
-                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={fetchRecommendations}
-                disabled={loading}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className={loading ? 'animate-spin' : ''}>
-                  <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
-                </svg>
-                {loading ? 'Refreshing...' : 'Refresh'}
-              </button>
-            </div>
+            <button
+              type="button"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-4 py-2.5 text-sm font-medium text-[var(--text-main)] transition hover:border-[var(--border-strong)] hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={rescanNow}
+              disabled={loading || rescanning || isScanActive || hasMissingPreferences}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className={rescanning || isScanActive ? 'animate-spin' : ''}>
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+              </svg>
+              {isScanActive ? 'Scanning...' : 'Rescan now'}
+            </button>
           </div>
 
-          {summary && (
-            <span className="trends-summary mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--border-color)] bg-[var(--accent-hover)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)]">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--accent)]" aria-hidden="true">
-                <circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-              </svg>
-              Profile interest: <strong className="text-[var(--accent)]">{summary.profile_interest || 'Not set'}</strong>
-            </span>
+          <button
+            type="button"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)]"
+            onClick={() => setShowHowItWorks((open) => !open)}
+            aria-expanded={showHowItWorks}
+          >
+            How this works
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true" style={{ transform: showHowItWorks ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {showHowItWorks && (
+            <ol className="trends-reasons mt-2 list-decimal">
+              <li>From your preferences we pick your primary business, plus up to two others that pass at least 2 of 3 checks (capital, setup, payback).</li>
+              <li>For each one, the system scans listed spaces for rent or sale, landmark areas and points across the commercial zone in the background, using the same engine as a manual scan ({settings.radius_meters ?? 340} m radius).</li>
+              <li>Every result is saved in the database and reused for {settings.fresh_hours ?? 24} hours, so logging in again does not rescan.</li>
+              <li>Spots scoring {minScore} or higher count as high chance and are ranked by their viability score.</li>
+            </ol>
           )}
         </div>
 
-        {loading && <div className="data-card p-4 text-sm text-[var(--text-muted)]">Generating recommendations...</div>}
+        {loading && <div className="data-card p-4 text-sm text-[var(--text-muted)]">Loading saved scan results...</div>}
 
         {!loading && error && (
           <div className="data-card border border-[var(--border-color)] bg-[var(--trend-down-bg)] p-4 text-sm text-[var(--trend-down)]">
@@ -386,25 +262,10 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           </div>
         )}
 
-        {!loading && !error && !hasRecommendations && (
-          <div className="history-empty-state">
-            <div className="history-empty-icon" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 12h18" />
-                <path d="M12 3v18" />
-              </svg>
-            </div>
-            <div>
-              <p className="history-empty-title">No trend recommendations yet</p>
-              <p className="history-empty-subtitle">Complete your profile and run more analyses to improve recommendation quality.</p>
-            </div>
-          </div>
-        )}
-
         {!loading && hasMissingPreferences && (
           <div className="data-card border border-[var(--border-color)] bg-[var(--trend-neutral-bg)] p-4 text-sm text-[var(--text-main)]">
             <p className="font-semibold">Trend preferences are not complete yet.</p>
-            <p className="mt-1 text-[var(--text-muted)]">Complete your preferences to generate trend recommendations for your profile.</p>
+            <p className="mt-1 text-[var(--text-muted)]">Complete your preferences so the system knows which businesses to scan for.</p>
             <button
               type="button"
               className="mt-3 inline-flex items-center justify-center rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
@@ -415,21 +276,39 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           </div>
         )}
 
-        {!loading && !error && hasRecommendations && (
-          isDesktop ? (
-            <div className="trends-list mt-2 grid grid-cols-2 items-start gap-4">
-              <div className="flex min-w-0 flex-col gap-4 [&>*]:mb-0">
-                {recommendations.map((item, index) => (index % 2 === 0 ? renderRecommendationCard(item, index) : null))}
-              </div>
-              <div className="flex min-w-0 flex-col gap-4 [&>*]:mb-0">
-                {recommendations.map((item, index) => (index % 2 === 1 ? renderRecommendationCard(item, index) : null))}
-              </div>
+        {!loading && trends && !primarySection && fitSections.length === 0 && (
+          <div className="history-empty-state">
+            <div>
+              <p className="history-empty-title">No business type to scan yet</p>
+              <p className="history-empty-subtitle">Pick a primary business in your profile to start the background scan.</p>
             </div>
-          ) : (
-            <div className="trends-list mt-2 flex flex-col gap-4 [&>*]:mb-0">
-              {recommendations.map((item, index) => renderRecommendationCard(item, index))}
+          </div>
+        )}
+
+        {!loading && primarySection && (
+          <section className="text-left">
+            <p className="eyebrow-label mb-1">Your business</p>
+            <h3 className="text-xl font-semibold text-[var(--text-main)]">Best spots for {primarySection.business_name}</h3>
+            <ScanStatus scan={primarySection.scan} minScore={minScore} />
+            {renderSpots(primarySection)}
+          </section>
+        )}
+
+        {!loading && fitSections.length > 0 && (
+          <section className="mt-4 flex flex-col gap-6 text-left">
+            <div>
+              <p className="eyebrow-label mb-1">Also fits your profile</p>
+              <p className="text-sm text-[var(--text-muted)]">Other businesses that pass your capital, setup and payback checks.</p>
             </div>
-          )
+            {fitSections.map((section) => (
+              <div key={section.business_key}>
+                <h3 className="text-lg font-semibold text-[var(--text-main)]">{section.business_name}</h3>
+                <FitChecks fit={section.fit} />
+                <ScanStatus scan={section.scan} minScore={minScore} />
+                {renderSpots({ ...section, spots: (section.spots || []).slice(0, 2) })}
+              </div>
+            ))}
+          </section>
         )}
       </div>
 

@@ -347,8 +347,10 @@ export default function App() {
             user={session}
             missingTrendPreferences={missingTrendPreferences}
             onPreferencesSaved={handleProfileUpdate}
+            onOpenReport={handleViewReport}
             onRunAnalysis={(coords, businessType) => {
-              handleOpenScanOnMap({ coords, businessType, radius: 500 });
+              // Same radius as the background trend scan, so a manual scan there gives the same score.
+              handleOpenScanOnMap({ coords, businessType, radius: 340 });
             }}
           />
         )}

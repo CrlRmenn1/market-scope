@@ -9,7 +9,7 @@ Run locally with `python main.py` (or `uvicorn main:app`).
 import os
 import socket
 from contextlib import asynccontextmanager
-from threading import Event, Thread
+from threading import Thread
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,13 +27,18 @@ from routers import (
     msmes,
     reports,
     spaces,
+    trends,
     users,
     verified_features,
 )
 from services.ahp_weights import _load_ahp_weights_cache
 from services.hazard import preload_hazard_layer_cache
 from services.osm_data import preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
-from services.trend_scan import _trend_snapshot_auto_refresh_loop
+from services.trend_scan import (
+    mark_interrupted_trend_runs,
+    start_trend_scan_worker,
+    stop_trend_scan_worker,
+)
 
 
 @asynccontextmanager
@@ -64,15 +69,13 @@ async def lifespan(app: FastAPI):
     Thread(target=_preload_geo_caches, daemon=True).start()
 
     _load_ahp_weights_cache()
-    stop_event = Event()
-    auto_refresh_thread = Thread(
-        target=_trend_snapshot_auto_refresh_loop,
-        args=(stop_event, 340),
-        daemon=True,
-    )
-    auto_refresh_thread.start()
+
+    # Background trend scan worker (services/trend_scan.py). Scans are queued on
+    # demand (login, profile save, Trends page), not on a timer.
+    mark_interrupted_trend_runs()
+    start_trend_scan_worker()
     yield
-    stop_event.set()
+    stop_trend_scan_worker()
     db_pool = getattr(app.state, "db_pool", None)
     if db_pool is not None:
         await db_pool.close()
@@ -102,6 +105,7 @@ app.include_router(admin_users.router)
 app.include_router(msmes.router)
 app.include_router(verified_features.router)
 app.include_router(analysis.router)
+app.include_router(trends.router)
 
 
 if __name__ == "__main__":

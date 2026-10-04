@@ -1,411 +1,280 @@
-"""Citywide pre-scan of every MSME category, cached in memory and in the DB."""
-import json
-from datetime import datetime, timezone
+"""Background trend scan: runs the main /analyze engine over many spots, saves every result.
+
+How it works
+  1. Someone asks for scans (login, profile save, opening Trends, "Rescan now")
+     via request_trend_scans(["coffee", ...]).
+  2. Cache check: a business type that already has a finished run younger than
+     TREND_SCAN_FRESH_HOURS is skipped. That run's saved results are reused.
+  3. Otherwise the business type goes on a queue. One worker thread takes it,
+     builds the candidate spots (services/trend_candidates.py) and calls
+     perform_analysis() on each one: the same function behind POST /analyze.
+  4. Each result is saved as a row in trend_scan_results, and the run's progress
+     is updated in trend_scan_runs. When it finishes, older runs are deleted.
+
+Results depend only on (spot, business type), never on the user, so every user
+interested in the same business type shares one scan.
+
+Logs use the "[trend-scan]" prefix.
+"""
+import time
+from queue import Empty, Queue
 from threading import Event, Lock, Thread
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
-from constants.geo import PANABO_ANCHORS, PANABO_BOUNDS
 from constants.msme import SME_DATABASE
-from core.config import (
-    TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS,
-    TREND_SCAN_CACHE_MAX_STALE_SECONDS,
-    TREND_SCAN_CACHE_TTL_SECONDS,
+from core.config import TREND_SCAN_FRESH_HOURS, TREND_SCAN_RADIUS
+from db.trend_queries import (
+    create_run,
+    delete_older_runs,
+    finish_run,
+    get_latest_done_run,
+    get_latest_run,
+    insert_result,
+    mark_interrupted_runs,
+    open_trend_cursor,
+    set_run_candidate_count,
+    update_run_progress,
 )
-from core.database import DB_CONFIG
 from models.requests import AnalysisRequest
 from services.analysis import perform_analysis
+from services.hazard import preload_hazard_layer_cache
+from services.osm_data import preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
 from services.spaces import (
     fetch_active_space_markers_for_analysis,
     resolve_space_context_for_coords,
 )
-from utils.dates import _parse_utc_iso_z, utc_now_iso_z, utc_now_naive
-from utils.values import to_finite_number
+from services.trend_candidates import build_scan_candidates
+from services.trend_scoring import pick_trend_business_types
 
 
-def trigger_trend_warmup_after_login(radius: int = 340):
-    """Start trend warmup in the background after auth succeeds."""
-    Thread(
-        target=warm_citywide_scan_snapshot_async,
-        kwargs={"radius": radius},
-        daemon=True,
-    ).start()
+PROGRESS_UPDATE_EVERY = 5
+
+_SCAN_QUEUE = Queue()
+_IN_FLIGHT = set()  # business types that are queued or being scanned right now
+_IN_FLIGHT_LOCK = Lock()
+_STOP_EVENT = Event()
+_WORKER = None
+_WORKER_LOCK = Lock()
 
 
-TREND_SCAN_CACHE = {}
+def _log(message: str):
+    print(f"[trend-scan] {message}", flush=True)
 
 
-TREND_SCAN_CACHE_LOCK = Lock()
+def is_run_fresh(run) -> bool:
+    return bool(run) and int(run.get("age_seconds") or 0) <= TREND_SCAN_FRESH_HOURS * 3600
 
 
-TREND_SCAN_REFRESH_IN_FLIGHT = set()
+# ---- worker lifecycle -------------------------------------------------------
+
+def start_trend_scan_worker():
+    global _WORKER
+    with _WORKER_LOCK:
+        if _WORKER is not None and _WORKER.is_alive():
+            return
+        _STOP_EVENT.clear()
+        _WORKER = Thread(target=_worker_loop, name="trend-scan-worker", daemon=True)
+        _WORKER.start()
 
 
-def _is_snapshot_stale(payload: dict | list | None, threshold_seconds: int) -> bool:
-    generated_raw = (payload or {}).get("generated_at") if isinstance(payload, dict) else None
-    generated_at = _parse_utc_iso_z(generated_raw if isinstance(generated_raw, str) else None)
-    if generated_at is None:
-        return True
-
-    age_seconds = (datetime.now(timezone.utc) - generated_at).total_seconds()
-    return age_seconds > max(0, int(threshold_seconds))
+def stop_trend_scan_worker():
+    _STOP_EVENT.set()
 
 
-def match_preference_business_keys(primary_interest: str | None):
-    interest_text = str(primary_interest or "").strip().lower()
-    if not interest_text:
-        return set()
+def mark_interrupted_trend_runs():
+    """Called at startup: runs a previous server process left half-done."""
+    try:
+        with open_trend_cursor() as cursor:
+            count = mark_interrupted_runs(cursor)
+        if count:
+            _log(f"marked {count} unfinished run(s) from the last server process as interrupted")
+    except Exception as exc:
+        _log(f"could not mark interrupted runs: {exc}")
 
-    matched = set()
-    tokenized_interest = {
-        token
-        for token in interest_text.replace("/", " ").replace(",", " ").replace("-", " ").split()
-        if token
-    }
 
-    for business_key, profile_data in SME_DATABASE.items():
-        business_name = str(profile_data.get("name") or "").strip().lower()
-        if not business_name:
+def _worker_loop():
+    while not _STOP_EVENT.is_set():
+        try:
+            business_key, trigger_source = _SCAN_QUEUE.get(timeout=1)
+        except Empty:
+            continue
+        try:
+            _run_business_scan(business_key, trigger_source)
+        finally:
+            with _IN_FLIGHT_LOCK:
+                _IN_FLIGHT.discard(business_key)
+            _SCAN_QUEUE.task_done()
+
+
+# ---- asking for scans -------------------------------------------------------
+
+def request_trend_scans(business_keys, trigger_source: str, force: bool = False):
+    """Queue a scan for each business type that has no fresh saved results.
+
+    force=True skips the freshness check ("Rescan now"). Returns the queued keys.
+    """
+    start_trend_scan_worker()
+    queued = []
+
+    for business_key in business_keys:
+        if business_key not in SME_DATABASE:
             continue
 
-        if business_key in interest_text or business_name in interest_text:
-            matched.add(business_key)
-            continue
-
-        business_tokens = {
-            token
-            for token in business_name.replace("/", " ").replace("-", " ").split()
-            if token
-        }
-        if tokenized_interest.intersection(business_tokens):
-            matched.add(business_key)
-
-    if "food" in interest_text:
-        matched.update({"kiosk", "bakery", "coffee", "meat"})
-
-    return matched
-
-
-def build_panabo_prescan_points(space_markers=None, max_space_points: int = 12):
-    min_lat, max_lat, min_lon, max_lon = PANABO_BOUNDS
-    lat_step = 0.006
-    lon_step = 0.006
-
-    points = []
-
-    lat_value = min_lat
-    while lat_value <= max_lat:
-        lon_value = min_lon
-        while lon_value <= max_lon:
-            points.append({
-                "lat": round(lat_value, 6),
-                "lon": round(lon_value, 6),
-                "label": "Panabo citywide scan point",
-                "source": "city-grid",
-            })
-            lon_value += lon_step
-        lat_value += lat_step
-
-    # Keep one central point even if grid spacing changes.
-    points.append({"lat": 7.3075, "lon": 125.6811, "label": "Panabo central corridor", "source": "city-grid"})
-
-    for anchor in PANABO_ANCHORS:
-        points.append({
-            "lat": anchor["lat"],
-            "lon": anchor["lon"],
-            "label": anchor["name"],
-            "source": "anchor",
-        })
-
-    if isinstance(space_markers, list):
-        for marker in space_markers[:max_space_points]:
-            lat = to_finite_number(marker.get("latitude"))
-            lon = to_finite_number(marker.get("longitude"))
-            if lat is None or lon is None:
+        with _IN_FLIGHT_LOCK:
+            if business_key in _IN_FLIGHT:
                 continue
 
-            points.append({
-                "lat": lat,
-                "lon": lon,
-                "label": marker.get("title") or "Approved space listing",
-                "source": "space",
-            })
+        if not force:
+            try:
+                with open_trend_cursor() as cursor:
+                    done_run = get_latest_done_run(cursor, business_key, TREND_SCAN_RADIUS)
+            except Exception as exc:
+                _log(f"{business_key}: freshness check failed, not queuing ({exc})")
+                continue
+            if is_run_fresh(done_run):
+                _log(f"{business_key}: skipped, saved results are fresh (run #{done_run['id']}, trigger={trigger_source})")
+                continue
 
-    deduped = []
-    seen = set()
-    for point in points:
-        dedupe_key = (round(point["lat"], 6), round(point["lon"], 6))
-        if dedupe_key in seen:
-            continue
-        seen.add(dedupe_key)
-        deduped.append(point)
+        with _IN_FLIGHT_LOCK:
+            if business_key in _IN_FLIGHT:
+                continue
+            _IN_FLIGHT.add(business_key)
+        _SCAN_QUEUE.put((business_key, trigger_source))
+        queued.append(business_key)
+        _log(f"{business_key}: queued (trigger={trigger_source}{', forced' if force else ''})")
 
-    return deduped
-
-
-def run_citywide_business_scan(business_key: str, candidates, radius: int = 340, space_markers=None, top_hotspots: int = 3):
-    best_report = None
-    hotspots = []
-
-    for candidate in candidates:
-        report = perform_analysis(
-            AnalysisRequest(
-                lat=float(candidate["lat"]),
-                lon=float(candidate["lon"]),
-                business_type=business_key,
-                radius=radius,
-                user_id=None,
-            )
-        )
-
-        score = int(report.get("viability_score") or 0)
-        report["scan_source"] = candidate.get("label")
-        report["scan_source_type"] = candidate.get("source")
-
-        target_coords = report.get("target_coords") or {}
-        target_lat = to_finite_number(target_coords.get("lat"))
-        target_lng = to_finite_number(target_coords.get("lng"))
-        if target_lat is not None and target_lng is not None:
-            report["space_context"] = resolve_space_context_for_coords(
-                target_lat,
-                target_lng,
-                space_markers=space_markers,
-            )
-        else:
-            report["space_context"] = None
-
-        hotspots.append({
-            "score": score,
-            "source": candidate.get("label"),
-            "source_type": candidate.get("source"),
-            "coords": target_coords,
-            "space_context": report.get("space_context"),
-        })
-
-        if best_report is None or score > int(best_report.get("viability_score") or 0):
-            best_report = report
-
-    hotspots.sort(key=lambda item: item.get("score", 0), reverse=True)
-    return {
-        "best_report": best_report,
-        "hotspots": hotspots[:top_hotspots],
-    }
+    return queued
 
 
-def save_citywide_scan_snapshot_to_db(radius: int, payload: dict):
-    """Save trend snapshot to database."""
+def queue_scans_for_user(user_profile, trigger_source: str, force: bool = False):
+    """Queue scans for the business types picked for this user. Never raises,
+    so it is safe to call from login and profile-save routes."""
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO trend_scan_snapshots (radius, snapshot_payload, updated_at)
-            VALUES (%s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (radius) DO UPDATE SET
-                snapshot_payload = EXCLUDED.snapshot_payload,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (radius, json.dumps(payload))
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
+        business_keys = [pick["business_key"] for pick in pick_trend_business_types(user_profile)]
+        return request_trend_scans(business_keys, trigger_source, force=force)
     except Exception as exc:
-        print(f"Warning: Failed to save trend snapshot to DB: {exc}")
+        _log(f"could not queue scans ({trigger_source}): {exc}")
+        return []
 
 
-def load_citywide_scan_snapshot_from_db(radius: int):
-    """Load trend snapshot from database."""
+# ---- the scan itself --------------------------------------------------------
+
+def scan_candidate(business_key: str, candidate: dict, space_markers):
+    """One spot = one regular /analyze run (user_id=None, so no history row is saved)."""
+    report = perform_analysis(
+        AnalysisRequest(
+            lat=float(candidate["lat"]),
+            lon=float(candidate["lon"]),
+            business_type=business_key,
+            radius=TREND_SCAN_RADIUS,
+            user_id=None,
+        )
+    )
+    report["space_context"] = resolve_space_context_for_coords(
+        candidate["lat"], candidate["lon"], space_markers=space_markers
+    )
+    report["trend_candidate"] = {"label": candidate.get("label"), "source": candidate.get("source")}
+    return report
+
+
+def _ensure_geo_data_loaded():
+    """Without these caches perform_analysis falls back to neutral road/building
+    scores, so a scan right after startup would save different scores than a
+    manual scan. Each loader returns at once when already loaded, and waits
+    when the startup preload thread is still loading it."""
+    preload_hazard_layer_cache()
+    preload_pbf_competitor_cache()
+    preload_pbf_spatial_context_cache()
+
+
+def _run_business_scan(business_key: str, trigger_source: str):
+    started = time.monotonic()
+    run_id = None
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor(RealDictCursor)
-        cursor.execute(
-            "SELECT snapshot_payload FROM trend_scan_snapshots WHERE radius = %s",
-            (radius,)
+        _ensure_geo_data_loaded()
+        with open_trend_cursor() as cursor:
+            run_id = create_run(cursor, business_key, trigger_source, TREND_SCAN_RADIUS)
+            space_markers = fetch_active_space_markers_for_analysis()
+            candidates = build_scan_candidates(business_key, space_markers)
+            set_run_candidate_count(cursor, run_id, len(candidates))
+            _log(f"{business_key}: run #{run_id} started, {len(candidates)} spots ({len(space_markers)} listed spaces)")
+
+            failed_spots = 0
+            for index, candidate in enumerate(candidates, start=1):
+                if _STOP_EVENT.is_set():
+                    finish_run(cursor, run_id, "interrupted", "Server shutting down")
+                    _log(f"{business_key}: run #{run_id} interrupted at {index - 1}/{len(candidates)}")
+                    return
+
+                try:
+                    report = scan_candidate(business_key, candidate, space_markers)
+                    insert_result(cursor, run_id, business_key, candidate, report)
+                except Exception as exc:
+                    failed_spots += 1
+                    _log(f"{business_key}: spot '{candidate.get('label')}' failed: {exc}")
+
+                if index % PROGRESS_UPDATE_EVERY == 0 or index == len(candidates):
+                    update_run_progress(cursor, run_id, index)
+
+            if failed_spots == len(candidates) and candidates:
+                raise RuntimeError("every spot failed to scan")
+
+            finish_run(cursor, run_id, "done")
+            delete_older_runs(cursor, business_key, keep_run_id=run_id)
+
+        _log(
+            f"{business_key}: run #{run_id} done in {time.monotonic() - started:.1f}s "
+            f"({len(candidates) - failed_spots} saved, {failed_spots} failed)"
         )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        if row and row["snapshot_payload"]:
-            payload = row["snapshot_payload"]
-            if isinstance(payload, (dict, list)):
-                return payload
-            if isinstance(payload, (bytes, bytearray, memoryview)):
-                return json.loads(bytes(payload).decode("utf-8"))
-            if isinstance(payload, str):
-                return json.loads(payload)
-            return payload
     except Exception as exc:
-        print(f"Warning: Failed to load trend snapshot from DB: {exc}")
-    return None
+        _log(f"{business_key}: run #{run_id} failed: {exc}")
+        if run_id is not None:
+            try:
+                with open_trend_cursor() as cursor:
+                    finish_run(cursor, run_id, "failed", str(exc))
+            except Exception:
+                pass
 
 
-def build_citywide_scan_snapshot(radius: int = 340):
-    space_markers = fetch_active_space_markers_for_analysis()
-    candidates = build_panabo_prescan_points(space_markers=space_markers, max_space_points=24)
-    print(f"[DEBUG] Citywide scan: {len(candidates)} grid points")
-    businesses = {}
-    for business_key in SME_DATABASE.keys():
-        print(f"[DEBUG] Scanning business: {business_key}")
-        scan_result = run_citywide_business_scan(
-            business_key,
-            candidates,
-            radius=radius,
-            space_markers=space_markers,
-            top_hotspots=3,
-        )
-        best_report = scan_result.get("best_report")
-        print(f"[DEBUG] Best report for {business_key}: score={best_report.get('viability_score') if best_report else None}, competitors={best_report.get('competitors_found') if best_report else None}")
-        businesses[business_key] = {
-            "best_report": best_report,
-            "hotspots": scan_result.get("hotspots") or [],
+# ---- reading the state ------------------------------------------------------
+
+def get_business_scan_state(cursor, business_key: str):
+    """Where a business type stands right now.
+
+    state: "scanning" | "queued" | "ready" | "stale" | "failed" | "missing"
+    done_run is the newest finished run (its results are shown even while a
+    rescan is going on).
+    """
+    latest_run = get_latest_run(cursor, business_key)
+    done_run = get_latest_done_run(cursor, business_key, TREND_SCAN_RADIUS)
+    with _IN_FLIGHT_LOCK:
+        in_flight = business_key in _IN_FLIGHT
+
+    if in_flight and latest_run and latest_run["status"] == "running":
+        state = "scanning"
+    elif in_flight:
+        state = "queued"
+    elif done_run:
+        state = "ready" if is_run_fresh(done_run) else "stale"
+    elif latest_run and latest_run["status"] in ("failed", "interrupted"):
+        state = "failed"
+    else:
+        state = "missing"
+
+    progress = None
+    if state == "scanning":
+        progress = {
+            "done": int(latest_run.get("scanned_count") or 0),
+            "total": int(latest_run.get("candidate_count") or 0),
         }
 
     return {
-        "generated_at": utc_now_iso_z(),
-        "radius": radius,
-        "candidate_count": len(candidates),
-        "businesses": businesses,
+        "state": state,
+        "progress": progress,
+        "done_run": done_run,
+        "error": latest_run.get("error") if latest_run and state == "failed" else None,
     }
 
 
-def _refresh_citywide_scan_snapshot_worker(cache_key: str, radius: int):
-    try:
-        payload = build_citywide_scan_snapshot(radius=radius)
-        # Save to database
-        save_citywide_scan_snapshot_to_db(radius, payload)
-        # Also update in-memory cache
-        with TREND_SCAN_CACHE_LOCK:
-            TREND_SCAN_CACHE[cache_key] = {
-                "cached_at": utc_now_naive(),
-                "payload": payload,
-            }
-    except Exception as exc:
-        print(f"Citywide scan refresh warning ({cache_key}): {exc}")
-    finally:
-        with TREND_SCAN_CACHE_LOCK:
-            TREND_SCAN_REFRESH_IN_FLIGHT.discard(cache_key)
-
-
-def warm_citywide_scan_snapshot_async(radius: int = 340):
-    cache_key = f"radius:{int(radius)}"
-
-    db_payload = load_citywide_scan_snapshot_from_db(radius)
-    if db_payload:
-        with TREND_SCAN_CACHE_LOCK:
-            TREND_SCAN_CACHE[cache_key] = {
-                "cached_at": utc_now_naive(),
-                "payload": db_payload,
-            }
-
-        if not _is_snapshot_stale(db_payload, TREND_SCAN_CACHE_TTL_SECONDS):
-            return
-
-    with TREND_SCAN_CACHE_LOCK:
-        if cache_key in TREND_SCAN_REFRESH_IN_FLIGHT:
-            return
-        TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
-
-    Thread(
-        target=_refresh_citywide_scan_snapshot_worker,
-        args=(cache_key, int(radius)),
-        daemon=True,
-    ).start()
-
-
-def get_citywide_scan_snapshot(radius: int = 340):
-    """Get trend snapshot with non-blocking first load and background refresh.
-    
-    Strategy:
-    1. First call: Return empty snapshot immediately, trigger background scan
-    2. Subsequent calls: Return latest from DB or cache, refresh in background if stale
-    """
-    cache_key = f"radius:{int(radius)}"
-    now = utc_now_naive()
-
-    # Check in-memory cache first
-    with TREND_SCAN_CACHE_LOCK:
-        cached = TREND_SCAN_CACHE.get(cache_key)
-        if cached:
-            cached_at = cached.get("cached_at")
-            if isinstance(cached_at, datetime):
-                age_seconds = (now - cached_at).total_seconds()
-                payload = cached.get("payload") or {}
-
-                if age_seconds <= TREND_SCAN_CACHE_TTL_SECONDS:
-                    return payload
-
-                if age_seconds <= TREND_SCAN_CACHE_MAX_STALE_SECONDS:
-                    if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
-                        TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
-                        Thread(
-                            target=_refresh_citywide_scan_snapshot_worker,
-                            args=(cache_key, int(radius)),
-                            daemon=True,
-                        ).start()
-                    return payload
-
-    # Try to load from database
-    db_payload = load_citywide_scan_snapshot_from_db(radius)
-    if db_payload:
-        # Cache it in memory
-        with TREND_SCAN_CACHE_LOCK:
-            TREND_SCAN_CACHE[cache_key] = {
-                "cached_at": now,
-                "payload": db_payload,
-            }
-        # Trigger background refresh only when snapshot is stale.
-        if _is_snapshot_stale(db_payload, TREND_SCAN_CACHE_TTL_SECONDS):
-            with TREND_SCAN_CACHE_LOCK:
-                if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
-                    TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
-                    Thread(
-                        target=_refresh_citywide_scan_snapshot_worker,
-                        args=(cache_key, int(radius)),
-                        daemon=True,
-                    ).start()
-        return db_payload if isinstance(db_payload, dict) else {}
-
-    # No cache and no DB entry: trigger background scan
-    if cache_key not in TREND_SCAN_REFRESH_IN_FLIGHT:
-        TREND_SCAN_REFRESH_IN_FLIGHT.add(cache_key)
-        Thread(
-            target=_refresh_citywide_scan_snapshot_worker,
-            args=(cache_key, int(radius)),
-            daemon=True,
-        ).start()
-    # Return empty snapshot immediately (non-blocking)
-    return {
-        "generated_at": utc_now_iso_z(),
-        "radius": radius,
-        "candidate_count": 0,
-        "businesses": {},
-        "snapshot_ready": False,
-    }
-
-
-def _trend_snapshot_auto_refresh_loop(stop_event: Event, radius: int = 340):
-    interval_seconds = max(300, TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS)
-
-    while not stop_event.is_set():
-        if stop_event.wait(interval_seconds):
-            break
-
-        try:
-            warm_citywide_scan_snapshot_async(radius=radius)
-        except Exception as exc:
-            print(f"Trend auto-refresh warning (radius:{radius}): {exc}")
-
-
-def run_pre_scanned_trend_report(business_key: str, user_id: int | None = None, radius: int = 340, space_markers=None):
-    snapshot = get_citywide_scan_snapshot(radius=radius)
-    snapshot_obj = snapshot if isinstance(snapshot, dict) else {}
-    business_bucket = (snapshot_obj.get("businesses") or {}).get(business_key) or {}
-    report = business_bucket.get("best_report")
-    if not report:
-        return None
-
-    hydrated = dict(report)
-    hydrated["trend_generated_for_user"] = user_id
-    return hydrated
+def get_in_flight_business_types():
+    with _IN_FLIGHT_LOCK:
+        return sorted(_IN_FLIGHT)

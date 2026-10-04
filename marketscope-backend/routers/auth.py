@@ -1,5 +1,6 @@
 """User registration, login, and password reset routes."""
 from fastapi import APIRouter, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from core.config import RESET_CODE_DEV_MODE, RESET_CODE_TTL_MINUTES
 from models.requests import (
@@ -16,7 +17,7 @@ from services.auth_service import (
     reset_password as auth_reset_password,
     reset_password_direct as auth_reset_password_direct,
 )
-from services.trend_scan import trigger_trend_warmup_after_login
+from services.trend_scan import queue_scans_for_user
 
 
 router = APIRouter()
@@ -35,7 +36,10 @@ async def register(request: Request, user: RegisterUser):
 async def login(request: Request, user: LoginUser):
     try:
         response = await auth_login_user(request.app.state.db_pool, user)
-        trigger_trend_warmup_after_login(radius=340)
+        if response.get("trend_preferences_completed"):
+            # Start background trend scans now so results are ready by the time
+            # the user opens Trends. Fresh saved results are reused, not rescanned.
+            await run_in_threadpool(queue_scans_for_user, response["user"], "login")
         return response
     except Exception as e:
         if isinstance(e, HTTPException): raise e

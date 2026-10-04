@@ -1,3 +1,15 @@
+"""Which business types fit the user's profile, and short highlights for a scanned spot.
+
+Profile fit is three yes/no checks against TREND_BUSINESS_REQUIREMENTS:
+  - Capital: the user's startup capital reaches the typical minimum
+  - Setup:   the business's usual setup matches the user's preferred setup
+  - Payback: the typical payback period is within the user's target
+fit_score = checks passed / 3 * 100. It only decides WHICH business types get
+scanned and shown; it never changes a spot's viability score.
+"""
+from constants.msme import SME_DATABASE, SME_PROFILE_BY_NAME
+
+
 TREND_BUSINESS_REQUIREMENTS = {
     "coffee": {"capital_min": 120000, "capital_max": 450000, "risk": "medium", "setup": "storefront", "payback_months": 18},
     "print": {"capital_min": 90000, "capital_max": 280000, "risk": "low", "setup": "storefront", "payback_months": 20},
@@ -14,193 +26,131 @@ TREND_BUSINESS_REQUIREMENTS = {
     "hardware": {"capital_min": 300000, "capital_max": 1200000, "risk": "medium", "setup": "warehouse", "payback_months": 28},
 }
 
+# Other business types are suggested only when they pass at least 2 of the 3 checks.
+MIN_FIT_SCORE_FOR_SUGGESTION = 67
 
-def score_business_opportunity(profile_key, profile_data, user_profile, global_trend, user_trend, local_competitor_count=0):
-    business_name = str(profile_data.get("name") or profile_key).strip()
-    business_name_key = business_name.lower()
 
-    market_scan_count = int(global_trend.get("scan_count") or 0)
-    market_avg_score = float(global_trend.get("avg_score") or 0.0)
-    user_scan_count = int(user_trend.get("scan_count") or 0)
-    user_avg_score = float(user_trend.get("avg_score") or 0.0)
+def _as_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
-    demand_points = min(22, int((profile_data.get("need", 5) / 10) * 22))
-    market_gap_points = max(0, 22 - min(22, int(local_competitor_count) * 2))
-    trend_points = min(18, int((market_avg_score / 100) * 18))
-    momentum_points = min(10, market_scan_count * 2)
-    user_experience_points = min(12, int((user_avg_score / 100) * 12)) if user_scan_count > 0 else 0
 
-    requirement = TREND_BUSINESS_REQUIREMENTS.get(profile_key, {})
+def _peso(amount: int) -> str:
+    return f"PHP {amount:,}"
+
+
+def resolve_primary_business_key(user_profile):
+    """primary_business is a key from the preferences dropdown ("coffee"); older
+    profiles may hold the display name ("Coffee Shops") instead."""
+    raw = str(user_profile.get("primary_business") or "").strip().lower()
+    if raw in SME_DATABASE:
+        return raw
+    return SME_PROFILE_BY_NAME.get(raw)
+
+
+def evaluate_business_fit(business_key: str, user_profile):
+    requirement = TREND_BUSINESS_REQUIREMENTS.get(business_key, {})
     capital_min = int(requirement.get("capital_min") or 0)
     capital_max = int(requirement.get("capital_max") or 0)
-    business_risk = str(requirement.get("risk") or "medium").strip().lower()
-    business_setup = str(requirement.get("setup") or "storefront").strip().lower()
-    target_payback = int(requirement.get("payback_months") or 0)
+    setup = str(requirement.get("setup") or "storefront")
+    payback_months = int(requirement.get("payback_months") or 0)
 
-    startup_capital = user_profile.get("startup_capital")
+    startup_capital = _as_int(user_profile.get("startup_capital"))
     preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
-    target_payback_months = user_profile.get("target_payback_months")
+    target_payback = _as_int(user_profile.get("target_payback_months"))
 
-    capital_fit_points = 6
-    if isinstance(startup_capital, int):
-        if capital_min <= startup_capital <= max(capital_max, capital_min):
-            capital_fit_points = 14
-        elif startup_capital >= capital_min:
-            capital_fit_points = 10
-        else:
-            capital_fit_points = 2
+    capital_passed = startup_capital is not None and startup_capital >= capital_min
+    if startup_capital is None:
+        capital_detail = f"Typical start-up cost is {_peso(capital_min)} to {_peso(capital_max)}."
+    elif capital_passed:
+        capital_detail = f"Your {_peso(startup_capital)} covers the typical minimum of {_peso(capital_min)}."
+    else:
+        capital_detail = f"Your {_peso(startup_capital)} is below the typical minimum of {_peso(capital_min)}."
 
-    setup_fit_points = 4
-    if preferred_setup:
-        setup_fit_points = 9 if preferred_setup == business_setup else 3
-
-    payback_fit_points = 3
-    if isinstance(target_payback_months, int) and target_payback_months > 0 and target_payback > 0:
-        payback_fit_points = 9 if target_payback <= target_payback_months else 2
-
-    primary_interest = str(user_profile.get("primary_business") or "").strip().lower()
-    interest_hit = bool(
-        primary_interest
-        and (
-            profile_key in primary_interest
-            or business_name_key in primary_interest
-            or any(token in primary_interest for token in ["food"] if profile_key in {"kiosk", "bakery", "coffee", "meat"})
-        )
-    )
-    interest_points = 16 if interest_hit else 4
-
-    total_score = min(
-        100,
-        demand_points
-        + market_gap_points
-        + trend_points
-        + momentum_points
-        + user_experience_points
-        + interest_points
-        + capital_fit_points
-        + setup_fit_points
-        + payback_fit_points,
+    setup_passed = preferred_setup == setup
+    setup_detail = (
+        f"Usually a {setup} business, which matches your preference."
+        if setup_passed
+        else f"Usually a {setup} business; you prefer {preferred_setup or 'no specific setup'}."
     )
 
-    scoring = {
-        "demand_points": demand_points,
-        "market_gap_points": market_gap_points,
-        "trend_points": trend_points,
-        "momentum_points": momentum_points,
-        "user_experience_points": user_experience_points,
-        "interest_points": interest_points,
-        "capital_fit_points": capital_fit_points,
-        "setup_fit_points": setup_fit_points,
-        "payback_fit_points": payback_fit_points,
-    }
+    payback_passed = target_payback is not None and payback_months <= target_payback
+    payback_detail = (
+        f"Typical payback is about {payback_months} months"
+        + (f", within your {target_payback}-month target." if payback_passed else f", longer than your {target_payback or '?'}-month target.")
+    )
 
-    reasons = [
-        f"Market trend average score is {market_avg_score:.1f} across {market_scan_count} recent scans.",
-        f"Local competitor estimate is {int(local_competitor_count)} around this business type.",
-        f"Preferred setup is {preferred_setup or 'unset'}.",
+    checks = [
+        {"label": "Capital", "passed": capital_passed, "detail": capital_detail},
+        {"label": "Setup", "passed": setup_passed, "detail": setup_detail},
+        {"label": "Payback", "passed": payback_passed, "detail": payback_detail},
     ]
+    passed_count = sum(1 for check in checks if check["passed"])
 
     return {
-        "business_key": profile_key,
-        "business_name": business_name,
-        "opportunity_score": int(total_score),
-        "scoring": scoring,
-        "reasons": reasons,
-        "local_competitor_estimate": int(local_competitor_count),
-        "market_scan_count": market_scan_count,
-        "market_average_viability": round(market_avg_score, 1),
-        "user_scan_count": user_scan_count,
-        "user_average_viability": round(user_avg_score, 1),
-        "profile_match": {
-            "capital_range": {"min": capital_min, "max": capital_max},
-            "business_risk": business_risk,
-            "business_setup": business_setup,
-            "estimated_payback_months": target_payback,
+        "fit_score": round(passed_count / len(checks) * 100),
+        "checks_passed": passed_count,
+        "checks": checks,
+        "requirements": {
+            "capital_min": capital_min,
+            "capital_max": capital_max,
+            "setup": setup,
+            "payback_months": payback_months,
+            "risk": requirement.get("risk"),
         },
     }
 
 
-def build_trend_upside_downside(recommendation, pre_scanned_report):
-    scoring = recommendation.get("scoring") or {}
-    upsides = []
-    downsides = []
+def pick_trend_business_types(user_profile, extra: int = 2):
+    """The business types to scan and show for this user.
 
-    if recommendation.get("opportunity_score", 0) >= 75:
-        upsides.append("Strong overall opportunity score based on local demand, saturation, and profile fit.")
-
-    if recommendation.get("local_competitor_estimate", 0) <= 2:
-        upsides.append("Low local competitor pressure leaves room to capture unmet demand.")
-    else:
-        downsides.append("Local competition is already present, so differentiation is required.")
-
-    if scoring.get("capital_fit_points", 0) >= 10:
-        upsides.append("Startup capital fit is favorable for this category.")
-    elif scoring.get("capital_fit_points", 0) <= 3:
-        downsides.append("Your startup capital may be below the typical range for this business type.")
-
-    if pre_scanned_report:
-        pre_scan_score = int(pre_scanned_report.get("viability_score") or 0)
-        if pre_scan_score >= 70:
-            upsides.append("The pre-scanned Panabo location shows strong viability for this business.")
-        elif pre_scan_score <= 45:
-            downsides.append("The pre-scanned Panabo location has mixed or weak viability indicators.")
-
-        breakdown = pre_scanned_report.get("breakdown") or {}
-        hazard_score = int((breakdown.get("hazard") or {}).get("score") or 0)
-        if hazard_score <= 12:
-            downsides.append("Flood hazard exposure may increase operating and mitigation costs in the selected area.")
-
-        if pre_scanned_report.get("space_context"):
-            upsides.append("A nearby active For Rent/For Sale listing matches the pre-scanned location.")
-
-    if not upsides:
-        upsides.append("Baseline demand and location-fit indicators are present, but require validation through full report review.")
-    if not downsides:
-        downsides.append("No major downside triggered in scoring, but permit checks and site validation are still required.")
-
-    return upsides[:4], downsides[:4]
-
-
-def recommend_trends(user_profile, global_trends):
+    1. The user's primary business, always first.
+    2. Up to `extra` other types that pass at least 2 of 3 fit checks, ordered by
+       fit score, then by shorter payback, then by key (so the order never shifts).
     """
-    Recommend business trends based on user profile and global trends.
+    primary_key = resolve_primary_business_key(user_profile)
+    picks = []
+    if primary_key:
+        picks.append({"business_key": primary_key, "role": "primary"})
 
-    Args:
-        user_profile (dict): The user's profile containing preferences and constraints.
-        global_trends (dict): Global trends data for various businesses.
-
-    Returns:
-        list: A list of recommended business trends sorted by suitability.
-    """
-    recommendations = []
-
-    startup_capital = user_profile.get("startup_capital") or 0
-    preferred_setup = str(user_profile.get("preferred_setup") or "").strip().lower()
-    target_payback_months = user_profile.get("target_payback_months") or 0
-
-    for business, requirements in TREND_BUSINESS_REQUIREMENTS.items():
-        capital_min = requirements["capital_min"]
-        capital_max = requirements["capital_max"]
-        setup = requirements["setup"]
-        payback_months = requirements["payback_months"]
-
-        # Check if the business matches the user's profile
-        if startup_capital < capital_min or startup_capital > capital_max:
+    others = []
+    for business_key in SME_DATABASE:
+        if business_key == primary_key:
             continue
-        if preferred_setup and preferred_setup != setup:
+        fit = evaluate_business_fit(business_key, user_profile)
+        if fit["fit_score"] < MIN_FIT_SCORE_FOR_SUGGESTION:
             continue
-        if target_payback_months and target_payback_months < payback_months:
-            continue
+        others.append((-fit["fit_score"], fit["requirements"]["payback_months"], business_key))
 
-        # Add the business to recommendations with a score
-        trend_data = global_trends.get(business, {})
-        scan_count = trend_data.get("scan_count", 0)
-        avg_score = trend_data.get("avg_score", 0)
+    others.sort()
+    for _, _, business_key in others[:max(0, extra)]:
+        picks.append({"business_key": business_key, "role": "fit"})
 
-        score = avg_score + scan_count  # Example scoring logic
-        recommendations.append((business, score))
+    return picks
 
-    # Sort recommendations by score in descending order
-    recommendations.sort(key=lambda x: x[1], reverse=True)
 
-    return [business for business, _ in recommendations]
+def summarize_spot(report):
+    """Short highlights taken straight from the /analyze breakdown of a spot."""
+    breakdown = report.get("breakdown") or {}
+    highlights = []
+
+    zoning_status = (breakdown.get("zoning") or {}).get("status")
+    if zoning_status:
+        highlights.append(f"Zoning: {zoning_status}")
+
+    hazard_status = (breakdown.get("hazard") or {}).get("status")
+    if hazard_status:
+        highlights.append(f"Flood hazard: {hazard_status}")
+
+    competitors_found = report.get("competitors_found")
+    radius = report.get("radius_meters")
+    if competitors_found is not None and radius:
+        highlights.append(f"{competitors_found} competitor{'s' if competitors_found != 1 else ''} within {radius} m")
+
+    road_status = (breakdown.get("road_access") or {}).get("status")
+    if road_status:
+        highlights.append(f"Road access: {road_status}")
+
+    return highlights

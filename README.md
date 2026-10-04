@@ -36,7 +36,8 @@ npm run dev                       # http://localhost:5173. Talks to localhost:80
 ```
 main.py            App entry point: startup work (tables, DB pool, cache preloads) and router registration
 core/              config.py (every env var), database.py (DB config + pool), paths.py, security.py (admin token)
-db/                schema.py (table creation, migrations, AHP seed data), queries.py (shared read queries)
+db/                schema.py (table creation, migrations, AHP seed data), queries.py (shared read queries),
+                   trend_queries.py (SQL for the background trend scan tables)
 models/            requests.py: request bodies for every route
 constants/         geo.py (Panabo bounds, anchors, zoning boxes), msme.py (business categories + scoring profiles)
 utils/             dates.py, values.py, geo.py (distance/bounds), geo_libs.py (optional geopandas/shapely import)
@@ -51,7 +52,8 @@ tests/             Unit tests
 |---|---|
 | `routers/health.py` | `GET/HEAD /` |
 | `routers/auth.py` | `/register`, `/login`, `/forgot-password`, `/reset-password`, `/reset-password-direct` |
-| `routers/users.py` | `/users/{id}` profile, history, onboarding, `/users/{id}/trend-recommendations` |
+| `routers/users.py` | `/users/{id}` profile, history, onboarding |
+| `routers/trends.py` | `GET /users/{id}/trends`, `POST /users/{id}/trends/rescan`, `GET /trends/results/{id}`, `GET /trends/scan-status` |
 | `routers/analysis.py` | `POST /analyze`, `POST /competitors/preview` |
 | `routers/reports.py` | `POST /reports/generate` |
 | `routers/spaces.py` | `/spaces/*` (user submissions, map markers) and `/admin/spaces/*` |
@@ -73,6 +75,7 @@ components/
   map/             MapPicker
   admin/           Admin panel tabs: AhpWeightsManager, FloodZoneManager, ZoningManager, ZoningEditor
   onboarding/      OnboardingModal, TrendPreferencesGate
+  trends/          TrendSpotCard (one scanned spot on the Trends page)
   spaces/          SpaceSubmissionModal
 lib/api.js         Backend URL: VITE_API_BASE_URL, else localhost:8000 locally, else the Render URL
 constants/         layoutIds.js, motion.js (shared animation easing)
@@ -93,7 +96,7 @@ public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cach
 | Flood hazard score | `services/hazard.py`, `data/flood/panabo_hazard_5yr.geojson` | `utils/hazardStyle.js`, `public/panabo_hazard_5yr.geojson` |
 | AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), `routers/ahp_admin.py` | `components/admin/AhpWeightsManager.jsx` |
 | Business categories / profiles | `constants/msme.py` | `utils/businessTypes.js` |
-| Trend recommendations | `routers/users.py`, `services/trend_scan.py`, `services/trend_scoring.py` | `pages/Trends.jsx` |
+| Trend analysis | `routers/trends.py`, `services/trend_*.py`, `db/trend_queries.py` (see below) | `pages/Trends.jsx`, `components/trends/TrendSpotCard.jsx` |
 | Login, register, password reset | `routers/auth.py`, `services/auth_service.py`, `services/email.py` | `pages/AuthPages.jsx` |
 | Admin panel data | `routers/admin_*.py`, `routers/msmes.py`, `routers/verified_features.py` | `pages/AdminPanel.jsx` |
 | Commercial spaces on the map | `routers/spaces.py`, `services/spaces.py` | `components/spaces/SpaceSubmissionModal.jsx`, `pages/Home.jsx` |
@@ -101,6 +104,18 @@ public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cach
 | Database tables / columns | `db/schema.py` | |
 | Slow first request after deploy | `main.py` lifespan: geo caches load in a background thread | |
 | Frontend can't reach the backend | `core/config.py` (`MARKETSCOPE_ALLOWED_ORIGINS`) | `lib/api.js` |
+
+## How trend analysis works
+
+The Trends page shows high-chance spots for the user's business, found by scans that run in the background with the same engine as a manual scan (`perform_analysis`).
+
+1. **Which businesses.** `services/trend_scoring.py` picks the user's primary business, plus up to 2 other business types that pass at least 2 of 3 profile checks (capital, setup, payback).
+2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart over the commercial zone. Business types allowed in the agri-industrial zone get that zone's grid too.
+3. **Scanning.** `services/trend_scan.py` keeps a queue with one worker thread. For each business type it runs `perform_analysis` on every spot (radius 340 m, no history row saved). Each result goes into `trend_scan_results`, and status and progress go into `trend_scan_runs`.
+4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24) is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now".
+5. **What the page shows.** `services/trend_recommendations.py` returns the saved spots scoring at least `MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE` (70), ranked by viability score. "View full report" opens the saved report, so no rescan is needed.
+
+**Debugging:** `GET /trends/scan-status` lists the newest run of each business type. Backend logs start with `[trend-scan]`. In SQL: `SELECT * FROM trend_scan_runs;`
 
 ## Flood hazard data
 
@@ -123,6 +138,6 @@ These were found during the reorganization and left as they are, so behavior sta
 - **Default admin credentials.** If the `MARKETSCOPE_ADMIN_*` variables aren't set, the admin login is `admin@marketscope.local` / `admin123` with a fixed token. Set them on Render.
 - **`MARKETSCOPE_RESET_CODE_DEV_MODE` does nothing.** `routers/auth.py` reads it but only runs `pass`.
 - **Windows console encoding.** The DB startup logs print ✓/✗. If stdout isn't UTF-8 (for example when output is piped to a file), that print fails and the DB connection is reported as failed. Set `PYTHONIOENCODING=utf-8` when redirecting output.
-- **Unused code.** `HAZARD_ZONES` (`services/hazard.py`), `SME_PROFILE_BY_NAME` (`constants/msme.py`) and `get_generic_nearby_pbf_competitors` (`services/osm_data.py`) aren't used anywhere.
+- **Unused code.** `HAZARD_ZONES` (`services/hazard.py`) and `get_generic_nearby_pbf_competitors` (`services/osm_data.py`) aren't used anywhere.
 - **Unused root `package.json` / `node_modules`.** The frontend has its own. The ones at the repo root aren't used by anything.
-- **40 ESLint problems** (`npm run lint` in the frontend), mostly unused variables.
+- **37 ESLint problems** (`npm run lint` in the frontend), mostly unused variables.

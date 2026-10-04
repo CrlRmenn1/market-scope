@@ -71,7 +71,10 @@ SMTP_FROM_NAME = os.environ.get("MARKETSCOPE_SMTP_FROM_NAME", "MarketScope")
 SMTP_USE_TLS = os.environ.get("MARKETSCOPE_SMTP_USE_TLS", "true").lower() == "true"
 SMTP_USE_SSL = os.environ.get("MARKETSCOPE_SMTP_USE_SSL", "false").lower() == "true"
 
-# Citywide trend-scan cache timing
-TREND_SCAN_CACHE_TTL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_TTL_SECONDS", "21600"))
-TREND_SCAN_CACHE_MAX_STALE_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_MAX_STALE_SECONDS", "86400"))
-TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS", "7200"))
+# Background trend scan (services/trend_scan.py)
+# Radius passed to perform_analysis for every scanned spot (same default as /analyze).
+TREND_SCAN_RADIUS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_RADIUS", "340"))
+# A finished scan younger than this is reused instead of scanning again.
+TREND_SCAN_FRESH_HOURS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_FRESH_HOURS", "24"))
+# Spots scoring at least this are "high chance" (same cut-off as the "Favorable Location" insight).
+TREND_HIGH_CHANCE_MIN_SCORE = int(os.environ.get("MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE", "70"))

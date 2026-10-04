@@ -2,7 +2,7 @@
 import psycopg2
 from psycopg2.extras import Json
 
-from constants.geo import ZONING_LAYERS
+from constants.geo import INDUSTRIAL_ZONE_BUSINESSES, ZONING_LAYERS
 from constants.msme import SME_DATABASE
 from core.database import DB_CONFIG
 from db.schema import get_analysis_history_pk_column
@@ -33,7 +33,7 @@ def perform_analysis(data: AnalysisRequest):
         zoning_score = 25
         zoning_status = "Compliant (Commercial Center)"
     elif check_inside_bounds(data.lat, data.lon, ZONING_LAYERS["industrial_anflo"]):
-        if business_key in ["carwash", "laundry", "hardware", "moto"]:
+        if business_key in INDUSTRIAL_ZONE_BUSINESSES:
             zoning_score = 25
             zoning_status = "Compliant (Agri-Industrial Support)"
         else:

@@ -7,6 +7,10 @@ ZONING_LAYERS = {
 }
 
 
+# Business types that are zoning-compliant inside the industrial_anflo zone.
+INDUSTRIAL_ZONE_BUSINESSES = {"carwash", "laundry", "hardware", "moto"}
+
+
 PANABO_BOUNDS = (7.269, 7.333, 125.636, 125.742)
 
 

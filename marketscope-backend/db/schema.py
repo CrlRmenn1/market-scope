@@ -47,7 +47,7 @@ def create_app_tables(db_config):
             ensure_user_space_submissions_table(cursor, user_pk_column)
             ensure_admin_space_submissions_table(cursor)
             ensure_password_reset_codes_table(cursor, user_pk_column)
-            ensure_trend_scan_snapshots_table(cursor)
+            ensure_trend_scan_tables(cursor)
             ensure_ahp_weight_configs_table(cursor)
             ensure_ahp_seed_data(cursor)
             ensure_default_admin_user(cursor)
@@ -256,23 +256,59 @@ def ensure_password_reset_codes_table(cursor, user_pk_column):
     )
 
 
-def ensure_trend_scan_snapshots_table(cursor):
+def ensure_trend_scan_tables(cursor):
+    """Tables behind the background trend scan (services/trend_scan.py).
+
+    trend_scan_runs: one row per scan of one business type (status + progress).
+    trend_scan_results: one row per scanned spot, holding the full /analyze report.
+    """
+    # Replaced by the two tables below; it only ever held cached data.
+    cursor.execute("DROP TABLE IF EXISTS trend_scan_snapshots")
     cursor.execute(
         """
-        CREATE TABLE IF NOT EXISTS trend_scan_snapshots (
+        CREATE TABLE IF NOT EXISTS trend_scan_runs (
             id SERIAL PRIMARY KEY,
+            business_type VARCHAR(64) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'running',
+            trigger_source VARCHAR(20),
             radius INTEGER NOT NULL,
-            snapshot_payload JSONB NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(radius)
+            candidate_count INTEGER NOT NULL DEFAULT 0,
+            scanned_count INTEGER NOT NULL DEFAULT 0,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at TIMESTAMP,
+            error TEXT,
+            CHECK (status IN ('running', 'done', 'failed', 'interrupted'))
         )
         """
     )
     cursor.execute(
         """
-        CREATE INDEX IF NOT EXISTS idx_trend_snapshots_radius_updated
-        ON trend_scan_snapshots(radius, updated_at DESC)
+        CREATE INDEX IF NOT EXISTS idx_trend_scan_runs_business_finished
+        ON trend_scan_runs(business_type, finished_at DESC)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trend_scan_results (
+            id SERIAL PRIMARY KEY,
+            run_id INTEGER NOT NULL REFERENCES trend_scan_runs(id) ON DELETE CASCADE,
+            business_type VARCHAR(64) NOT NULL,
+            candidate_source VARCHAR(20) NOT NULL,
+            candidate_label TEXT,
+            space_id VARCHAR(64),
+            lat DOUBLE PRECISION NOT NULL,
+            lon DOUBLE PRECISION NOT NULL,
+            viability_score INTEGER NOT NULL,
+            insight TEXT,
+            report JSONB NOT NULL,
+            scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_trend_scan_results_run_score
+        ON trend_scan_results(run_id, viability_score DESC)
         """
     )
 
