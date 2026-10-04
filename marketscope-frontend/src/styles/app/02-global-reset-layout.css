@@ -84,9 +84,7 @@ a,
 .detail-toggle,
 .edit-btn,
 .history-delete-btn,
-.history-breakdown-toggle,
-.admin-tab-btn,
-.admin-action-btn {
+.history-breakdown-toggle {
   will-change: transform;
 }
 

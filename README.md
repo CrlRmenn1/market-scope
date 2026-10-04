@@ -61,19 +61,20 @@ tests/             Unit tests
 | `routers/admin_users.py` | `/admin/users` |
 | `routers/msmes.py` | `/admin/custom-msmes` |
 | `routers/verified_features.py` | `/admin/verified-local-features` |
-| `routers/ahp_admin.py` | `/admin/ahp/matrix`, `/admin/ahp/matrices` |
 
 ### Frontend: `marketscope-frontend/src/`
 
 ```
 main.jsx, App.jsx  Entry point; App holds the session, the active tab, and which page is shown
 pages/             One file per screen: AuthPages (landing/login), Home (map + analysis), Report, History,
-                   Trends, Profile, AdminPanel
+                   Trends, Profile, AdminPanel (admin console shell)
+  admin/           Admin console pages: MsmesPage, UsersPage, SpacesPage, MapLayersPage
 components/
   layout/          Header, BottomNav, AdminNavbar
   common/          Modal, AnalysisLoader, TourSpotlight (shared UI pieces)
   map/             MapPicker
-  admin/           Admin panel tabs: AhpWeightsManager, FloodZoneManager, ZoningManager, ZoningEditor
+  admin/           AdminLayout (desktop sidebar / mobile tab bar), adminNav, ui/ (shared admin pieces,
+                   useAdminApi), FloodZoneManager + ZoningEditor (Map Layers), ZoningManager (unused)
   onboarding/      OnboardingModal, TrendPreferencesGate
   trends/          TrendSpotCard (one scanned spot on the Trends page)
   spaces/          SpaceSubmissionModal
@@ -94,11 +95,11 @@ public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cach
 | Competition / road / anchor / building sub-score | `services/scoring.py` (`_score_*` functions) | |
 | Competitors missing or wrong | `services/osm_data.py` (OSM data), `db/queries.py` (`fetch_custom_msmes`) | |
 | Flood hazard score | `services/hazard.py`, `data/flood/panabo_hazard_5yr.geojson` | `utils/hazardStyle.js`, `public/panabo_hazard_5yr.geojson` |
-| AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), `routers/ahp_admin.py` | `components/admin/AhpWeightsManager.jsx` |
+| AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), seed matrices in `db/schema.py`. There is no admin editor; change weights in the `ahp_weight_configs` table. | |
 | Business categories / profiles | `constants/msme.py` | `utils/businessTypes.js` |
 | Trend analysis | `routers/trends.py`, `services/trend_*.py`, `db/trend_queries.py` (see below) | `pages/Trends.jsx`, `components/trends/TrendSpotCard.jsx` |
 | Login, register, password reset | `routers/auth.py`, `services/auth_service.py`, `services/email.py` | `pages/AuthPages.jsx` |
-| Admin panel data | `routers/admin_*.py`, `routers/msmes.py`, `routers/verified_features.py` | `pages/AdminPanel.jsx` |
+| Admin panel | `routers/admin_*.py`, `routers/msmes.py`, `routers/spaces.py` | `pages/AdminPanel.jsx`, `pages/admin/`, `components/admin/` |
 | Commercial spaces on the map | `routers/spaces.py`, `services/spaces.py` | `components/spaces/SpaceSubmissionModal.jsx`, `pages/Home.jsx` |
 | Reports / PDF | `routers/reports.py`, `services/reporting.py` | `pages/Report.jsx` |
 | Database tables / columns | `db/schema.py` | |
@@ -134,11 +135,12 @@ Each feature needs a `Var` property: **1 = Very High, 2 = High, 3 = Moderate** f
 These were found during the reorganization and left as they are, so behavior stays unchanged:
 
 - **Zoning/flood layer uploads have no backend.** `FloodZoneManager.jsx` and `ZoningManager.jsx` call `/admin/zoning-layers` (list, `/upload`, `/{id}`), but those routes don't exist in the backend, so saving an uploaded layer fails.
-- **The CLUP admin tab can't be reached.** `AdminPanel.jsx` renders `ZoningManager` for the `clup` tab, but `AdminNavbar.jsx` has no button for it.
+- **`ZoningManager.jsx` is unused.** The old unreachable `clup` admin tab was its only user. The Map Layers page uses `FloodZoneManager`, which has its own CLUP panel.
+- **Pending user spaces count as available.** `fetch_active_space_markers_for_analysis` (`services/spaces.py`) includes `pending` user submissions, so they appear on the map and in trend scans before an admin approves them.
 - **Default admin credentials.** If the `MARKETSCOPE_ADMIN_*` variables aren't set, the admin login is `admin@marketscope.local` / `admin123` with a fixed token. Set them on Render.
 - **`MARKETSCOPE_RESET_CODE_DEV_MODE` does nothing.** `routers/auth.py` reads it but only runs `pass`.
 - **Windows console encoding.** The DB startup logs print ✓/✗. If stdout isn't UTF-8 (for example when output is piped to a file), that print fails and the DB connection is reported as failed. Set `PYTHONIOENCODING=utf-8` when redirecting output.
 - **Unused user columns.** `users.startup_capital` and `users.target_payback_months` are no longer read or written (those preferences were removed). Existing databases still have them; drop them with `ALTER TABLE users DROP COLUMN startup_capital, DROP COLUMN target_payback_months;` if wanted.
 - **Unused code.** `HAZARD_ZONES` (`services/hazard.py`) and `get_generic_nearby_pbf_competitors` (`services/osm_data.py`) aren't used anywhere.
 - **Unused root `package.json` / `node_modules`.** The frontend has its own. The ones at the repo root aren't used by anything.
-- **37 ESLint problems** (`npm run lint` in the frontend), mostly unused variables.
+- **30 ESLint problems** (`npm run lint` in the frontend), mostly unused variables.

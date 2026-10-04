@@ -191,33 +191,7 @@
     grid-template-columns: 1fr;
   }
 
-  .admin-navbar {
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    gap: 6px;
-    padding: 6px;
-    width: calc(100vw - 12px);
-  }
-
-  .admin-nav-item {
-    padding: 8px 8px;
-  }
-
-  .admin-nav-label {
-    font-size: 0.62rem;
-    letter-spacing: 0.03em;
-  }
-
-  .admin-nav-icon,
-  .admin-nav-icon svg {
-    width: 16px;
-    height: 16px;
-  }
-
   .history-tools-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-tools-grid {
     grid-template-columns: 1fr;
   }
 

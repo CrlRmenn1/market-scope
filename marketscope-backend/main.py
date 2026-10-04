@@ -20,7 +20,6 @@ from db.schema import create_app_tables
 from routers import (
     admin_auth,
     admin_users,
-    ahp_admin,
     analysis,
     auth,
     health,
@@ -97,7 +96,6 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(users.router)
-app.include_router(ahp_admin.router)
 app.include_router(spaces.router)
 app.include_router(admin_auth.router)
 app.include_router(reports.router)

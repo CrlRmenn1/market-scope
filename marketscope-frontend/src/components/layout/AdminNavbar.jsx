@@ -1,78 +1,28 @@
 import React from 'react';
+import { ADMIN_NAV_ITEMS } from '../admin/adminNav';
 
-const NAV_ITEMS = [
-  {
-    id: 'msmes',
-    label: 'MSMEs',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 10l8-6 8 6v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
-        <path d="M9 21V12h6v9" />
-      </svg>
-    )
-  },
-  {
-    id: 'users',
-    label: 'Users',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="10.5" cy="7.5" r="3.5" />
-        <path d="M20 21v-2a3.5 3.5 0 0 0-2.5-3.35" />
-        <path d="M16.5 4.5a3.5 3.5 0 0 1 0 7" />
-      </svg>
-    )
-  },
-  {
-    id: 'spaces',
-    label: 'Spaces',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 6h16v12H4z" />
-        <path d="M8 6v12" />
-        <path d="M16 6v12" />
-      </svg>
-    )
-  },
-  {
-    id: 'flood',
-    label: 'Map Layers',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 3l9 16H3z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
-      </svg>
-    )
-  },
-  {
-    id: 'ahp',
-    label: 'AHP Weights',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M3 17l6-6 4 4 8-8" />
-        <path d="M14 7h7v7" />
-      </svg>
-    )
-  }
-];
-
-export default function AdminNavbar({ activeTab, onChange }) {
+// Mobile-only bottom tab bar for the admin console (the desktop uses AdminLayout's sidebar).
+export default function AdminNavbar({ activeTab, onChange, pendingCount = 0 }) {
   return (
-    <nav className="admin-navbar" aria-label="Admin sections">
-      {NAV_ITEMS.map((item) => {
+    <nav className="admin-tabbar" aria-label="Admin sections">
+      {ADMIN_NAV_ITEMS.map((item) => {
         const isActive = activeTab === item.id;
+        const Icon = item.icon;
+        const badge = item.id === 'spaces' && pendingCount > 0 ? pendingCount : null;
 
         return (
           <button
             key={item.id}
             type="button"
-            className={`admin-nav-item ${isActive ? 'active' : ''}`}
+            className={`admin-tabbar-item ${isActive ? 'is-active' : ''}`}
             onClick={() => onChange(item.id)}
-            aria-pressed={isActive}
+            aria-current={isActive ? 'page' : undefined}
           >
-            <span className="admin-nav-icon" aria-hidden="true">{item.icon}</span>
-            <span className="admin-nav-label">{item.label}</span>
+            <span className="relative">
+              <Icon className="h-6 w-6" aria-hidden="true" />
+              {badge && <span className="admin-tabbar-badge" aria-label={`${badge} pending`}>{badge > 99 ? '99+' : badge}</span>}
+            </span>
+            <span className="admin-tabbar-label">{item.label}</span>
           </button>
         );
       })}

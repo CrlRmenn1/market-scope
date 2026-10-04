@@ -22,13 +22,11 @@
   padding-right: 2.375rem;
 }
 
-.history-tools-card .input-group label,
-.admin-tools-card .input-group label {
+.history-tools-card .input-group label {
   color: var(--text-muted);
 }
 
-html[data-theme="light"] .history-tools-card .input-group label,
-html[data-theme="light"] .admin-tools-card .input-group label {
+html[data-theme="light"] .history-tools-card .input-group label {
   color: #111827;
 }
 

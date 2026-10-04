@@ -1,366 +1,250 @@
+/* Map Layers tool (FloodZoneManager, ZoningManager, ZoningEditor).
+   Styled to match the admin console: solid theme surfaces, 12px radii,
+   the same button and input look as components/admin/ui/adminStyles.js. */
+
 .zoning-manager-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  --zoning-surface: var(--surface-2-bg);
-  --zoning-surface-soft: var(--surface-1-bg);
-  --zoning-border: var(--surface-1-border);
-  --zoning-border-strong: var(--surface-2-border);
+  --zoning-surface: var(--bg-sheet);
+  --zoning-surface-soft: var(--bg-app);
+  --zoning-border: var(--border-color);
   --zoning-text: var(--text-main);
   --zoning-muted: var(--text-muted);
   --zoning-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  color: var(--zoning-text);
 }
 
+/* ---- Header row ---- */
 .zoning-hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 2px 2px;
 }
 
 .zoning-hero-actions {
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  flex: none;
 }
 
 .zoning-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
+  margin-bottom: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--zoning-accent);
-  margin-bottom: 10px;
 }
 
 .zoning-title {
   margin: 0;
-  font-size: clamp(1.6rem, 3vw, 2.35rem);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--zoning-text);
 }
 
 .zoning-subtitle {
-  margin-top: 10px;
-  max-width: 62ch;
+  margin: 4px 0 0;
+  max-width: 60ch;
+  font-size: 0.875rem;
+  line-height: 1.5;
   color: var(--zoning-muted);
-  line-height: 1.55;
 }
 
 .zoning-hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--zoning-muted);
+}
+
+.zoning-badge-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  background: var(--zoning-surface-soft);
-  color: var(--zoning-text);
-  font-weight: 700;
-  border: 1px solid var(--zoning-border);
-  white-space: nowrap;
+  background: var(--zoning-accent);
 }
 
 .zoning-mode-toggle {
   display: inline-flex;
+  min-height: 44px;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  min-width: 160px;
-  padding: 12px 16px;
-  border-radius: 20px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6px 14px;
   border: 1px solid var(--zoning-border);
-  background: var(--zoning-surface-soft);
+  border-radius: 12px;
+  background: var(--zoning-surface);
   color: var(--zoning-text);
   cursor: pointer;
-  text-align: right;
-  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard);
-}
-
-.flood-zone-manager .zoning-mode-toggle {
-  background: var(--btn-primary-bg);
-  border-color: transparent;
-  color: var(--btn-primary-text);
-  box-shadow: none;
-}
-
-.zoning-mode-toggle:hover {
-  transform: translateY(-1px);
-  border-color: var(--zoning-border-strong);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12);
-}
-
-.flood-zone-manager .zoning-mode-toggle:hover {
-  background: var(--btn-primary-hover);
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
 }
 
 .zoning-mode-toggle span {
-  font-size: 0.92rem;
-  font-weight: 800;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .zoning-mode-toggle small {
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
   color: var(--zoning-muted);
 }
 
-.flood-zone-manager .zoning-mode-toggle small {
-  color: var(--btn-primary-text);
-  opacity: 0.75;
+.zoning-mode-toggle:hover {
+  border-color: var(--border-strong);
+  background: var(--accent-hover);
 }
 
-.zoning-badge-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--zoning-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--zoning-accent) 18%, transparent);
-}
-
+/* ---- Toolbar ---- */
 .zoning-toolbar {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.5fr) repeat(3, auto);
-  gap: 12px;
-  align-items: end;
-}
-
-.zoning-upload-btn,
-.zoning-btn,
-.zoning-input-wrap input {
-  border-radius: 18px;
-}
-
-.zoning-upload-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 52px;
-  padding: 0 18px;
-  background: var(--zoning-surface-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid var(--zoning-border);
-  color: var(--zoning-text);
-  cursor: pointer;
-  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard);
-}
-
-.zoning-upload-btn:hover {
-  transform: translateY(-1px);
-  background: color-mix(in srgb, var(--zoning-surface-soft) 82%, var(--zoning-accent) 18%);
-  border-color: var(--zoning-border-strong);
-}
-
-.zoning-upload-btn input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
+  border-radius: 12px;
+  background: var(--zoning-surface-soft);
 }
 
 .zoning-input-wrap {
   display: flex;
+  min-width: 200px;
+  flex: 1 1 220px;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .zoning-input-wrap label {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--zoning-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--zoning-text);
 }
 
 .zoning-input-wrap input {
-  min-height: 52px;
+  min-height: 44px;
+  padding: 0 12px;
   border: 1px solid var(--zoning-border);
-  background: var(--zoning-surface-soft);
+  border-radius: 12px;
+  background: var(--zoning-surface);
   color: var(--zoning-text);
-  padding: 0 16px;
+  font-size: 0.875rem;
   outline: none;
-  transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard);
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
 .zoning-input-wrap input:focus {
-  border-color: var(--zoning-border-strong);
-  background: color-mix(in srgb, var(--zoning-surface-soft) 78%, var(--zoning-accent) 22%);
+  border-color: var(--zoning-accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-.zoning-btn {
+/* ---- Buttons ---- */
+.zoning-btn,
+.zoning-upload-btn {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  padding: 0 16px;
   border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: transform var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard);
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
 }
 
-.zoning-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
+.zoning-btn:focus-visible,
+.zoning-upload-btn:focus-within,
+.zoning-mode-toggle:focus-visible,
+.zoning-editor-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .zoning-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .zoning-btn-primary {
-  min-height: 52px;
-  padding: 0 18px;
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
-  box-shadow: none;
 }
 
 .zoning-btn-primary:hover:not(:disabled) {
   background: var(--btn-primary-hover);
 }
 
-.zoning-btn-secondary {
-  min-height: 52px;
-  padding: 0 18px;
-  background: var(--zoning-surface-soft);
-  color: var(--zoning-text);
+.zoning-btn-secondary,
+.zoning-upload-btn {
   border-color: var(--zoning-border);
+  background: var(--zoning-surface);
+  color: var(--zoning-text);
 }
 
-.zoning-btn-secondary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--zoning-surface-soft) 82%, var(--zoning-accent) 18%);
-  border-color: var(--zoning-border-strong);
+.zoning-btn-secondary:hover:not(:disabled),
+.zoning-upload-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--accent-hover);
 }
 
 .zoning-btn-ghost {
-  min-height: 52px;
-  padding: 0 18px;
   background: transparent;
   color: var(--zoning-muted);
-  border-color: var(--zoning-border);
 }
 
 .zoning-btn-ghost:hover:not(:disabled) {
-  background: var(--zoning-surface-soft);
+  background: var(--accent-hover);
   color: var(--zoning-text);
-}
-
-.zoning-live-banner {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: var(--zoning-surface-soft);
-  border: 1px solid var(--zoning-border);
-  color: var(--zoning-text);
-}
-
-.zoning-live-banner-title {
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.zoning-live-banner p {
-  flex: 1 1 340px;
-  margin: 0;
-  color: var(--zoning-muted);
-  line-height: 1.45;
 }
 
 .zoning-btn-sm {
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 14px;
-  font-size: 0.92rem;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
 }
 
 .zoning-btn-lg {
-  min-height: 54px;
-  padding: 0 20px;
-  border-radius: 16px;
-  font-weight: 800;
-}
-
-.zoning-editor-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-height: 48px;
-  padding: 0 18px;
-  border-radius: 16px;
-  border: 1px solid var(--zoning-border);
-  background: var(--zoning-surface-soft);
-  color: var(--zoning-text);
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.16);
-  cursor: pointer;
-  transition: transform var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard);
+  padding: 0 20px;
 }
 
-.zoning-editor-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  background: color-mix(in srgb, var(--zoning-surface-soft) 82%, var(--zoning-accent) 18%);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
+.zoning-upload-btn input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.zoning-editor-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.zoning-upload-btn {
+  position: relative;
 }
 
-.zoning-editor-btn-sm {
-  min-height: 38px;
-  padding: 0 12px;
-  font-size: 0.88rem;
-}
-
-.zoning-editor-btn-icon {
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border-radius: 16px;
-}
-
-.zoning-editor-btn-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
+/* ---- Map + layer list ---- */
 .zoning-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(290px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 16px;
+  align-items: start;
 }
 
 .zoning-map-card,
 .zoning-side-panel {
-  border-radius: 28px;
-  border: 1px solid var(--zoning-border);
-  background: var(--zoning-surface);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
   overflow: hidden;
-}
-
-html[data-theme="light"] .zoning-map-card,
-html[data-theme="light"] .zoning-side-panel {
+  border: 1px solid var(--zoning-border);
+  border-radius: 12px;
   background: var(--zoning-surface);
-  border-color: var(--zoning-border);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.08);
 }
 
 .zoning-map-card {
   display: flex;
   flex-direction: column;
-  min-height: 620px;
 }
 
 .zoning-map-header {
@@ -368,106 +252,91 @@ html[data-theme="light"] .zoning-side-panel {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 18px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--zoning-border);
 }
 
-html[data-theme="light"] .zoning-map-header {
-  border-bottom-color: var(--zoning-border);
-}
-
 .zoning-map-label {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--zoning-accent);
-  margin-bottom: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--zoning-text);
 }
 
 .zoning-map-helper {
-  color: var(--zoning-muted);
+  margin-top: 2px;
+  font-size: 0.8rem;
   line-height: 1.45;
+  color: var(--zoning-muted);
 }
 
 .zoning-map-mini-stat {
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: var(--zoning-surface-soft);
-  border: 1px solid var(--zoning-border);
-  color: var(--zoning-text);
+  gap: 2px;
   white-space: nowrap;
 }
 
 .zoning-map-mini-stat strong {
-  font-size: 1.05rem;
+  font-size: 0.875rem;
+  color: var(--zoning-text);
 }
 
 .zoning-map-mini-stat span {
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   color: var(--zoning-muted);
 }
 
 .zoning-map-canvas {
   width: 100%;
-  min-height: 556px;
+  min-height: 480px;
 }
 
 .zoning-side-panel {
-  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 16px;
 }
 
 .zoning-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
 }
 
 .zoning-panel-head h4 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .zoning-panel-head span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  height: 28px;
-  padding: 0 10px;
+  min-width: 26px;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: var(--zoning-surface-soft);
-  color: var(--zoning-text);
+  background: var(--accent-hover);
+  color: var(--zoning-accent);
+  font-size: 0.75rem;
   font-weight: 700;
+  text-align: center;
 }
 
 .zoning-empty-state {
   padding: 16px;
-  border-radius: 18px;
-  background: var(--zoning-surface-soft);
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  font-size: 0.875rem;
   color: var(--zoning-muted);
-  border: 1px dashed var(--zoning-border);
+  text-align: center;
 }
 
 .zoning-layer-card {
-  padding: 14px;
-  border-radius: 20px;
+  padding: 12px;
   border: 1px solid var(--zoning-border);
+  border-radius: 12px;
   background: var(--zoning-surface-soft);
-}
-
-html[data-theme="light"] .zoning-layer-card,
-html[data-theme="light"] .zoning-empty-state {
-  background: var(--zoning-surface-soft);
-  border-color: var(--zoning-border);
 }
 
 .zoning-layer-top {
@@ -475,38 +344,54 @@ html[data-theme="light"] .zoning-empty-state {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .zoning-layer-name {
-  font-weight: 800;
-  margin-bottom: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .zoning-layer-meta {
-  color: var(--zoning-muted);
-  font-size: 0.88rem;
+  margin-top: 2px;
+  font-size: 0.8rem;
   line-height: 1.45;
+  color: var(--zoning-muted);
 }
 
 .zoning-layer-pill {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 10px;
+  flex: none;
+  padding: 2px 8px;
   border-radius: 999px;
-  background: var(--zoning-surface-soft);
-  color: var(--zoning-text);
-  font-size: 0.77rem;
-  font-weight: 700;
+  background: var(--trend-up-bg);
+  color: var(--trend-up);
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .zoning-layer-actions {
   display: flex;
-  gap: 10px;
+  gap: 6px;
 }
 
+.zoning-live-banner {
+  padding: 12px 14px;
+  border: 1px solid var(--zoning-border);
+  border-radius: 12px;
+  background: var(--zoning-surface-soft);
+}
+
+.zoning-live-banner-title {
+  font-weight: 600;
+}
+
+.zoning-live-banner p {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--zoning-muted);
+}
+
+/* ---- Full-screen polygon editor ---- */
 .zoning-editor-modal {
   position: fixed;
   inset: 0;
@@ -526,13 +411,11 @@ html[data-theme="light"] .zoning-empty-state {
   position: relative;
   width: min(94vw, 1180px);
   height: min(90vh, 760px);
-  border-radius: 30px;
   overflow: hidden;
   border: 1px solid var(--border-color);
-  background: var(--zoning-surface);
-  backdrop-filter: blur(var(--surface-2-blur));
-  -webkit-backdrop-filter: blur(var(--surface-2-blur));
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  border-radius: 16px;
+  background: var(--bg-sheet);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
 }
 
 .zoning-editor-panel .leaflet-control-container {
@@ -553,15 +436,13 @@ html[data-theme="light"] .zoning-empty-state {
   left: 16px;
   top: 16px;
   z-index: 1700;
-  width: min(100%, 430px);
-  padding: 16px 18px;
-  border-radius: 22px;
-  background: var(--zoning-surface);
-  backdrop-filter: blur(var(--surface-2-blur));
-  -webkit-backdrop-filter: blur(var(--surface-2-blur));
-  color: var(--zoning-text);
-  border: 1px solid var(--zoning-border);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+  width: min(calc(100% - 96px), 400px);
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-sheet);
+  color: var(--text-main);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .zoning-editor-actions {
@@ -569,12 +450,12 @@ html[data-theme="light"] .zoning-empty-state {
   z-index: 1700;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .zoning-editor-actions-left {
   left: 16px;
-  top: 170px;
+  top: 172px;
 }
 
 .zoning-editor-top-right {
@@ -591,65 +472,113 @@ html[data-theme="light"] .zoning-empty-state {
   z-index: 1700;
 }
 
-.zoning-editor-bottom-right .zoning-editor-btn-icon {
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+.zoning-editor-btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-sheet);
+  color: var(--text-main);
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
 }
 
-.zoning-editor-top-right .zoning-editor-btn,
-.zoning-editor-actions-left .zoning-editor-btn {
+.zoning-editor-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--accent-hover);
+}
+
+.zoning-editor-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.zoning-editor-btn-sm {
+  min-height: 40px;
   min-width: 112px;
+  padding: 0 12px;
 }
 
-.zoning-editor-top-right .zoning-editor-btn-close {
-  min-width: 48px;
+.zoning-editor-btn-icon {
+  width: 48px;
+  height: 48px;
+  padding: 0;
 }
 
-.zoning-editor-bottom-right .zoning-btn-primary {
-  min-width: 152px;
+.zoning-editor-btn-icon svg {
+  width: 22px;
+  height: 22px;
 }
 
+.zoning-editor-bottom-right .zoning-editor-btn-icon {
+  border-color: transparent;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.zoning-editor-bottom-right .zoning-editor-btn-icon:hover:not(:disabled) {
+  background: var(--btn-primary-hover);
+}
+
+/* ---- Smaller screens ---- */
 @media (max-width: 1080px) {
-  .zoning-toolbar {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .zoning-layout {
     grid-template-columns: 1fr;
-  }
-
-  .zoning-side-panel {
-    order: 2;
   }
 }
 
 @media (max-width: 720px) {
-  .zoning-hero {
-    flex-direction: column;
+  .zoning-manager-shell {
+    padding: 16px;
   }
 
-  .zoning-toolbar {
-    grid-template-columns: 1fr;
-  }
-
+  .zoning-hero,
   .zoning-map-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .zoning-map-mini-stat {
     align-items: flex-start;
   }
 
-  .zoning-map-canvas {
-    min-height: 480px;
+  .zoning-toolbar > * {
+    flex: 1 1 100%;
   }
 
-  .zoning-editor-card {
-    width: calc(100% - 32px);
+  .zoning-map-canvas {
+    min-height: 360px;
+  }
+
+  .zoning-editor-panel {
+    width: 100vw;
+    height: 100svh;
+    border-radius: 0;
   }
 
   .zoning-editor-actions-left {
     top: auto;
-    bottom: 90px;
+    bottom: 16px;
+    flex-direction: row;
+  }
+
+  .zoning-editor-btn-sm {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoning-btn,
+  .zoning-upload-btn,
+  .zoning-mode-toggle,
+  .zoning-editor-btn,
+  .zoning-input-wrap input {
+    transition: none;
   }
 }

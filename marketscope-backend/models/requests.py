@@ -99,13 +99,6 @@ class AdminVerifiedLocalFeatureRequest(BaseModel):
     is_active: bool = True
 
 
-class AhpPairwiseSubmitRequest(BaseModel):
-    level: str                          # "criteria" | "saturation"
-    category: str | None = None         # required if level == "saturation"
-    criteria_labels: list[str]          # order defines matrix row/col order
-    judgments: dict[str, float]         # upper-triangle only, "i,j" string keys -> Saaty value
-
-
 class AdminUpdateUser(BaseModel):
     full_name: str
     email: str

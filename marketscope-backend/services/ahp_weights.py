@@ -1,9 +1,9 @@
 """
-In-memory cache of admin-configured AHP weight configs, keyed by
+In-memory cache of the AHP weight configs (ahp_weight_configs table), keyed by
 (level, category). Avoids a DB round-trip per perform_analysis() call, since
-citywide scans call perform_analysis() hundreds of times per scan across all
-MSME categories. Populated at startup (lifespan) and refreshed after every
-admin write.
+background trend scans call perform_analysis() many times per scan. Loaded
+once at startup (lifespan). The weights are the seeded AHP matrices from
+db/schema.py; there is no admin editor, so change them in the table directly.
 """
 from threading import Lock
 

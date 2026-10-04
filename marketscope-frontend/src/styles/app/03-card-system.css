@@ -5,7 +5,6 @@
 .profile-card,
 .report-map-container,
 .disclaimer-card,
-.admin-card,
 .history-card,
 .profile-stat-card {
   border-radius: 16px;
@@ -19,8 +18,7 @@
   transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
 }
 
-.main-score-card,
-.admin-tools-card {
+.main-score-card {
   border-radius: 16px;
   color: var(--text-main);
   background: var(--surface-2-bg);
@@ -36,11 +34,9 @@
 .profile-card:hover,
 .report-map-container:hover,
 .disclaimer-card:hover,
-.admin-card:hover,
 .history-card:hover,
 .profile-stat-card:hover,
-.main-score-card:hover,
-.admin-tools-card:hover {
+.main-score-card:hover {
   border-color: var(--border-strong);
 }
 
@@ -48,8 +44,6 @@
 .profile-card,
 .main-score-card,
 .report-map-container,
-.admin-card,
-.admin-tools-card,
 .history-card,
 .profile-stat-card {
   @apply p-5 sm:p-6;

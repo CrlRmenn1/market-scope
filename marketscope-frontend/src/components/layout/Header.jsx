@@ -9,6 +9,7 @@ import {
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/solid';
 import Modal from '../common/Modal';
+import BrandMark from './BrandMark';
 import { SPACE_SUBMISSION_TRIGGER_ID, LOGOUT_CONFIRM_TRIGGER_ID } from '../../constants/layoutIds';
 
 export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl, onOpenSpaceSubmission, onStartTour }) {
@@ -59,13 +60,7 @@ export default function Header({ theme, toggleTheme, onLogout, onGoHome, userNam
     <header className="app-header">
       <div className="brand-wrapper">
         <button className="brand-home-btn" onClick={onGoHome} aria-label="Go to Home screen">
-          <div className="brand-mark" aria-hidden="true">
-            <div className="lens-left" />
-            <div className="lens-center">
-              <div className="lens-reflection" />
-            </div>
-            <div className="lens-right" />
-          </div>
+          <BrandMark />
         </button>
         <h1 className="app-title">
           Market<span className="highlight-text">Scope</span>

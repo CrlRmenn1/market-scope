@@ -1,0 +1,168 @@
+/* =========================================
+   ADMIN CONSOLE
+   Desktop sidebar, data tables, mobile tab bar and loading skeletons for
+   pages/AdminPanel.jsx. Everything else in the console is Tailwind utilities
+   on the theme tokens from styles/index.css.
+   ========================================= */
+
+/* ---- Desktop sidebar ---- */
+.admin-side-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+.admin-side-item:hover {
+  background: var(--accent-hover);
+  color: var(--text-main);
+}
+
+.admin-side-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.admin-side-item.is-active {
+  background: var(--accent-hover);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.admin-side-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+.admin-side-item--danger:hover {
+  background: var(--trend-down-bg);
+  color: var(--trend-down);
+}
+
+/* ---- Data tables (desktop) ---- */
+.admin-table th {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-app);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr {
+  transition: background-color var(--motion-fast) ease;
+}
+
+.admin-table tbody tr:hover,
+.admin-table tbody tr.is-highlighted {
+  background: var(--accent-hover);
+}
+
+/* ---- Mobile bottom tab bar ---- */
+.admin-tabbar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  background: var(--bg-sheet);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.admin-tabbar-item {
+  display: flex;
+  min-height: 56px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+.admin-tabbar-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.admin-tabbar-item.is-active {
+  background: var(--accent-hover);
+  color: var(--accent);
+}
+
+.admin-tabbar-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.admin-tabbar-badge {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ---- Loading skeleton ---- */
+.admin-skeleton {
+  background: linear-gradient(90deg, var(--accent-hover) 0%, var(--border-color) 50%, var(--accent-hover) 100%);
+  background-size: 200% 100%;
+  animation: admin-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes admin-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-skeleton { animation: none; }
+  .admin-side-item,
+  .admin-tabbar-item,
+  .admin-table tbody tr { transition: none; }
+}

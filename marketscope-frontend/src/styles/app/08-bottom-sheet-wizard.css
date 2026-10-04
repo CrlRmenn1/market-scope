@@ -136,11 +136,6 @@ html[data-theme="light"] .factor-list { background: rgba(0, 0, 0, 0.03); }
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-.admin-tools-grid--compact {
-  grid-template-columns: 1.7fr auto;
-  gap: 10px;
-}
-
 /* Map action buttons (use location / pin on map) */
 .map-action-btn {
   display: inline-flex; align-items: center; justify-content: center;

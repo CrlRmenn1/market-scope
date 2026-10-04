@@ -8,7 +8,6 @@ import Trends from './pages/Trends';
 import BottomNav from './components/layout/BottomNav';
 import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
-import AdminNavbar from './components/layout/AdminNavbar';
 import OnboardingModal from './components/onboarding/OnboardingModal';
 import SpaceSubmissionModal from './components/spaces/SpaceSubmissionModal';
 import { apiUrl } from './lib/api';
@@ -21,7 +20,6 @@ export default function App() {
   const ADMIN_SESSION_KEY = 'marketscope_admin_session';
   const appShellClass = 'relative flex h-[100svh] w-full flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-main)] transition-colors duration-300';
   const appContentClass = 'relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto antialiased';
-  const adminContentClass = 'pt-[88px]';
   const [session, setSession] = useState(null);
   const [adminSession, setAdminSession] = useState(null);
   const [adminActiveTab, setAdminActiveTab] = useState('msmes');
@@ -274,33 +272,15 @@ export default function App() {
   }
 
   if (adminSession) {
-    const adminName = adminSession.email
-      ? `Admin (${adminSession.email.split('@')[0]})`
-      : 'Admin';
-
     return (
-      <div className={appShellClass}>
-        <Header
-          theme={theme}
-          toggleTheme={toggleTheme}
-          onLogout={handleAdminLogout}
-          onGoHome={() => {}}
-          userName={adminName}
-          userAvatarUrl={null}
-          onOpenSpaceSubmission={null}
-        />
-
-        <main className={`${appContentClass} ${adminContentClass}`}>
-          <AdminPanel
-            adminSession={adminSession}
-            onAdminLogout={handleAdminLogout}
-            activeTab={adminActiveTab}
-            onActiveTabChange={setAdminActiveTab}
-          />
-        </main>
-
-        <AdminNavbar activeTab={adminActiveTab} onChange={setAdminActiveTab} />
-      </div>
+      <AdminPanel
+        adminSession={adminSession}
+        activeTab={adminActiveTab}
+        onActiveTabChange={setAdminActiveTab}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onLogout={handleAdminLogout}
+      />
     );
   }
 
