@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../api';
+import { apiUrl } from '../../lib/api';
 
 const LEVEL_DEFS = {
   criteria: {

@@ -4,11 +4,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
-import { apiUrl } from '../api';
+import { apiUrl } from '../lib/api';
 import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
-import AnalysisLoader from '../components/AnalysisLoader';
-import Modal from '../components/Modal';
-import TourSpotlight from '../components/TourSpotlight';
+import AnalysisLoader from '../components/common/AnalysisLoader';
+import Modal from '../components/common/Modal';
+import TourSpotlight from '../components/common/TourSpotlight';
+import { EASE_STANDARD } from '../constants/motion';
+import { getHazardStyle } from '../utils/hazardStyle';
 
 // Fix for Vite + Leaflet image bug
 delete L.Icon.Default.prototype._getIconUrl;
@@ -27,42 +29,10 @@ const PANABO_BOUNDS = {
 
 // Matches the app's --ease-standard CSS token, for JS-driven Framer Motion
 // transitions to feel consistent with the rest of the UI's motion.
-const EASE_STANDARD = [0.16, 1, 0.3, 1];
-
 const hazardNameByVar = {
   1: 'Very High Flood Hazard (5-Year)',
   2: 'High Flood Hazard (5-Year)',
   3: 'Moderate Flood Hazard (5-Year)'
-};
-
-const getHazardStyle = (hazardVar) => {
-  if (hazardVar === 1) {
-    return {
-      color: '#dc2626',
-      weight: 2.5,
-      fillColor: '#ef4444',
-      fillOpacity: 0.28,
-      opacity: 0.95
-    };
-  }
-  if (hazardVar === 2) {
-    return {
-      color: '#f97316',
-      weight: 1.7,
-      fillColor: '#fb7185',
-      fillOpacity: 0.2,
-      opacity: 0.85,
-      dashArray: '6 6'
-    };
-  }
-  return {
-    color: '#f59e0b',
-    weight: 1.5,
-    fillColor: '#fbbf24',
-    fillOpacity: 0.14,
-    opacity: 0.8,
-    dashArray: '6 6'
-  };
 };
 
 export default function Home({ onViewReport, theme, userId, previewSelection, onSpaceDetailOpenChange, tourActive = false, onTourEnd, isActive = true }) {

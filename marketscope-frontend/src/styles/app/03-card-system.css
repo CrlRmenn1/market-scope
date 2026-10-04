@@ -1,0 +1,82 @@
+/* =========================================
+   2A. SHARED CARD SYSTEM
+   ========================================= */
+.data-card,
+.profile-card,
+.report-map-container,
+.disclaimer-card,
+.admin-card,
+.history-card,
+.profile-stat-card {
+  border-radius: 16px;
+  color: var(--text-main);
+  background: var(--surface-1-bg);
+  border: 1px solid var(--surface-1-border);
+  box-shadow: var(--surface-1-shadow);
+  backdrop-filter: blur(var(--surface-1-blur));
+  -webkit-backdrop-filter: blur(var(--surface-1-blur));
+  margin-bottom: 22px;
+  transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
+}
+
+.main-score-card,
+.admin-tools-card {
+  border-radius: 16px;
+  color: var(--text-main);
+  background: var(--surface-2-bg);
+  border: 1px solid var(--surface-2-border);
+  box-shadow: var(--surface-2-shadow);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
+  margin-bottom: 22px;
+  transition: border-color var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
+}
+
+.data-card:hover,
+.profile-card:hover,
+.report-map-container:hover,
+.disclaimer-card:hover,
+.admin-card:hover,
+.history-card:hover,
+.profile-stat-card:hover,
+.main-score-card:hover,
+.admin-tools-card:hover {
+  border-color: var(--border-strong);
+}
+
+.data-card,
+.profile-card,
+.main-score-card,
+.report-map-container,
+.admin-card,
+.admin-tools-card,
+.history-card,
+.profile-stat-card {
+  @apply p-5 sm:p-6;
+}
+
+.disclaimer-card {
+  @apply p-5 sm:p-6;
+}
+
+.history-card-top,
+.profile-card,
+.main-score-card {
+  @apply overflow-hidden;
+}
+
+.app-content.app-content-locked {
+  overflow: hidden;
+}
+
+.admin-content {
+  padding-top: 88px;
+}
+
+.home-container {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 1; /* keep the map below the app header and bottom navbar (z 1000) */
+  overflow: hidden;
+}
+

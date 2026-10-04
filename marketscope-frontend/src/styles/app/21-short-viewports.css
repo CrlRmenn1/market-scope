@@ -1,0 +1,63 @@
+/* =========================================
+   SHORT VIEWPORTS (landscape phones)
+   ========================================= */
+@media (max-height: 520px) {
+  .app-header {
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: 8px;
+  }
+
+  .bottom-navbar {
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    padding: 4px;
+  }
+
+  .nav-item {
+    padding: 5px 0;
+    gap: 2px;
+  }
+
+  .map-scan-hint {
+    display: none;
+  }
+
+  .map-legend {
+    top: 64px;
+  }
+
+  .map-legend-pill {
+    top: 64px;
+  }
+
+  .map-mode-toggle {
+    top: 64px;
+  }
+
+  .map-quick-panel {
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    padding: 10px 14px;
+    max-height: 68dvh;
+    overflow-y: auto;
+  }
+
+  .map-quick-panel:not(.is-collapsed) .input-group {
+    margin-bottom: 8px;
+  }
+
+  .map-quick-panel__top {
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 430px) {
+  .report-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .report-header .report-title {
+    font-size: 1rem;
+  }
+}
+
+

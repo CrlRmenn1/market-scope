@@ -1,0 +1,110 @@
+/* .input-group input/select (legacy admin-form styling) has higher CSS
+   specificity than the Tailwind size utilities on these two controls, so it
+   was overriding their padding and inflating them taller than the 44px
+   Delete button next to them. Pin the intended sizing back so all three
+   controls in this row line up. */
+.history-tools-grid .history-search-input,
+.history-tools-grid .app-select {
+  min-height: 44px;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+}
+
+.history-tools-grid .history-search-input {
+  padding-left: 2.5rem;
+}
+
+.history-tools-grid .app-select {
+  padding-right: 2.375rem;
+}
+
+.history-tools-card .input-group label,
+.admin-tools-card .input-group label {
+  color: var(--text-muted);
+}
+
+html[data-theme="light"] .history-tools-card .input-group label,
+html[data-theme="light"] .admin-tools-card .input-group label {
+  color: #111827;
+}
+
+.history-search-input {
+  width: 100%;
+  background: var(--bg-sheet);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 12px;
+  font-size: 0.92rem;
+  outline: none;
+}
+
+html[data-theme="light"] .history-search-input {
+  background: #ffffff;
+  color: #111827;
+}
+
+.history-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+html[data-theme="light"] .history-search-input::placeholder {
+  color: #6b7280;
+}
+
+.history-search-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.history-empty-state {
+  margin-top: 16px;
+  background: var(--surface-1-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 18px;
+  padding: 18px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  box-shadow: 0 10px 28px rgba(2, 2, 8, 0.35);
+  opacity: 1;
+}
+
+html[data-theme="light"] .history-empty-state {
+  background: var(--bg-sheet);
+  border-color: rgba(17, 24, 39, 0.1);
+  opacity: 0.88;
+}
+
+.history-empty-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.history-empty-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 4px;
+  opacity: 0.92;
+}
+
+.history-empty-subtitle {
+  font-size: 0.87rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  opacity: 0.88;
+}
+

@@ -3,10 +3,11 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
-import { apiUrl } from '../api';
+import { apiUrl } from '../lib/api';
 import { getBusinessTypeLabel } from '../utils/businessTypes';
-import Modal from '../components/Modal';
+import Modal from '../components/common/Modal';
 import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
+import { getHazardStyle } from '../utils/hazardStyle';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -25,36 +26,6 @@ const hazardNameByVar = {
   1: 'Very High Flood Hazard (5-Year)',
   2: 'High Flood Hazard (5-Year)',
   3: 'Moderate Flood Hazard (5-Year)'
-};
-
-const getHazardStyle = (hazardVar) => {
-  if (hazardVar === 1) {
-    return {
-      color: '#dc2626',
-      weight: 2.5,
-      fillColor: '#ef4444',
-      fillOpacity: 0.28,
-      opacity: 0.95
-    };
-  }
-  if (hazardVar === 2) {
-    return {
-      color: '#f97316',
-      weight: 1.7,
-      fillColor: '#fb7185',
-      fillOpacity: 0.2,
-      opacity: 0.85,
-      dashArray: '6 6'
-    };
-  }
-  return {
-    color: '#f59e0b',
-    weight: 1.5,
-    fillColor: '#fbbf24',
-    fillOpacity: 0.14,
-    opacity: 0.8,
-    dashArray: '6 6'
-  };
 };
 
 export default function Report({ data, targetCoords, onClose }) {

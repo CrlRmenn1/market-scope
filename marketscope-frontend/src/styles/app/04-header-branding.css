@@ -1,0 +1,91 @@
+/* =========================================
+   3. HEADER & BRANDING
+   ========================================= */
+.app-header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
+  padding: max(16px, env(safe-area-inset-top)) 20px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  text-shadow: var(--glass-text-shadow);
+}
+
+.app-header.app-header-minimal {
+  justify-content: flex-end;
+}
+
+.brand-wrapper {
+  display: flex; align-items: center; gap: 12px;
+  min-width: 0; flex-shrink: 1;
+}
+
+.brand-mark { flex-shrink: 0; }
+
+.brand-home-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: transform var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard);
+}
+
+.brand-home-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.brand-home-btn:hover .lens-center {
+  transform: scale(1.05) rotate(-4deg);
+}
+
+.brand-home-btn:hover .lens-left,
+.brand-home-btn:hover .lens-right {
+  transform: scale(1.03);
+}
+
+.brand-mark {
+  position: relative; width: 48px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.lens-left, .lens-right {
+  position: absolute; width: 24px; height: 24px;
+  border-radius: 50%; border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
+  background-color: color-mix(in srgb, var(--brand) 12%, transparent);
+}
+
+.lens-left { left: 0; }
+.lens-right { right: 0; }
+
+.lens-center {
+  position: absolute; z-index: 10; width: 28px; height: 28px;
+  border-radius: 50%; border: 2px solid var(--brand);
+  background-color: color-mix(in srgb, var(--brand) 20%, transparent);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.lens-reflection {
+  width: 6px; height: 6px; background-color: var(--brand);
+  border-radius: 50%; opacity: 0.8;
+}
+
+.app-title {
+  font-size: 1.25rem; font-weight: 800;
+  font-family: var(--font-brand);
+  color: var(--text-main); /* Shifts to black in light mode */
+  letter-spacing: -0.02em; margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.highlight-text { color: var(--accent); }
+

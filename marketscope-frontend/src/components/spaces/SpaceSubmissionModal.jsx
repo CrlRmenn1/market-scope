@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../api';
-import { parseCoordinatePairText } from '../utils/coordinates';
-import MapPicker from './MapPicker';
-import Modal from './Modal';
-import { SPACE_SUBMISSION_TRIGGER_ID } from '../constants/layoutIds';
+import { apiUrl } from '../../lib/api';
+import { parseCoordinatePairText } from '../../utils/coordinates';
+import MapPicker from '../map/MapPicker';
+import Modal from '../common/Modal';
+import { SPACE_SUBMISSION_TRIGGER_ID } from '../../constants/layoutIds';
 
 const BUSINESS_TYPE_OPTIONS = [
   { value: '', label: 'Not specific' },

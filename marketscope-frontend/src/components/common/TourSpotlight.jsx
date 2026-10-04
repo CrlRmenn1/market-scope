@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { createPortal } from 'react-dom';
+import { EASE_STANDARD } from '../../constants/motion';
 
-const EASE_STANDARD = [0.16, 1, 0.3, 1];
 // Above app chrome (.app-header/.bottom-navbar: 1000) and .map-quick-panel
 // (2600), below .tour-card (2700) so the instruction card always stays
 // legible and clickable on top of the darkened backdrop.

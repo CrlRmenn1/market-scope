@@ -1,0 +1,380 @@
+/* =========================================
+   9. REPORT & DOSSIER PAGE STYLES
+   ========================================= */
+
+.report-page {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg-app);
+  z-index: 6000;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 45%, transparent) var(--bg-app);
+}
+
+.report-page::-webkit-scrollbar {
+  width: 10px;
+}
+
+.report-page::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+
+.report-page::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.report-page::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-2-blur));
+  -webkit-backdrop-filter: blur(var(--surface-2-blur));
+  text-shadow: var(--glass-text-shadow);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1200;
+}
+
+.report-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.icon-btn svg { width: 24px; height: 24px; }
+
+.report-scroll-content {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+  padding: 24px 20px 100px 20px;
+  width: 100%;
+}
+
+.report-grid,
+.report-left,
+.report-right,
+.report-map-section {
+  display: block;
+  width: 100%;
+}
+
+.main-score-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 24px;
+}
+
+.score-ring-large {
+  width: 140px;
+  height: 140px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-sheet);
+}
+
+/* Minimal uppercase section kicker */
+.eyebrow-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Violet dot markers for trend reason lists */
+.trends-reasons li {
+  position: relative;
+  padding-left: 16px;
+  list-style: none;
+}
+
+.trends-reasons li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* Icon bullet lists (upsides / considerations) */
+.signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.signal-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.signal-list svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.section-heading {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.input-group:last-child {
+  margin-bottom: 0;
+}
+
+.input-group label {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.input-group input,
+.input-group textarea,
+.input-group select {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-app);
+  color: var(--text-main);
+  padding: 14px 16px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+html[data-theme="light"] .input-group input,
+html[data-theme="light"] .input-group textarea,
+html[data-theme="light"] .input-group select {
+  background: #ffffff;
+  color: #111827;
+}
+
+.input-group input:focus,
+.input-group textarea:focus,
+.input-group select:focus {
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Metric Bars */
+.progress-group {
+  margin-bottom: 24px;
+}
+
+.progress-group:last-child {
+  margin-bottom: 0;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-main);
+}
+
+.detail-toggle {
+  cursor: pointer;
+  padding: 10px 0;
+  border-radius: 14px;
+  transition: background-color 0.2s ease;
+  display: flex;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+}
+
+.detail-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.detail-chevron {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+.detail-chevron.open {
+  transform: rotate(180deg);
+}
+
+.factor-details {
+  margin-top: 10px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--text-main);
+  line-height: 1.8;
+  font-size: 0.92rem;
+}
+
+.detail-section {
+  margin-bottom: 14px;
+}
+
+.detail-section strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.92rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.factor-details p {
+  margin: 0;
+}
+
+.factor-name {
+  flex: 1;
+}
+
+.factor-metrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric-score {
+  font-weight: 800;
+  font-size: 0.85rem;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.metric-status {
+  font-weight: 600;
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.factor-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Legal Disclaimer Box */
+/* Compact muted footnote instead of an alert card */
+.report-page .disclaimer-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0 12px;
+  text-align: center;
+  justify-content: center;
+}
+
+.disclaimer-card {
+  display: flex;
+  gap: 15px;
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.warning-icon {
+  width: 24px;
+  height: 24px;
+  color: #ef4444;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.disclaimer-card p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.report-page .disclaimer-card p {
+  font-size: 0.78rem;
+  max-width: 60ch;
+  margin: 0 auto;
+}
+
+.disclaimer-card strong {
+  color: var(--trend-down);
+}
+

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { apiUrl } from '../api';
-import { getBusinessTypeLabel } from '../utils/businessTypes';
+import { apiUrl } from '../lib/api';
+import { getBusinessTypeLabel, BUSINESS_TYPE_OPTIONS as PRIMARY_BUSINESS_OPTIONS } from '../utils/businessTypes';
+import { getScoreTone } from '../utils/scoreTone';
 
 const mapProfileToFormValues = (value) => ({
   full_name: value?.full_name || value?.name || '',
@@ -23,30 +24,7 @@ const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-const PRIMARY_BUSINESS_OPTIONS = [
-  { value: 'coffee', label: 'Coffee Shops / Cafes' },
-  { value: 'print', label: 'Print / Copy Centers' },
-  { value: 'laundry', label: 'Laundry Shops' },
-  { value: 'carwash', label: 'Car Washes' },
-  { value: 'kiosk', label: 'Food Kiosks / Stalls' },
-  { value: 'water', label: 'Water Refilling Stations' },
-  { value: 'bakery', label: 'Bakeries' },
-  { value: 'pharmacy', label: 'Small Pharmacies' },
-  { value: 'barber', label: 'Barbershops / Salons' },
-  { value: 'moto', label: 'Motorcycle Repair Shops' },
-  { value: 'internet', label: 'Internet Cafes' },
-  { value: 'meat', label: 'Meat Shops' },
-  { value: 'hardware', label: 'Hardware / Construction Supplies' }
-];
-
 const inlineInputClass = 'settings-inline-input profile-form-input w-full rounded-lg border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-[var(--text-main)] outline-none transition placeholder:text-[color:var(--text-muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)] sm:max-w-[260px]';
-
-const getScoreTone = (score) => {
-  const value = Number(score || 0);
-  if (value >= 75) return 'high';
-  if (value >= 55) return 'medium';
-  return 'low';
-};
 
 const Row = ({ label, children }) => (
   <div className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">

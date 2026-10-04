@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { apiUrl } from '../api';
-import Modal from './Modal';
+import { apiUrl } from '../../lib/api';
+import Modal from '../common/Modal';
 
 const REQUIRED_FIELDS = [
   'primary_business',

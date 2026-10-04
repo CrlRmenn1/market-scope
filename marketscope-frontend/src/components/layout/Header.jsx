@@ -8,8 +8,8 @@ import {
   AcademicCapIcon,
   ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/solid';
-import Modal from './Modal';
-import { SPACE_SUBMISSION_TRIGGER_ID, LOGOUT_CONFIRM_TRIGGER_ID } from '../constants/layoutIds';
+import Modal from '../common/Modal';
+import { SPACE_SUBMISSION_TRIGGER_ID, LOGOUT_CONFIRM_TRIGGER_ID } from '../../constants/layoutIds';
 
 export default function Header({ theme, toggleTheme, onLogout, onGoHome, userName, userAvatarUrl, onOpenSpaceSubmission, onStartTour }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);

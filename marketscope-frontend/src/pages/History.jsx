@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { apiUrl } from '../api';
+import { apiUrl } from '../lib/api';
 import { getBusinessTypeKey, getBusinessTypeLabel } from '../utils/businessTypes';
 import useIsDesktop from '../utils/useIsDesktop';
-import AnalysisLoader from '../components/AnalysisLoader';
-import Modal from '../components/Modal';
+import AnalysisLoader from '../components/common/AnalysisLoader';
+import Modal from '../components/common/Modal';
 import { BULK_DELETE_CONFIRM_TRIGGER_ID } from '../constants/layoutIds';
+import { getScoreTone } from '../utils/scoreTone';
 
 // Floor so a very fast (e.g. cache-adjacent) fetch doesn't flash the loading
 // modal open-and-closed; cache hits skip the modal entirely (see openSavedReport).
@@ -25,13 +26,6 @@ const formatDate = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Unknown date';
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-};
-
-const getScoreTone = (score) => {
-  const value = Number(score || 0);
-  if (value >= 75) return 'high';
-  if (value >= 55) return 'medium';
-  return 'low';
 };
 
 const getScoreLabel = (score) => {

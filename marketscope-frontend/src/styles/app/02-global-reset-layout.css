@@ -1,0 +1,108 @@
+/* =========================================
+   2. GLOBAL RESET & LAYOUT
+   ========================================= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+img,
+picture,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+html, body, #root {
+  height: 100%; width: 100%;
+  min-height: 100svh;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  overscroll-behavior-y: none;
+  transition: background-color var(--motion-slow) var(--ease-standard), color var(--motion-slow) var(--ease-standard);
+}
+
+h1, h2, h3, h4, h5, h6,
+.app-title,
+.report-title,
+.profile-name,
+.history-title,
+.section-heading {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+.app-container {
+  position: relative;
+  height: 100svh; width: 100vw;
+  display: flex; flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.app-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.app-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 999px;
+}
+
+button,
+a,
+[role="button"],
+.icon-btn,
+.nav-item,
+.dropdown-item,
+.brand-home-btn,
+.gear-btn,
+.user-settings-btn,
+.primary-btn,
+.secondary-btn,
+.map-mode-btn,
+.detail-toggle,
+.edit-btn,
+.history-delete-btn,
+.history-breakdown-toggle,
+.admin-tab-btn,
+.admin-action-btn {
+  will-change: transform;
+}
+
+button svg,
+a svg,
+[role="button"] svg,
+.icon-btn svg,
+.nav-item svg,
+.dropdown-icon,
+.gear-icon,
+.gear-icon-small,
+.check-icon,
+.warning-icon,
+.loading-icon,
+.pure-pin {
+  transform-origin: center;
+  transition: transform var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard), opacity var(--motion-normal) var(--ease-standard), filter var(--motion-normal) var(--ease-standard);
+}
+

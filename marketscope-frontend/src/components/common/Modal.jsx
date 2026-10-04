@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import useIsDesktop from '../utils/useIsDesktop';
-
-const EASE_STANDARD = [0.16, 1, 0.3, 1];
+import useIsDesktop from '../../utils/useIsDesktop';
+import { EASE_STANDARD } from '../../constants/motion';
 
 // Reusable modal primitive, driven by Framer Motion instead of CSS keyframes
 // so panels get a real exit animation and can optionally morph out of the

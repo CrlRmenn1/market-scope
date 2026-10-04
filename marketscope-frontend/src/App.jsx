@@ -1,36 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import AuthPages from './AuthPages';
-import Header from './components/Header';
+import AuthPages from './pages/AuthPages';
+import Header from './components/layout/Header';
 import Home from './pages/Home';
 import Profile from './pages/Profile';
 import History from './pages/History';
 import Trends from './pages/Trends';
-import BottomNav from './components/BottomNav';
+import BottomNav from './components/layout/BottomNav';
 import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
-import AdminNavbar from './components/AdminNavbar';
-import OnboardingModal from './components/OnboardingModal';
-import SpaceSubmissionModal from './components/SpaceSubmissionModal';
-import { apiUrl } from './api';
-import './App.css';
-
-const REQUIRED_TREND_FIELDS = [
-  'primary_business',
-  'startup_capital',
-  'preferred_setup',
-  'target_payback_months'
-];
-
-const normalizePreferenceValue = (value) => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed ? trimmed : null;
-  }
-  return value;
-};
-
-const getMissingTrendPreferenceFields = (user) => REQUIRED_TREND_FIELDS.filter((field) => normalizePreferenceValue(user?.[field]) === null);
+import AdminNavbar from './components/layout/AdminNavbar';
+import OnboardingModal from './components/onboarding/OnboardingModal';
+import SpaceSubmissionModal from './components/spaces/SpaceSubmissionModal';
+import { apiUrl } from './lib/api';
+import './styles/app/index.css';
+import { getMissingTrendPreferenceFields } from './utils/trendPreferences';
 
 export default function App() {
   const validTabs = ['home', 'trends', 'profile', 'history'];

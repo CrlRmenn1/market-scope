@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { MotionConfig } from 'framer-motion'
 // IMPORTANT: Leaflet CSS MUST be imported before App and index.css
 import App from './App'
-import './index.css'
+import './styles/index.css'
 import 'leaflet/dist/leaflet.css';
 
 // Persistent tile cache (see public/sw.js) - only intercepts OSM tile

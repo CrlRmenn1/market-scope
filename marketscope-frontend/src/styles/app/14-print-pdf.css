@@ -1,0 +1,228 @@
+/* =========================================
+   8. PRINT & EXPORT TO PDF STYLES
+   ========================================= */
+@media (min-width: 1024px) {
+  .report-grid {
+    display: block;
+  }
+
+  .report-left .main-score-card,
+  .report-left .insight-box,
+  .report-map-section,
+  .report-right .data-card {
+    width: 100%;
+  }
+
+  .report-map-container {
+    min-height: 420px;
+  }
+}
+
+@media print {
+  @page {
+    margin: 8mm;
+    size: auto;
+  }
+
+  :root,
+  html[data-theme="dark"],
+  body {
+    --bg-app: #ffffff !important;
+    --bg-glass: #ffffff !important;
+    --bg-sheet: #ffffff !important;
+    --text-main: #111827 !important;
+    --text-muted: #6b7280 !important;
+    --border-color: #e5e7eb !important;
+    --surface-1-bg: #ffffff !important;
+    --surface-1-border: #e5e7eb !important;
+    --surface-1-blur: 0px !important;
+    --surface-2-bg: #ffffff !important;
+    --surface-2-border: #e5e7eb !important;
+    --surface-2-blur: 0px !important;
+    --surface-3-bg: #ffffff !important;
+    --surface-3-border: #e5e7eb !important;
+    --surface-3-blur: 0px !important;
+  }
+
+  .data-card,
+  .main-score-card,
+  .disclaimer-card,
+  .report-map-container,
+  .insight-box,
+  .report-header {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Hide UI elements that shouldn't be on paper */
+  .icon-btn, .bottom-navbar, .app-header { 
+    display: none !important; 
+  }
+
+  .report-page::-webkit-scrollbar,
+  .report-page::-webkit-scrollbar-track,
+  .report-page::-webkit-scrollbar-thumb {
+    display: none !important;
+  }
+  
+  /* Unroll the scrollable area so everything prints */
+  body, .app-container, .app-content, .report-page { 
+    height: auto !important; 
+    overflow: visible !important; 
+    position: static !important;
+    background: #ffffff !important;
+    color: #111 !important;
+  }
+
+  .report-page {
+    display: block !important;
+    z-index: auto !important;
+    isolation: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .report-header {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    padding: 0 0 10px 0 !important;
+    margin-bottom: 14px !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    border-bottom: 1px solid #e5e7eb !important;
+  }
+
+  .report-title {
+    font-size: 16pt !important;
+  }
+  
+  .report-scroll-content { 
+    overflow: visible !important; 
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  .main-score-card,
+  .insight-box,
+  .report-map-container,
+  .data-card,
+  .disclaimer-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Force background colors to print (e.g., progress bars) */
+  * { 
+    -webkit-print-color-adjust: exact !important; 
+    print-color-adjust: exact !important; 
+  }
+
+  /* Prevent elements from being cut in half across pages */
+  .insight-box, .data-card, .main-score-card, .report-map-container { 
+    page-break-inside: avoid; 
+    break-inside: avoid; 
+  }
+
+  .section-heading {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .report-map-container,
+  .report-map-legend {
+    page-break-before: avoid;
+    break-before: avoid;
+  }
+
+  .report-map-container {
+    height: 220px !important; /* Force a strict height for paper */
+    display: block !important;
+    position: relative !important;
+    overflow: hidden !important; /* Required to clip map tiles */
+    border: 2px solid #ccc !important;
+  }
+
+  .report-map-legend {
+    padding: 8px 10px !important;
+    gap: 10px !important;
+    font-size: 9pt !important;
+  }
+
+  .score-ring-large {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  }
+
+  .progress-fill {
+    transition: none !important;
+  }
+
+  .detail-toggle,
+  .history-breakdown-toggle,
+  .map-mode-toggle,
+  .map-legend {
+    display: none !important;
+  }
+
+  .factor-details {
+    border-color: var(--text-muted) !important;
+    background: #faf5ff !important;
+    color: #111827 !important;
+  }
+
+  .leaflet-container {
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Keep deterministic pane stacking so circles/markers stay visible in PDF */
+  .leaflet-pane {
+    position: absolute !important;
+  }
+
+  .leaflet-tile-pane { z-index: 1 !important; }
+  .leaflet-overlay-pane { z-index: 3 !important; }
+  .leaflet-shadow-pane { z-index: 4 !important; }
+  .leaflet-marker-pane { z-index: 5 !important; }
+  .leaflet-tooltip-pane,
+  .leaflet-popup-pane { z-index: 6 !important; }
+
+  .leaflet-tile,
+  .leaflet-marker-icon,
+  .leaflet-marker-shadow,
+  .leaflet-interactive {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+}
+
+@media print and (orientation: landscape) {
+  @page {
+    size: landscape;
+  }
+
+  .main-score-card {
+    padding: 14px 0 !important;
+    margin-bottom: 12px !important;
+  }
+
+  .insight-box {
+    margin-bottom: 12px !important;
+    padding: 12px !important;
+  }
+
+  .section-heading {
+    margin-bottom: 8px !important;
+  }
+
+  .report-map-container {
+    height: 175px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .report-scroll-content {
+    padding-bottom: 0 !important;
+  }
+}
+

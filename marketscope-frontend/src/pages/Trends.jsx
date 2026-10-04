@@ -1,25 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../api';
-import TrendPreferencesGate from '../components/TrendPreferencesGate';
+import { apiUrl } from '../lib/api';
+import TrendPreferencesGate from '../components/onboarding/TrendPreferencesGate';
 import useIsDesktop from '../utils/useIsDesktop';
-
-const REQUIRED_TREND_FIELDS = [
-  'primary_business',
-  'startup_capital',
-  'preferred_setup',
-  'target_payback_months'
-];
-
-const normalizePreferenceValue = (value) => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed ? trimmed : null;
-  }
-  return value;
-};
-
-const getMissingTrendPreferenceFields = (user) => REQUIRED_TREND_FIELDS.filter((field) => normalizePreferenceValue(user?.[field]) === null);
+import { getMissingTrendPreferenceFields } from '../utils/trendPreferences';
 
 const getScoreTone = (score) => {
   if (score >= 75) return 'high';

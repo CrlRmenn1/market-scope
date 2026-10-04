@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import ZoningEditor from './ZoningEditor';
-import { apiUrl } from '../api';
+import { apiUrl } from '../../lib/api';
 import './ZoningManager.css';
 
 export default function ZoningManager({ token }) {

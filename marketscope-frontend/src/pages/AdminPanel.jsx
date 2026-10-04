@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../api';
+import { apiUrl } from '../lib/api';
 import { parseCoordinatePairText } from '../utils/coordinates';
-import MapPicker from '../components/MapPicker';
-const ZoningManager = React.lazy(() => import('../components/ZoningManager'));
-const FloodZoneManager = React.lazy(() => import('../components/FloodZoneManager'));
-const AhpWeightsManager = React.lazy(() => import('../components/AhpWeightsManager'));
+import MapPicker from '../components/map/MapPicker';
+import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
+const ZoningManager = React.lazy(() => import('../components/admin/ZoningManager'));
+const FloodZoneManager = React.lazy(() => import('../components/admin/FloodZoneManager'));
+const AhpWeightsManager = React.lazy(() => import('../components/admin/AhpWeightsManager'));
 
 const defaultMsmeForm = {
   name: '',
@@ -27,22 +28,6 @@ const defaultAdminSpaceForm = {
   notes: '',
   photo_urls: []
 };
-
-const BUSINESS_TYPE_OPTIONS = [
-  { value: 'coffee', label: 'Coffee Shops / Cafes' },
-  { value: 'print', label: 'Print / Copy Centers' },
-  { value: 'laundry', label: 'Laundry Shops' },
-  { value: 'carwash', label: 'Car Washes' },
-  { value: 'kiosk', label: 'Food Kiosks / Stalls' },
-  { value: 'water', label: 'Water Refilling Stations' },
-  { value: 'bakery', label: 'Bakeries' },
-  { value: 'pharmacy', label: 'Small Pharmacies' },
-  { value: 'barber', label: 'Barbershops / Salons' },
-  { value: 'moto', label: 'Motorcycle Repair Shops' },
-  { value: 'internet', label: 'Internet Cafes' },
-  { value: 'meat', label: 'Meat Shops' },
-  { value: 'hardware', label: 'Hardware / Construction Supplies' }
-];
 
 const getBusinessTypeLabel = (value) => {
   const found = BUSINESS_TYPE_OPTIONS.find((option) => option.value === value);

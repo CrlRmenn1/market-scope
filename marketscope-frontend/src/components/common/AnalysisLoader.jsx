@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { EASE_STANDARD } from '../../constants/motion';
 
 // Reused from the Leaflet L.divIcon pin marker drawn in Home.jsx (~line 527)
 // so the loader's pin reads as the same mark, without touching the Leaflet
@@ -15,8 +16,6 @@ const DEFAULT_LABELS = [
 
 const DEFAULT_STAGE_MS = 1500;
 const FADE_MS = 400;
-const EASE_STANDARD = [0.16, 1, 0.3, 1];
-
 // Rapidly cycling 2-digit number for the "score" stage — deliberately never
 // settles on a value, so it reads as "calculating" rather than previewing a
 // (possibly wrong) real result.

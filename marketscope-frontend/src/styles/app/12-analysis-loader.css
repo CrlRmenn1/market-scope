@@ -1,0 +1,64 @@
+/* =========================================
+   ANALYSIS LOADER (MAP QUICK PANEL)
+   pin -> radius -> score -> verdict, looping
+   ========================================= */
+.analysis-loader {
+  padding: 6px 2px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.analysis-loader__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76px;
+  width: 100%;
+}
+
+.analysis-loader__icon {
+  width: 38px;
+  height: 38px;
+  color: var(--accent);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));
+}
+
+.analysis-loader__radius {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.analysis-loader__score {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 2.5rem;
+  line-height: 1;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.analysis-loader__verdict {
+  width: 44px;
+  height: 44px;
+}
+
+.analysis-loader__verdict--pass { color: var(--trend-up); }
+.analysis-loader__verdict--fail { color: var(--trend-down); }
+
+.analysis-loader__label {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+.analysis-loader--static .analysis-loader__icon {
+  filter: none;
+}
+

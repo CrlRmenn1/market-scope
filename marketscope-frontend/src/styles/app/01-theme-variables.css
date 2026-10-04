@@ -1,0 +1,15 @@
+/* =========================================
+   1. THEME VARIABLES (DARK & LIGHT)
+   ========================================= */
+:root {
+  /* Fonts & motion only — color/surface tokens live in index.css (single source of truth) */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-brand: 'Sora', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --motion-fast: 140ms;
+  --motion-normal: 220ms;
+  --motion-slow: 360ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphatic: cubic-bezier(0.68, -0.55, 0.26, 1.55);
+}
+

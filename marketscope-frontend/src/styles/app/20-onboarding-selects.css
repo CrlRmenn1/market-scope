@@ -1,0 +1,280 @@
+/* Rich onboarding hero layout (step 0) */
+.onboarding-hero {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.onboarding-hero-left {
+  flex: 1 1 60%;
+}
+
+.onboarding-hero-right {
+  flex: 0 0 36%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-hero-sub {
+  margin: 8px 0 12px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.onboarding-benefits {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.onboarding-benefits li {
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.onboarding-small-title {
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 6px 0;
+  font-size: 0.86rem;
+}
+
+.onboarding-steps-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+}
+
+.onboarding-mini-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--accent-hover);
+  border: 1px solid var(--border-color);
+}
+
+.mini-icon svg { width: 20px; height: 20px; }
+.mini-title { font-weight: 700; font-size: 0.88rem; color: var(--text-main); }
+.mini-desc { font-size: 0.82rem; color: var(--text-muted); }
+
+@media (max-width: 560px) {
+  .onboarding-hero { flex-direction: column; }
+  .onboarding-hero-right { flex: none; }
+}
+
+/* Styled select (map quick panel) - dark theme */
+.styled-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-sheet);
+  color: var(--text-main);
+  font-size: 0.95rem;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.styled-select:focus {
+  outline: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.28);
+}
+
+/* Options dropdown background (dark) */
+.styled-select option {
+  background: var(--bg-sheet);
+  color: var(--text-main);
+}
+
+/* For browsers that render native popup list, ensure selected/hovered states are readable */
+.styled-select option:checked,
+.styled-select option[selected] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-main);
+}
+
+.styled-select option:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.map-quick-panel .styled-select,
+.map-quick-panel .styled-select:focus {
+  background: var(--bg-sheet) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+.map-quick-panel .styled-select option,
+.map-quick-panel .styled-select option:checked,
+.map-quick-panel .styled-select option[selected] {
+  background: var(--bg-sheet) !important;
+  color: var(--text-main) !important;
+}
+
+.onboarding-description {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.onboarding-checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  margin-bottom: 14px;
+  user-select: none;
+}
+
+.onboarding-checkbox-row input {
+  accent-color: var(--accent);
+}
+
+.onboarding-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.onboarding-btn {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard), color var(--motion-normal) var(--ease-standard);
+}
+
+.onboarding-btn:hover {
+  transform: translateY(-1px);
+}
+
+.onboarding-btn.secondary,
+.onboarding-btn.ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.onboarding-btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+@keyframes onboardingStepIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 560px) {
+  .profile-page {
+    padding-top: 72px;
+    padding-bottom: calc(260px + env(safe-area-inset-bottom));
+  }
+
+  .admin-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-navbar {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    gap: 6px;
+    padding: 6px;
+    width: calc(100vw - 12px);
+  }
+
+  .admin-nav-item {
+    padding: 8px 8px;
+  }
+
+  .admin-nav-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.03em;
+  }
+
+  .admin-nav-icon,
+  .admin-nav-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .history-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-actions {
+    position: static;
+    bottom: auto;
+    z-index: auto;
+    padding-top: 2px;
+    padding-bottom: 0;
+    background: transparent;
+  }
+
+  .profile-card,
+  .data-card {
+    border-radius: 20px;
+  }
+
+  .history-actions-row {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .history-open-btn,
+  .history-delete-btn {
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    border-radius: 10px;
+  }
+
+  /* Swap visual order/sizing on mobile only: Open report + Delete share the
+     top row (Open slightly bigger), Breakdown takes the full-width row below.
+     DOM order stays Open/Breakdown/Delete, so desktop (.history-delete-btn
+     keeps ml-auto there) is unaffected. */
+  .history-open-btn {
+    flex: 3 1 0%;
+  }
+
+  .history-delete-btn {
+    flex: 2 1 0%;
+    order: 2;
+  }
+
+  .history-breakdown-toggle {
+    flex: 1 1 100%;
+    order: 3;
+    justify-content: center;
+  }
+
+  .profile-badge {
+    margin-top: 4px;
+  }
+
+  .profile-actions .primary-btn,
+  .profile-actions .edit-btn {
+    min-height: 46px;
+  }
+}
+
+

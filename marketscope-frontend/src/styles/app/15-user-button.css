@@ -1,0 +1,60 @@
+/* =========================================
+   NEW UNIFIED USER BUTTON
+   ========================================= */
+.user-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  background: var(--bg-sheet);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: 30px; /* Pill shape */
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-settings-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-hover);
+}
+
+.user-avatar-tiny {
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.user-avatar-image {
+  object-fit: cover;
+}
+
+.settings-user-name {
+  color: var(--text-main);
+  font-size: 0.9rem;
+  font-weight: 600;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gear-icon-small {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.user-settings-btn.active .gear-icon-small {
+  transform: rotate(90deg);
+  color: var(--accent);
+}

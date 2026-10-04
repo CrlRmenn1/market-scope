@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { getTileUrl, TILE_ATTRIBUTION } from '../utils/mapTheme';
+import { getTileUrl, TILE_ATTRIBUTION } from '../../utils/mapTheme';
 // Fix for Vite + Leaflet image bug (same approach as Home.jsx)
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({

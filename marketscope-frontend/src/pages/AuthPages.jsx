@@ -1,28 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import './Auth.css';
-import { apiUrl } from './api';
+import '../styles/auth.css';
+import { apiUrl } from '../lib/api';
+import { EASE_STANDARD } from '../constants/motion';
+import { BUSINESS_TYPE_OPTIONS as PRIMARY_BUSINESS_OPTIONS } from '../utils/businessTypes';
 
 // Matches the app's --ease-standard CSS token, for JS-driven Framer Motion
 // transitions to feel consistent with the rest of the UI's motion.
-const EASE_STANDARD = [0.16, 1, 0.3, 1];
-
-const PRIMARY_BUSINESS_OPTIONS = [
-  { value: 'coffee', label: 'Coffee Shops / Cafes' },
-  { value: 'print', label: 'Print / Copy Centers' },
-  { value: 'laundry', label: 'Laundry Shops' },
-  { value: 'carwash', label: 'Car Washes' },
-  { value: 'kiosk', label: 'Food Kiosks / Stalls' },
-  { value: 'water', label: 'Water Refilling Stations' },
-  { value: 'bakery', label: 'Bakeries' },
-  { value: 'pharmacy', label: 'Small Pharmacies' },
-  { value: 'barber', label: 'Barbershops / Salons' },
-  { value: 'moto', label: 'Motorcycle Repair Shops' },
-  { value: 'internet', label: 'Internet Cafes' },
-  { value: 'meat', label: 'Meat Shops' },
-  { value: 'hardware', label: 'Hardware / Construction Supplies' }
-];
-
 const formatDateYmd = (dateObj) => {
   const year = dateObj.getFullYear();
   const month = `${dateObj.getMonth() + 1}`.padStart(2, '0');
