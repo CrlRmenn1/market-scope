@@ -1,3 +1,7 @@
+"""Every environment variable the backend reads, in one place.
+
+See .env.example in the backend folder for the full list with defaults.
+"""
 import os
 from urllib.parse import urlparse
 
@@ -46,3 +50,28 @@ def get_allowed_origins():
         for origin in allowed_origins_env.split(",")
         if origin.strip()
     ]
+
+
+# Admin account and token
+ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
+ADMIN_PASSWORD = os.environ.get("MARKETSCOPE_ADMIN_PASSWORD", "admin123")
+ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local-token")
+
+# Password reset codes
+RESET_CODE_TTL_MINUTES = int(os.environ.get("MARKETSCOPE_RESET_CODE_TTL_MINUTES", "10"))
+RESET_CODE_DEV_MODE = os.environ.get("MARKETSCOPE_RESET_CODE_DEV_MODE", "false").lower() == "true"
+
+# Outgoing email (password reset)
+SMTP_HOST = os.environ.get("MARKETSCOPE_SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("MARKETSCOPE_SMTP_PORT", "587"))
+SMTP_USERNAME = os.environ.get("MARKETSCOPE_SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.environ.get("MARKETSCOPE_SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.environ.get("MARKETSCOPE_SMTP_FROM_EMAIL", "").strip()
+SMTP_FROM_NAME = os.environ.get("MARKETSCOPE_SMTP_FROM_NAME", "MarketScope")
+SMTP_USE_TLS = os.environ.get("MARKETSCOPE_SMTP_USE_TLS", "true").lower() == "true"
+SMTP_USE_SSL = os.environ.get("MARKETSCOPE_SMTP_USE_SSL", "false").lower() == "true"
+
+# Citywide trend-scan cache timing
+TREND_SCAN_CACHE_TTL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_TTL_SECONDS", "21600"))
+TREND_SCAN_CACHE_MAX_STALE_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_CACHE_MAX_STALE_SECONDS", "86400"))
+TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_AUTO_REFRESH_INTERVAL_SECONDS", "7200"))

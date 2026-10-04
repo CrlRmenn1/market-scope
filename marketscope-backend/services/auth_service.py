@@ -3,12 +3,11 @@ import bcrypt
 from fastapi import HTTPException
 from datetime import datetime, timezone
 
-from db_schema import (
-    generate_reset_code,
+from db.schema import (
     get_analysis_history_pk_column_async,
     get_users_primary_key_column_async,
-    send_password_reset_email,
 )
+from services.email import generate_reset_code, send_password_reset_email
 
 
 REQUIRED_TREND_PREFERENCE_FIELDS = (

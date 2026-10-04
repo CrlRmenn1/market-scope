@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 
-from db_schema import (
+from db.schema import (
     get_analysis_history_pk_column_async,
     get_users_primary_key_column_async,
 )

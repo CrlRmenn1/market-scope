@@ -1,43 +1,11 @@
-import os
-import random
-import smtplib
-from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
-
+"""Table creation, column migrations, and AHP seed data (runs at startup)."""
 import bcrypt
 import psycopg2
 from fastapi import HTTPException
 from psycopg2.extras import Json
 
-from ahp import build_consistent_matrix_from_weights, solve_ahp
-
-
-ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
-ADMIN_PASSWORD = os.environ.get("MARKETSCOPE_ADMIN_PASSWORD", "admin123")
-ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local-token")
-RESET_CODE_TTL_MINUTES = int(os.environ.get("MARKETSCOPE_RESET_CODE_TTL_MINUTES", "10"))
-RESET_CODE_DEV_MODE = os.environ.get("MARKETSCOPE_RESET_CODE_DEV_MODE", "false").lower() == "true"
-
-SMTP_HOST = os.environ.get("MARKETSCOPE_SMTP_HOST", "").strip()
-SMTP_PORT = int(os.environ.get("MARKETSCOPE_SMTP_PORT", "587"))
-SMTP_USERNAME = os.environ.get("MARKETSCOPE_SMTP_USERNAME", "").strip()
-SMTP_PASSWORD = os.environ.get("MARKETSCOPE_SMTP_PASSWORD", "")
-SMTP_FROM_EMAIL = os.environ.get("MARKETSCOPE_SMTP_FROM_EMAIL", "").strip()
-SMTP_FROM_NAME = os.environ.get("MARKETSCOPE_SMTP_FROM_NAME", "MarketScope")
-SMTP_USE_TLS = os.environ.get("MARKETSCOPE_SMTP_USE_TLS", "true").lower() == "true"
-SMTP_USE_SSL = os.environ.get("MARKETSCOPE_SMTP_USE_SSL", "false").lower() == "true"
-
-
-def get_startup_db_config(base_config):
-    startup_config = dict(base_config)
-    startup_options = os.environ.get("MARKETSCOPE_DB_STARTUP_OPTIONS", "-c statement_timeout=0")
-
-    if startup_options:
-        startup_config["options"] = startup_options
-    else:
-        startup_config.pop("options", None)
-
-    return startup_config
+from core.config import ADMIN_EMAIL, ADMIN_PASSWORD, get_startup_database_config
+from services.ahp import build_consistent_matrix_from_weights, solve_ahp
 
 
 def create_app_tables(db_config):
@@ -49,7 +17,7 @@ def create_app_tables(db_config):
     for attempt in range(max_retries):
         try:
             print(f"[DB Schema] Attempt {attempt + 1}/{max_retries} to create tables...", flush=True)
-            conn = psycopg2.connect(**get_startup_db_config(db_config))
+            conn = psycopg2.connect(**get_startup_database_config(db_config))
             cursor = conn.cursor()
             ensure_users_table(cursor)
             user_pk_column = get_users_primary_key_column(cursor)
@@ -510,40 +478,3 @@ async def get_analysis_history_pk_column_async(conn):
     if not result:
         raise HTTPException(status_code=500, detail="analysis_history table must include either history_id or id")
     return result["column_name"]
-
-
-def generate_reset_code():
-    return ''.join(random.choice('0123456789') for _ in range(6))
-
-
-def is_smtp_configured():
-    return bool(SMTP_HOST and SMTP_FROM_EMAIL)
-
-
-def send_password_reset_email(target_email: str, reset_code: str):
-    if not is_smtp_configured():
-        print(f"Password reset code for {target_email}: {reset_code}")
-        return
-
-    msg = EmailMessage()
-    msg["Subject"] = f"{SMTP_FROM_NAME} Password Reset Code"
-    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
-    msg["To"] = target_email
-    msg.set_content(
-        f"Your MarketScope password reset code is: {reset_code}\n\n"
-        f"This code expires in {RESET_CODE_TTL_MINUTES} minutes."
-    )
-
-    if SMTP_USE_SSL:
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
-            if SMTP_USERNAME:
-                smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-            smtp.send_message(msg)
-        return
-
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
-        if SMTP_USE_TLS:
-            smtp.starttls()
-        if SMTP_USERNAME:
-            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-        smtp.send_message(msg)

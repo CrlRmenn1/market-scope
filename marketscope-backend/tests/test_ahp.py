@@ -5,7 +5,7 @@ Unit tests for the AHP math core (ahp.py) against known textbook examples.
 import math
 import unittest
 
-from ahp import (
+from services.ahp import (
     AHPValidationError,
     CONSISTENCY_RATIO_THRESHOLD,
     build_consistent_matrix_from_weights,
