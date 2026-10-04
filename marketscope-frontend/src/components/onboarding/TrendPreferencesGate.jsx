@@ -1,13 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { apiUrl } from '../../lib/api';
+import { getMissingTrendPreferenceFields } from '../../utils/trendPreferences';
 import Modal from '../common/Modal';
-
-const REQUIRED_FIELDS = [
-  'primary_business',
-  'startup_capital',
-  'preferred_setup',
-  'target_payback_months'
-];
 
 const BUSINESS_OPTIONS = [
   { value: 'coffee', label: 'Coffee Shops / Cafes' },
@@ -27,23 +21,10 @@ const BUSINESS_OPTIONS = [
 
 const FIELD_LABELS = {
   primary_business: 'Primary Business Interest',
-  startup_capital: 'Startup Capital (PHP)',
-  preferred_setup: 'Preferred Setup',
-  target_payback_months: 'Target Payback (Months)'
+  preferred_setup: 'Preferred Setup'
 };
 
-const normalizeField = (value) => {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed ? trimmed : null;
-  }
-  return value;
-};
-
-const getMissingFields = (profile) => REQUIRED_FIELDS.filter((field) => normalizeField(profile?.[field]) === null);
-
-export default function TrendPreferencesGate({ isOpen, user, missingFields, onSaved, onLater }) {
+export default function TrendPreferencesGate({ isOpen, user, onSaved, onLater }) {
   const userId = user?.user_id || user?.id;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -57,17 +38,11 @@ export default function TrendPreferencesGate({ isOpen, user, missingFields, onSa
     age: user?.age ?? '',
     birthday: user?.birthday ? String(user.birthday).slice(0, 10) : '',
     primary_business: user?.primary_business || '',
-    startup_capital: user?.startup_capital ?? '',
-    preferred_setup: user?.preferred_setup || '',
-    target_payback_months: user?.target_payback_months ?? ''
+    preferred_setup: user?.preferred_setup || ''
   });
 
-  const effectiveMissingFields = useMemo(() => {
-    if (Array.isArray(missingFields) && missingFields.length > 0) {
-      return missingFields;
-    }
-    return getMissingFields(formValues);
-  }, [formValues, missingFields]);
+  // Always from what is typed now, so the banner clears as fields are filled in.
+  const missingFields = useMemo(() => getMissingTrendPreferenceFields(formValues), [formValues]);
 
   if (!userId) return null;
 
@@ -79,9 +54,8 @@ export default function TrendPreferencesGate({ isOpen, user, missingFields, onSa
     event.preventDefault();
     setError('');
 
-    const pendingMissing = getMissingFields(formValues);
-    if (pendingMissing.length > 0) {
-      setError(`Please complete: ${pendingMissing.map((field) => FIELD_LABELS[field] || field).join(', ')}`);
+    if (missingFields.length > 0) {
+      setError(`Please complete: ${missingFields.map((field) => FIELD_LABELS[field] || field).join(', ')}`);
       return;
     }
 
@@ -93,8 +67,6 @@ export default function TrendPreferencesGate({ isOpen, user, missingFields, onSa
         body: JSON.stringify({
           ...formValues,
           age: formValues.age === '' ? null : Number(formValues.age),
-          startup_capital: formValues.startup_capital === '' ? null : Number(formValues.startup_capital),
-          target_payback_months: formValues.target_payback_months === '' ? null : Number(formValues.target_payback_months),
           birthday: formValues.birthday || null
         })
       });
@@ -131,9 +103,9 @@ export default function TrendPreferencesGate({ isOpen, user, missingFields, onSa
             <p className="eyebrow-label mb-2">Trend Page Guide</p>
             <h2 id="trend-pref-title" className="text-xl font-semibold text-[var(--text-main)] sm:text-2xl">How the Trends page works</h2>
             <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
-              <p>MarketScope uses your preferences plus citywide scan signals to rank MSME opportunities.</p>
-              <p>You will see score-based recommendations, best-fit business types, and hotspot suggestions.</p>
-              <p>To generate accurate results, complete your preference profile first.</p>
+              <p>MarketScope scans spots around Panabo in the background for your primary business, using the same engine as a manual scan, and shows the ones with a high chance of success.</p>
+              <p>It also scans other businesses usually run in your preferred setup and shows the two with the best spots.</p>
+              <p>Tell us your primary business and preferred setup to start.</p>
             </div>
 
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
@@ -171,11 +143,6 @@ export default function TrendPreferencesGate({ isOpen, user, missingFields, onSa
               </label>
 
               <label className="text-sm text-[var(--text-main)]">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Startup Capital (PHP)</span>
-                <input type="number" min="0" step="1000" className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.startup_capital} onChange={(e) => updateField('startup_capital', e.target.value)} />
-              </label>
-
-              <label className="text-sm text-[var(--text-main)]">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Preferred Setup</span>
                 <select className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.preferred_setup} onChange={(e) => updateField('preferred_setup', e.target.value)}>
                   <option value="">Select...</option>
@@ -186,16 +153,11 @@ export default function TrendPreferencesGate({ isOpen, user, missingFields, onSa
                   <option value="warehouse">Warehouse</option>
                 </select>
               </label>
-
-              <label className="text-sm text-[var(--text-main)]">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Target Payback (Months)</span>
-                <input type="number" min="1" max="120" className="w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]" value={formValues.target_payback_months} onChange={(e) => updateField('target_payback_months', e.target.value)} />
-              </label>
             </div>
 
-            {effectiveMissingFields.length > 0 && (
+            {missingFields.length > 0 && (
               <p className="mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--trend-neutral-bg)] px-3 py-2 text-xs text-[var(--trend-neutral)]">
-                Missing: {effectiveMissingFields.map((field) => FIELD_LABELS[field] || field).join(', ')}
+                Missing: {missingFields.map((field) => FIELD_LABELS[field] || field).join(', ')}
               </p>
             )}
 

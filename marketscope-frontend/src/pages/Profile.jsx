@@ -9,9 +9,7 @@ const mapProfileToFormValues = (value) => ({
   cellphone_number: value?.cellphone_number || '',
   address: value?.address || '',
   primary_business: value?.primary_business || '',
-  startup_capital: value?.startup_capital ?? '',
   preferred_setup: value?.preferred_setup || '',
-  target_payback_months: value?.target_payback_months ?? '',
   birthday: value?.birthday ? String(value.birthday).slice(0, 10) : '',
   age: value?.age ?? '',
   avatar_url: value?.avatar_url || ''
@@ -127,8 +125,6 @@ export default function Profile({ user, onProfileUpdate }) {
         body: JSON.stringify({
           ...formValues,
           age: formValues.age === '' ? null : Number(formValues.age),
-          startup_capital: formValues.startup_capital === '' ? null : Number(formValues.startup_capital),
-          target_payback_months: formValues.target_payback_months === '' ? null : Number(formValues.target_payback_months),
           birthday: formValues.birthday || null
         })
       });
@@ -377,13 +373,6 @@ export default function Profile({ user, onProfileUpdate }) {
                   <span className="settings-value">{selectedPrimaryBusinessLabel}</span>
                 )}
               </Row>
-              <Row label="Startup Capital (PHP)">
-                {editingSection === 'business' ? (
-                  <input type="number" min="0" step="1000" className={inlineInputClass} value={formValues.startup_capital} onChange={updateField('startup_capital')} />
-                ) : (
-                  <span className="settings-value">{profile?.startup_capital ? `PHP ${Number(profile.startup_capital).toLocaleString()}` : '-'}</span>
-                )}
-              </Row>
               <Row label="Preferred Setup">
                 {editingSection === 'business' ? (
                   <select className={inlineInputClass} value={formValues.preferred_setup} onChange={updateField('preferred_setup')}>
@@ -396,13 +385,6 @@ export default function Profile({ user, onProfileUpdate }) {
                   </select>
                 ) : (
                   <span className="settings-value capitalize">{profile?.preferred_setup || '-'}</span>
-                )}
-              </Row>
-              <Row label="Target Payback (Months)">
-                {editingSection === 'business' ? (
-                  <input type="number" min="1" max="120" className={inlineInputClass} value={formValues.target_payback_months} onChange={updateField('target_payback_months')} />
-                ) : (
-                  <span className="settings-value">{profile?.target_payback_months ? `${profile.target_payback_months} months` : '-'}</span>
                 )}
               </Row>
             </div>

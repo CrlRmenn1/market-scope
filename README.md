@@ -109,11 +109,11 @@ public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cach
 
 The Trends page shows high-chance spots for the user's business, found by scans that run in the background with the same engine as a manual scan (`perform_analysis`).
 
-1. **Which businesses.** `services/trend_scoring.py` picks the user's primary business, plus up to 2 other business types that pass at least 2 of 3 profile checks (capital, setup, payback).
+1. **Which businesses.** `services/trend_preferences.py` uses the user's two trend preferences: the primary business, plus every other business type usually run in the preferred setup (`TYPICAL_SETUP` in `constants/msme.py`).
 2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart over the commercial zone. Business types allowed in the agri-industrial zone get that zone's grid too.
 3. **Scanning.** `services/trend_scan.py` keeps a queue with one worker thread. For each business type it runs `perform_analysis` on every spot (radius 340 m, no history row saved). Each result goes into `trend_scan_results`, and status and progress go into `trend_scan_runs`.
 4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24) is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now".
-5. **What the page shows.** `services/trend_recommendations.py` returns the saved spots scoring at least `MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE` (70), ranked by viability score. "View full report" opens the saved report, so no rescan is needed.
+5. **What the page shows.** `services/trend_recommendations.py` returns the primary business's saved spots scoring at least `MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE` (70), ranked by viability score. Under "Other {setup} businesses" it shows the 2 same-setup businesses whose best spot scored highest. "View full report" opens the saved report, so no rescan is needed.
 
 **Debugging:** `GET /trends/scan-status` lists the newest run of each business type. Backend logs start with `[trend-scan]`. In SQL: `SELECT * FROM trend_scan_runs;`
 
@@ -138,6 +138,7 @@ These were found during the reorganization and left as they are, so behavior sta
 - **Default admin credentials.** If the `MARKETSCOPE_ADMIN_*` variables aren't set, the admin login is `admin@marketscope.local` / `admin123` with a fixed token. Set them on Render.
 - **`MARKETSCOPE_RESET_CODE_DEV_MODE` does nothing.** `routers/auth.py` reads it but only runs `pass`.
 - **Windows console encoding.** The DB startup logs print ✓/✗. If stdout isn't UTF-8 (for example when output is piped to a file), that print fails and the DB connection is reported as failed. Set `PYTHONIOENCODING=utf-8` when redirecting output.
+- **Unused user columns.** `users.startup_capital` and `users.target_payback_months` are no longer read or written (those preferences were removed). Existing databases still have them; drop them with `ALTER TABLE users DROP COLUMN startup_capital, DROP COLUMN target_payback_months;` if wanted.
 - **Unused code.** `HAZARD_ZONES` (`services/hazard.py`) and `get_generic_nearby_pbf_competitors` (`services/osm_data.py`) aren't used anywhere.
 - **Unused root `package.json` / `node_modules`.** The frontend has its own. The ones at the repo root aren't used by anything.
 - **37 ESLint problems** (`npm run lint` in the frontend), mostly unused variables.

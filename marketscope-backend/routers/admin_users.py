@@ -26,9 +26,7 @@ def fetch_user_for_admin(cursor, user_pk_column: str, user_id: int):
             age,
             birthday,
             primary_business,
-            startup_capital,
-            preferred_setup,
-            target_payback_months
+            preferred_setup
         FROM users
         WHERE {user_pk_column} = %s
         """,
@@ -57,9 +55,7 @@ def admin_list_users(x_admin_token: str | None = Header(default=None)):
                 age,
                 birthday,
                 primary_business,
-                startup_capital,
-                preferred_setup,
-                target_payback_months
+                preferred_setup
             FROM users
             ORDER BY created_at DESC, {user_pk_column} DESC
             """
@@ -118,9 +114,7 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 age = %s,
                 birthday = %s,
                 primary_business = %s,
-                startup_capital = %s,
-                preferred_setup = %s,
-                target_payback_months = %s
+                preferred_setup = %s
             WHERE {user_pk_column} = %s
             RETURNING
                 {user_pk_column} AS user_id,
@@ -133,9 +127,7 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 age,
                 birthday,
                 primary_business,
-                startup_capital,
-                preferred_setup,
-                target_payback_months
+                preferred_setup
             """,
             (
                 payload.full_name,
@@ -146,9 +138,7 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 payload.age,
                 payload.birthday,
                 payload.primary_business or None,
-                payload.startup_capital,
                 payload.preferred_setup or None,
-                payload.target_payback_months,
                 user_id
             )
         )

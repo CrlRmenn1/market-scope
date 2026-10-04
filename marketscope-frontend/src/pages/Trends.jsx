@@ -63,20 +63,13 @@ function ScanStatus({ scan, minScore }) {
   );
 }
 
-function FitChecks({ fit }) {
-  if (!fit?.checks?.length) return null;
+// Only shown when the primary business isn't usually run in the preferred setup.
+function SetupNote({ setupMatch }) {
+  if (!setupMatch || setupMatch.matches) return null;
   return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {fit.checks.map((check) => (
-        <span
-          key={check.label}
-          title={check.detail}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${check.passed ? 'border-[var(--trend-up)] text-[var(--trend-up)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}
-        >
-          {check.passed ? '✓' : '✗'} {check.label}
-        </span>
-      ))}
-    </div>
+    <p className="mt-2 rounded-xl bg-[var(--trend-neutral-bg)] px-3 py-2 text-sm text-[var(--text-main)]">
+      {setupMatch.detail}
+    </p>
   );
 }
 
@@ -98,12 +91,13 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
   }, [missingTrendPreferences, user]);
 
   const hasMissingPreferences = activeMissingPreferences.length > 0;
-  const sections = useMemo(() => (Array.isArray(trends?.sections) ? trends.sections : []), [trends]);
   const settings = trends?.settings || {};
   const minScore = settings.high_chance_min_score ?? 70;
-  const primarySection = sections.find((section) => section.role === 'primary') || null;
-  const fitSections = sections.filter((section) => section.role === 'fit');
-  const isScanActive = sections.some((section) => ACTIVE_SCAN_STATES.includes(section.scan?.state));
+  const primarySection = trends?.primary || null;
+  const setupMatches = trends?.setup_matches || null;
+  const setupSections = Array.isArray(setupMatches?.sections) ? setupMatches.sections : [];
+  const setupName = String(setupMatches?.setup || '').replace('-', ' ');
+  const isScanActive = ACTIVE_SCAN_STATES.includes(primarySection?.scan?.state) || Boolean(setupMatches?.is_scanning);
 
   // GET only reads saved scan results (it queues a scan when they are missing or old).
   const loadTrends = useCallback(async ({ silent = false } = {}) => {
@@ -246,10 +240,10 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           </button>
           {showHowItWorks && (
             <ol className="trends-reasons mt-2 list-decimal">
-              <li>From your preferences we pick your primary business, plus up to two others that pass at least 2 of 3 checks (capital, setup, payback).</li>
+              <li>Your primary business is scanned, plus every other business usually run in your preferred setup.</li>
               <li>For each one, the system scans listed spaces for rent or sale, landmark areas and points across the commercial zone in the background, using the same engine as a manual scan ({settings.radius_meters ?? 340} m radius).</li>
               <li>Every result is saved in the database and reused for {settings.fresh_hours ?? 24} hours, so logging in again does not rescan.</li>
-              <li>Spots scoring {minScore} or higher count as high chance and are ranked by their viability score.</li>
+              <li>Spots scoring {minScore} or higher count as high chance and are ranked by their viability score. Of the other businesses, the two with the best-scoring spot are shown.</li>
             </ol>
           )}
         </div>
@@ -276,7 +270,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           </div>
         )}
 
-        {!loading && trends && !primarySection && fitSections.length === 0 && (
+        {!loading && trends && !primarySection && !setupMatches?.total && (
           <div className="history-empty-state">
             <div>
               <p className="history-empty-title">No business type to scan yet</p>
@@ -289,21 +283,30 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           <section className="text-left">
             <p className="eyebrow-label mb-1">Your business</p>
             <h3 className="text-xl font-semibold text-[var(--text-main)]">Best spots for {primarySection.business_name}</h3>
+            <SetupNote setupMatch={primarySection.setup_match} />
             <ScanStatus scan={primarySection.scan} minScore={minScore} />
             {renderSpots(primarySection)}
           </section>
         )}
 
-        {!loading && fitSections.length > 0 && (
+        {!loading && setupMatches && (
           <section className="mt-4 flex flex-col gap-6 text-left">
             <div>
-              <p className="eyebrow-label mb-1">Also fits your profile</p>
-              <p className="text-sm text-[var(--text-muted)]">Other businesses that pass your capital, setup and payback checks.</p>
+              <p className="eyebrow-label mb-1">Also fits your setup</p>
+              <h3 className="text-lg font-semibold text-[var(--text-main)]">Other {setupName} businesses</h3>
+              {setupMatches.total === 0 ? (
+                <p className="mt-1 text-sm text-[var(--text-muted)]">No other business in our list is usually run as a {setupName}.</p>
+              ) : (
+                <p className="mt-1 text-sm tabular-nums text-[var(--text-muted)]">
+                  {setupMatches.is_scanning
+                    ? `Checked ${setupMatches.scanned} of ${setupMatches.total} ${setupName} businesses...`
+                    : `The ${setupSections.length} of ${setupMatches.total} ${setupName} businesses with the best-scoring spots.`}
+                </p>
+              )}
             </div>
-            {fitSections.map((section) => (
+            {setupSections.map((section) => (
               <div key={section.business_key}>
-                <h3 className="text-lg font-semibold text-[var(--text-main)]">{section.business_name}</h3>
-                <FitChecks fit={section.fit} />
+                <h4 className="text-base font-semibold text-[var(--text-main)]">{section.business_name}</h4>
                 <ScanStatus scan={section.scan} minScore={minScore} />
                 {renderSpots({ ...section, spots: (section.spots || []).slice(0, 2) })}
               </div>
@@ -315,7 +318,6 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
       <TrendPreferencesGate
         isOpen={Boolean(hasMissingPreferences && showPreferenceGate)}
         user={user}
-        missingFields={activeMissingPreferences}
         onSaved={(updatedUser) => {
           onPreferencesSaved?.(updatedUser);
           setShowPreferenceGate(false);

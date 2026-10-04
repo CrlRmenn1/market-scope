@@ -14,9 +14,7 @@ class RegisterUser(BaseModel):
     age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
-    startup_capital: int | None = None
     preferred_setup: str | None = None
-    target_payback_months: int | None = None
 
 
 class LoginUser(BaseModel):
@@ -48,9 +46,7 @@ class UpdateUserProfile(BaseModel):
     age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
-    startup_capital: int | None = None
     preferred_setup: str | None = None
-    target_payback_months: int | None = None
 
 
 class AnalysisRequest(BaseModel):
@@ -119,9 +115,7 @@ class AdminUpdateUser(BaseModel):
     age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
-    startup_capital: int | None = None
     preferred_setup: str | None = None
-    target_payback_months: int | None = None
 
 
 class UserSpaceSubmissionRequest(BaseModel):

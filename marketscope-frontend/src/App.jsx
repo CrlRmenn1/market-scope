@@ -114,11 +114,9 @@ export default function App() {
       return;
     }
 
-    const sessionMissing = Array.isArray(session.missing_trend_preferences)
-      ? session.missing_trend_preferences
-      : getMissingTrendPreferenceFields(session);
-
-    setMissingTrendPreferences(sessionMissing);
+    // Computed from the session's own fields, not a cached list, so a session saved
+    // before the required fields changed doesn't keep asking for removed ones.
+    setMissingTrendPreferences(getMissingTrendPreferenceFields(session));
   }, [session]);
 
   // Persist the per-account "seen" flag on the backend and in the cached session.

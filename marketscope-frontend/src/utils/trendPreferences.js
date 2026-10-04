@@ -1,9 +1,7 @@
 // The profile fields a user must fill in before trend recommendations work.
 export const REQUIRED_TREND_FIELDS = [
   'primary_business',
-  'startup_capital',
-  'preferred_setup',
-  'target_payback_months'
+  'preferred_setup'
 ];
 
 export const normalizePreferenceValue = (value) => {

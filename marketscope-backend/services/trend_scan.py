@@ -43,7 +43,7 @@ from services.spaces import (
     resolve_space_context_for_coords,
 )
 from services.trend_candidates import build_scan_candidates
-from services.trend_scoring import pick_trend_business_types
+from services.trend_preferences import get_trend_scan_business_keys
 
 
 PROGRESS_UPDATE_EVERY = 5
@@ -146,11 +146,10 @@ def request_trend_scans(business_keys, trigger_source: str, force: bool = False)
 
 
 def queue_scans_for_user(user_profile, trigger_source: str, force: bool = False):
-    """Queue scans for the business types picked for this user. Never raises,
-    so it is safe to call from login and profile-save routes."""
+    """Queue scans for this user's primary business and same-setup businesses.
+    Never raises, so it is safe to call from login and profile-save routes."""
     try:
-        business_keys = [pick["business_key"] for pick in pick_trend_business_types(user_profile)]
-        return request_trend_scans(business_keys, trigger_source, force=force)
+        return request_trend_scans(get_trend_scan_business_keys(user_profile), trigger_source, force=force)
     except Exception as exc:
         _log(f"could not queue scans ({trigger_source}): {exc}")
         return []

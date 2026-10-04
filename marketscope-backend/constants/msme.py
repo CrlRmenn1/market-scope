@@ -220,6 +220,25 @@ MSME_CATEGORY_PROFILES = {
 }
 
 
+# How each business type is usually set up. Matches the "Preferred Setup" choices
+# in the trend preferences; used to find other businesses that fit the user's setup.
+TYPICAL_SETUP = {
+    "coffee": "storefront",
+    "print": "storefront",
+    "laundry": "storefront",
+    "carwash": "roadside",
+    "kiosk": "kiosk",
+    "water": "storefront",
+    "bakery": "storefront",
+    "pharmacy": "storefront",
+    "barber": "storefront",
+    "moto": "roadside",
+    "internet": "storefront",
+    "meat": "market-stall",
+    "hardware": "warehouse",
+}
+
+
 SME_PROFILE_BY_NAME = {
     str(profile.get("name") or "").strip().lower(): key
     for key, profile in SME_DATABASE.items()

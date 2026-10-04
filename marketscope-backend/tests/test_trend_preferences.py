@@ -1,82 +1,95 @@
 """
-Unit tests for the trend analysis pure functions: profile fit, business-type
-picking, and candidate spot building. No database needed.
+Unit tests for the trend analysis pure functions: which business types get
+scanned, candidate spot building, spot highlights and setup-match ranking.
+No database needed.
 """
 
 import unittest
 
 from constants.geo import INDUSTRIAL_ZONE_BUSINESSES, PANABO_ANCHORS, ZONING_LAYERS
+from constants.msme import SME_DATABASE, TYPICAL_SETUP
 from services.trend_candidates import build_area_grid_points, build_scan_candidates
-from services.trend_scoring import (
-    MIN_FIT_SCORE_FOR_SUGGESTION,
-    evaluate_business_fit,
-    pick_trend_business_types,
+from services.trend_preferences import (
+    describe_setup_match,
+    get_same_setup_business_keys,
+    get_trend_scan_business_keys,
     resolve_primary_business_key,
-    summarize_spot,
 )
+from services.trend_recommendations import rank_setup_matches, summarize_spot
 from utils.geo import check_inside_bounds
 
 
-COFFEE_PROFILE = {
-    "primary_business": "coffee",
-    "startup_capital": 200000,
-    "preferred_setup": "storefront",
-    "target_payback_months": 20,
-}
+PHARMACY_STOREFRONT = {"primary_business": "pharmacy", "preferred_setup": "storefront"}
 
 
-class EvaluateBusinessFitTests(unittest.TestCase):
-    def test_all_checks_pass(self):
-        fit = evaluate_business_fit("coffee", COFFEE_PROFILE)
-        self.assertEqual(fit["checks_passed"], 3)
-        self.assertEqual(fit["fit_score"], 100)
-
-    def test_capital_below_minimum_fails(self):
-        fit = evaluate_business_fit("hardware", {**COFFEE_PROFILE, "startup_capital": 100000})
-        capital = next(check for check in fit["checks"] if check["label"] == "Capital")
-        self.assertFalse(capital["passed"])
-
-    def test_setup_mismatch_fails(self):
-        fit = evaluate_business_fit("carwash", COFFEE_PROFILE)
-        setup = next(check for check in fit["checks"] if check["label"] == "Setup")
-        self.assertFalse(setup["passed"])
-
-    def test_payback_longer_than_target_fails(self):
-        fit = evaluate_business_fit("pharmacy", COFFEE_PROFILE)
-        payback = next(check for check in fit["checks"] if check["label"] == "Payback")
-        self.assertFalse(payback["passed"])
-
-    def test_handles_missing_values(self):
-        fit = evaluate_business_fit("coffee", {})
-        self.assertEqual(fit["fit_score"], 0)
+class TypicalSetupTests(unittest.TestCase):
+    def test_every_business_has_a_setup(self):
+        self.assertEqual(set(TYPICAL_SETUP), set(SME_DATABASE))
 
 
-class PickTrendBusinessTypesTests(unittest.TestCase):
-    def test_primary_business_is_first(self):
-        picks = pick_trend_business_types(COFFEE_PROFILE)
-        self.assertEqual(picks[0], {"business_key": "coffee", "role": "primary"})
+class SameSetupBusinessKeysTests(unittest.TestCase):
+    def test_matches_setup_and_excludes_primary(self):
+        keys = get_same_setup_business_keys(PHARMACY_STOREFRONT, exclude="pharmacy")
+        self.assertNotIn("pharmacy", keys)
+        self.assertTrue(keys)
+        self.assertTrue(all(TYPICAL_SETUP[key] == "storefront" for key in keys))
 
-    def test_at_most_two_extra_and_no_duplicates(self):
-        picks = pick_trend_business_types(COFFEE_PROFILE)
-        keys = [pick["business_key"] for pick in picks]
-        self.assertLessEqual(len(picks), 3)
+    def test_no_setup_means_no_matches(self):
+        self.assertEqual(get_same_setup_business_keys({"primary_business": "coffee"}), [])
+
+    def test_setup_is_case_insensitive(self):
+        keys = get_same_setup_business_keys({"preferred_setup": " Roadside "})
+        self.assertEqual(keys, ["carwash", "moto"])
+
+
+class TrendScanBusinessKeysTests(unittest.TestCase):
+    def test_primary_comes_first_without_duplicates(self):
+        keys = get_trend_scan_business_keys(PHARMACY_STOREFRONT)
+        self.assertEqual(keys[0], "pharmacy")
         self.assertEqual(len(keys), len(set(keys)))
 
-    def test_extras_meet_minimum_fit(self):
-        for pick in pick_trend_business_types(COFFEE_PROFILE)[1:]:
-            fit = evaluate_business_fit(pick["business_key"], COFFEE_PROFILE)
-            self.assertGreaterEqual(fit["fit_score"], MIN_FIT_SCORE_FOR_SUGGESTION)
-            self.assertEqual(pick["role"], "fit")
-
-    def test_order_is_deterministic(self):
-        self.assertEqual(pick_trend_business_types(COFFEE_PROFILE), pick_trend_business_types(COFFEE_PROFILE))
+    def test_primary_outside_setup_is_still_scanned(self):
+        keys = get_trend_scan_business_keys({"primary_business": "pharmacy", "preferred_setup": "kiosk"})
+        self.assertEqual(keys, ["pharmacy", "kiosk"])
 
     def test_display_name_resolves_to_key(self):
         self.assertEqual(resolve_primary_business_key({"primary_business": "Coffee Shops"}), "coffee")
 
     def test_unknown_primary_business_is_skipped(self):
-        picks = pick_trend_business_types({**COFFEE_PROFILE, "primary_business": "spaceships"})
-        self.assertTrue(all(pick["role"] == "fit" for pick in picks))
+        keys = get_trend_scan_business_keys({"primary_business": "spaceships", "preferred_setup": "warehouse"})
+        self.assertEqual(keys, ["hardware"])
+
+
+class DescribeSetupMatchTests(unittest.TestCase):
+    def test_match(self):
+        self.assertTrue(describe_setup_match("pharmacy", PHARMACY_STOREFRONT)["matches"])
+
+    def test_mismatch(self):
+        result = describe_setup_match("pharmacy", {"preferred_setup": "kiosk"})
+        self.assertFalse(result["matches"])
+        self.assertIn("kiosk", result["detail"])
+
+
+class RankSetupMatchesTests(unittest.TestCase):
+    def _section(self, name, best_score=None):
+        spots = [] if best_score is None else [{"viability_score": best_score}]
+        return {"business_name": name, "spots": spots}
+
+    def test_best_spot_score_first_and_limited(self):
+        ranked = rank_setup_matches([
+            self._section("Bakeries", 80),
+            self._section("Coffee Shops", 92),
+            self._section("Laundry Shops", 88),
+        ])
+        self.assertEqual([s["business_name"] for s in ranked], ["Coffee Shops", "Laundry Shops"])
+
+    def test_ties_break_by_name_and_unscanned_are_skipped(self):
+        ranked = rank_setup_matches([
+            self._section("Water Refilling Stations", 90),
+            self._section("Bakeries", 90),
+            self._section("Internet Cafes"),
+        ])
+        self.assertEqual([s["business_name"] for s in ranked], ["Bakeries", "Water Refilling Stations"])
 
 
 class BuildScanCandidatesTests(unittest.TestCase):
