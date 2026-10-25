@@ -14,7 +14,7 @@ SME_DATABASE = {
     "bakery": {"key": "shop", "val": "bakery", "fear": 8, "need": 9, "name": "Bakeries", "osm_tags": [("shop", "bakery"), ("shop", "pastry")]},
     "pharmacy": {"key": "amenity", "val": "pharmacy", "fear": 7, "need": 9, "name": "Small Pharmacies", "osm_tags": [("amenity", "pharmacy"), ("shop", "chemist")]},
     "barber": {"key": "shop", "val": "hairdresser", "fear": 7, "need": 9, "name": "Barbershops/Salons", "osm_tags": [("shop", "hairdresser"), ("shop", "beauty")]},
-    "moto": {"key": "shop", "val": "motorcycle_repair", "fear": 5, "need": 8, "name": "Motorcycle Repair Shops", "osm_tags": [("shop", "motorcycle"), ("shop", "motorcycle_repair"), ("shop", "car_repair")]},
+    "moto": {"key": "shop", "val": "motorcycle_repair", "fear": 5, "need": 8, "name": "Motorcycle Repair/Parts & Accessories", "osm_tags": [("shop", "motorcycle"), ("shop", "motorcycle_repair"), ("shop", "car_repair"), ("shop", "car_parts")]},
     "internet": {"key": "amenity", "val": "internet_cafe", "fear": 6, "need": 6, "name": "Internet Cafes", "osm_tags": [("amenity", "internet_cafe"), ("amenity", "cafe")]},
     "meat": {"key": "shop", "val": "butcher", "fear": 9, "need": 9, "name": "Meat Shops", "osm_tags": [("shop", "butcher"), ("shop", "deli")]},
     "hardware": {"key": "shop", "val": "hardware", "fear": 7, "need": 8, "name": "Hardware/Construction Supplies", "osm_tags": [("shop", "hardware"), ("shop", "doityourself"), ("shop", "trade")]}
@@ -158,8 +158,8 @@ MSME_CATEGORY_PROFILES = {
         "building_radius_scale_m": 360.0,
     },
     "moto": {
-        "display_name": "Motorcycle Repair Shops",
-        "osm_tags": [("shop", "motorcycle"), ("shop", "motorcycle_repair"), ("shop", "car_repair")],
+        "display_name": "Motorcycle Repair/Parts & Accessories",
+        "osm_tags": [("shop", "motorcycle"), ("shop", "motorcycle_repair"), ("shop", "car_repair"), ("shop", "car_parts")],
         "competition_sensitivity": 1.06,
         "competition_weight": 0.40,
         "road_weight": 0.30,
@@ -244,6 +244,8 @@ SME_PROFILE_BY_NAME = {
     for key, profile in SME_DATABASE.items()
     if str(profile.get("name") or "").strip()
 }
+# Older profiles saved a category's previous display name.
+SME_PROFILE_BY_NAME["motorcycle repair shops"] = "moto"
 
 
 PBF_NAME_KEYWORD_FALLBACK = {
@@ -256,7 +258,7 @@ PBF_NAME_KEYWORD_FALLBACK = {
     "bakery": ["bakery", "bakeshop", "bread"],
     "pharmacy": ["pharmacy", "drugstore", "mercury"],
     "barber": ["barber", "salon", "hair"],
-    "moto": ["motor", "motorcycle", "moto", "repair"],
+    "moto": ["motor", "motorcycle", "moto", "repair", "parts"],
     "internet": ["internet", "computer", "cyber"],
     "meat": ["meat", "butcher"],
     "hardware": ["hardware", "construction", "tools"],

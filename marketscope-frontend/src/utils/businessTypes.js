@@ -8,7 +8,7 @@ export const BUSINESS_TYPE_OPTIONS = [
   { value: 'bakery', label: 'Bakeries' },
   { value: 'pharmacy', label: 'Small Pharmacies' },
   { value: 'barber', label: 'Barbershops / Salons' },
-  { value: 'moto', label: 'Motorcycle Repair Shops' },
+  { value: 'moto', label: 'Motorcycle Repair/Parts & Accessories' },
   { value: 'internet', label: 'Internet Cafes' },
   { value: 'meat', label: 'Meat Shops' },
   { value: 'hardware', label: 'Hardware / Construction Supplies' }
