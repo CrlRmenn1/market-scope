@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { motion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { apiUrl } from '../lib/api';
-import { getBusinessTypeLabel } from '../utils/businessTypes';
+import { getBusinessTypeColor, getBusinessTypeLabel } from '../utils/businessTypes';
 import Modal from '../components/common/Modal';
 import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
 import { getHazardStyle, getHazardVar } from '../utils/hazardStyle';
@@ -128,7 +128,7 @@ export default function Report({ data, targetCoords, onClose }) {
       if (competitorLocations.length > 0) {
         const compIcon = L.divIcon({
           className: 'competitor-pin',
-          html: `<div style="width:14px; height:14px; background:#ef4444; border:2px solid white; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
+          html: `<div style="width:14px; height:14px; background:${getBusinessTypeColor(data.business_type)}; border:2px solid white; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
           iconSize: [14, 14], iconAnchor: [7, 7]
         });
 
@@ -787,7 +787,7 @@ export default function Report({ data, targetCoords, onClose }) {
 
           <div className="report-map-legend flex flex-wrap items-center gap-4 border-t border-[var(--border-color)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium text-[var(--text-muted)]">
             <span className="inline-flex items-center gap-2"><span className="legend-dot target"></span> Proposed Site</span>
-            <span className="inline-flex items-center gap-2"><span className="legend-dot competitor"></span> Competitors ({strictCompetitorsFound})</span>
+            <span className="inline-flex items-center gap-2"><span className="legend-dot competitor" style={{ background: getBusinessTypeColor(business_type) }}></span> Competitors ({strictCompetitorsFound})</span>
           </div>
         </div>
 

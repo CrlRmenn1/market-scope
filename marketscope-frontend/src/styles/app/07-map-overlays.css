@@ -551,7 +551,9 @@ html[data-theme="light"] .map-quick-panel {
 }
 
 .competitor-marker-icon-wrapper { background: transparent; border: none; }
+/* --competitor-color is set per business type (utils/businessTypes.js). */
 .competitor-marker {
+  --competitor-color: #ef4444;
   position: relative;
   width: 30px;
   height: 30px;
@@ -563,7 +565,7 @@ html[data-theme="light"] .map-quick-panel {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: rgba(239, 68, 68, 0.18);
+  background: color-mix(in srgb, var(--competitor-color) 18%, transparent);
   animation: ping 1.55s infinite;
 }
 .competitor-marker__core {
@@ -571,7 +573,7 @@ html[data-theme="light"] .map-quick-panel {
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  background: linear-gradient(135deg, var(--competitor-color), color-mix(in srgb, var(--competitor-color) 70%, black));
   color: #fff;
   display: flex;
   align-items: center;
@@ -579,9 +581,13 @@ html[data-theme="light"] .map-quick-panel {
   font-size: 0.72rem;
   font-weight: 800;
   border: 2px solid rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8px 18px rgba(127, 29, 29, 0.35);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--competitor-color) 35%, transparent);
 }
-.legend-color.competitor-preview { background: #ef4444; border: 2px solid #7f1d1d; }
+.legend-color.competitor-preview {
+  --competitor-color: #ef4444;
+  background: var(--competitor-color);
+  border: 2px solid color-mix(in srgb, var(--competitor-color) 50%, black);
+}
 
 @media (max-width: 640px) {
   .map-legend {

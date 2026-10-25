@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { apiUrl } from '../lib/api';
-import { BUSINESS_TYPE_OPTIONS } from '../utils/businessTypes';
+import { BUSINESS_TYPE_OPTIONS, getBusinessTypeColor } from '../utils/businessTypes';
 import AnalysisLoader from '../components/common/AnalysisLoader';
 import Modal from '../components/common/Modal';
 import TourSpotlight from '../components/common/TourSpotlight';
@@ -147,13 +147,13 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     return 'Price not set';
   };
 
-  const createCompetitorIcon = (name) => {
+  const createCompetitorIcon = (name, color) => {
     const initials = String(name || 'C').trim().slice(0, 1).toUpperCase();
 
     return L.divIcon({
       className: 'competitor-marker-icon-wrapper',
       html: `
-        <div class="competitor-marker">
+        <div class="competitor-marker" style="--competitor-color: ${color}">
           <span class="competitor-marker__pulse"></span>
           <span class="competitor-marker__core">${initials}</span>
         </div>
@@ -730,13 +730,14 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     if (!mapInstance.current || !competitorLayerGroup.current) return;
 
     competitorLayerGroup.current.clearLayers();
+    const competitorColor = getBusinessTypeColor(previewBusinessType);
 
     competitorLocations.forEach((item) => {
       const lat = Number(item?.lat);
       const lng = Number(item?.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-      const marker = L.marker([lat, lng], { icon: createCompetitorIcon(item?.name), pane: 'previewPane' }).addTo(competitorLayerGroup.current);
+      const marker = L.marker([lat, lng], { icon: createCompetitorIcon(item?.name, competitorColor), pane: 'previewPane' }).addTo(competitorLayerGroup.current);
       marker.bindTooltip(item?.name || 'Competitor', {
         className: 'competitor-name-tooltip',
         direction: 'top',
@@ -744,7 +745,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
         opacity: 1
       });
     });
-  }, [competitorLocations]);
+  }, [competitorLocations, previewBusinessType]);
 
   useEffect(() => {
     if (!locationUpdated) return;
@@ -1186,7 +1187,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
               </div>
               {selectedCoord && competitorLocations.length > 0 && (
                 <div className="legend-item">
-                  <span className="legend-color competitor-preview"></span>
+                  <span className="legend-color competitor-preview" style={{ '--competitor-color': getBusinessTypeColor(previewBusinessType) }}></span>
                   <span className="legend-text">Preview Competitors</span>
                 </div>
               )}

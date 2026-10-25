@@ -55,7 +55,11 @@
 }
 
 /* ---- Data tables (desktop) ---- */
+/* Sticky so the header stays put when the table scrolls inside its card. */
 .admin-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: 10px 20px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-app);

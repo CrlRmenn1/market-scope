@@ -150,9 +150,9 @@ export function SegmentedTabs({ tabs, value, onChange, ariaLabel }) {
 }
 
 // Plain data table for the desktop layout; pages render cards on mobile instead.
-export function DataTable({ columns, rows, rowKey, isRowHighlighted, caption }) {
+export function DataTable({ columns, rows, rowKey, isRowHighlighted, caption, className = '' }) {
   return (
-    <div className="admin-table-wrap overflow-x-auto">
+    <div className={`admin-table-wrap overflow-x-auto ${className}`}>
       <table className="admin-table w-full text-left text-sm">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>

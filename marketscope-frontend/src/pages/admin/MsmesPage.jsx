@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BuildingStorefrontIcon, PlusIcon } from '@heroicons/react/24/outline';
-import { BUSINESS_TYPE_OPTIONS, getBusinessTypeLabel } from '../../utils/businessTypes';
+import { BUSINESS_TYPE_OPTIONS, getBusinessTypeColor, getBusinessTypeLabel } from '../../utils/businessTypes';
 import CoordinateFields from '../../components/admin/ui/CoordinateFields';
 import {
   Card,
@@ -24,6 +24,14 @@ const SORTERS = {
 };
 
 const formatCoords = (item) => `${Number(item.latitude).toFixed(5)}, ${Number(item.longitude).toFixed(5)}`;
+
+// Same color as the category's competitor pins on the map.
+const TypeLabel = ({ item }) => (
+  <span className="inline-flex items-center gap-2">
+    <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: getBusinessTypeColor(item.business_type) }} aria-hidden="true" />
+    {item.typeLabel}
+  </span>
+);
 
 // Custom MSMEs: businesses the admin adds by hand. Every scan counts them as
 // competitors for their business type, next to the OpenStreetMap data.
@@ -128,7 +136,7 @@ export default function MsmesPage({ api, notify, isDesktop }) {
   };
 
   const formCard = (
-    <div ref={formRef} className={isDesktop ? 'sticky top-0' : ''}>
+    <div ref={formRef} className={isDesktop ? 'max-h-full overflow-y-auto' : ''}>
       <Card>
         <CardHeader
           title={editingId ? 'Edit MSME' : 'Add an MSME'}
@@ -175,8 +183,9 @@ export default function MsmesPage({ api, notify, isDesktop }) {
   );
 
   const listCard = (
-    <Card className="min-w-0">
-      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border-color)] px-5 py-4">
+    // On desktop the card fills the remaining height and only the table scrolls.
+    <Card className={isDesktop ? 'flex max-h-full min-w-0 flex-col overflow-hidden' : 'min-w-0'}>
+      <div className="flex flex-none flex-wrap items-center gap-3 border-b border-[var(--border-color)] px-5 py-4">
         <SearchField value={search} onChange={setSearch} placeholder="Search by name or business type" label="Search MSMEs" />
         <select className={`${inputClass} w-auto`} value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort MSMEs">
           <option value="type-asc">Business type (A-Z)</option>
@@ -202,9 +211,10 @@ export default function MsmesPage({ api, notify, isDesktop }) {
           rows={rows}
           rowKey={(item) => item.id}
           isRowHighlighted={(item) => item.id === editingId}
+          className="min-h-0 flex-1 overflow-y-auto"
           columns={[
             { key: 'name', header: 'Name', render: (item) => <span className="font-medium text-[var(--text-main)]">{item.name}</span> },
-            { key: 'type', header: 'Business type', render: (item) => item.typeLabel },
+            { key: 'type', header: 'Business type', render: (item) => <TypeLabel item={item} /> },
             { key: 'coords', header: 'Coordinates', className: 'tabular-nums', render: formatCoords },
             { key: 'actions', header: <span className="sr-only">Actions</span>, className: 'text-right', render: rowActions }
           ]}
@@ -214,7 +224,7 @@ export default function MsmesPage({ api, notify, isDesktop }) {
           {rows.map((item) => (
             <li key={item.id} className={`px-4 py-4 ${item.id === editingId ? 'bg-[var(--accent-hover)]' : ''}`}>
               <p className="font-medium text-[var(--text-main)]">{item.name}</p>
-              <p className="mt-0.5 text-sm text-[var(--text-muted)]">{item.typeLabel}</p>
+              <p className="mt-0.5 text-sm text-[var(--text-muted)]"><TypeLabel item={item} /></p>
               <p className="mt-0.5 text-sm tabular-nums text-[var(--text-muted)]">{formatCoords(item)}</p>
               <div className="mt-2">{rowActions(item, 'start')}</div>
             </li>
@@ -224,28 +234,39 @@ export default function MsmesPage({ api, notify, isDesktop }) {
     </Card>
   );
 
-  return (
-    <>
-      <PageHeader
-        title="MSMEs"
-        description="Businesses added here count as competitors in every scan, alongside OpenStreetMap data."
-        actions={!isDesktop && !showMobileForm && (
-          <button type="button" className={buttonClass.primary} onClick={() => setShowMobileForm(true)}>
-            <PlusIcon className="h-4 w-4" aria-hidden="true" /> Add MSME
-          </button>
-        )}
-      />
-      {isDesktop ? (
-        <div className="grid grid-cols-[minmax(320px,380px)_minmax(0,1fr)] items-start gap-6">
+  const header = (
+    <PageHeader
+      title="MSMEs"
+      description="Businesses added here count as competitors in every scan, alongside OpenStreetMap data."
+      actions={!isDesktop && !showMobileForm && (
+        <button type="button" className={buttonClass.primary} onClick={() => setShowMobileForm(true)}>
+          <PlusIcon className="h-4 w-4" aria-hidden="true" /> Add MSME
+        </button>
+      )}
+    />
+  );
+
+  if (isDesktop) {
+    // Fill the admin main area exactly (100svh minus its py-8 padding) so the
+    // page itself never scrolls; the MSME table scrolls inside its card.
+    return (
+      <div className="flex h-[calc(100svh-4rem)] flex-col">
+        {header}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,380px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] items-start gap-6">
           {formCard}
           {listCard}
         </div>
-      ) : (
-        <div className="space-y-4">
-          {showMobileForm && formCard}
-          {listCard}
-        </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {header}
+      <div className="space-y-4">
+        {showMobileForm && formCard}
+        {listCard}
+      </div>
     </>
   );
 }
