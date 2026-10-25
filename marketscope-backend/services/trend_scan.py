@@ -4,7 +4,8 @@ How it works
   1. Someone asks for scans (login, profile save, opening Trends, "Rescan now")
      via request_trend_scans(["coffee", ...]).
   2. Cache check: a business type that already has a finished run younger than
-     TREND_SCAN_FRESH_HOURS is skipped. That run's saved results are reused.
+     TREND_SCAN_FRESH_HOURS (and newer than the last hazard/zoning layer change)
+     is skipped. That run's saved results are reused.
   3. Otherwise the business type goes on a queue. One worker thread takes it,
      builds the candidate spots (services/trend_candidates.py) and calls
      perform_analysis() on each one: the same function behind POST /analyze.
@@ -37,6 +38,7 @@ from db.trend_queries import (
 from models.requests import AnalysisRequest
 from services.analysis import perform_analysis
 from services.hazard import preload_hazard_layer_cache
+from services.map_layers import get_map_layers_changed_at
 from services.osm_data import preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
 from services.spaces import (
     fetch_active_space_markers_for_analysis,
@@ -44,6 +46,7 @@ from services.spaces import (
 )
 from services.trend_candidates import build_scan_candidates
 from services.trend_preferences import get_trend_scan_business_keys
+from services.zoning import preload_zoning_layer_cache
 
 
 PROGRESS_UPDATE_EVERY = 5
@@ -61,7 +64,12 @@ def _log(message: str):
 
 
 def is_run_fresh(run) -> bool:
-    return bool(run) and int(run.get("age_seconds") or 0) <= TREND_SCAN_FRESH_HOURS * 3600
+    """Younger than TREND_SCAN_FRESH_HOURS, and started after the last hazard/zoning layer change."""
+    if not run or int(run.get("age_seconds") or 0) > TREND_SCAN_FRESH_HOURS * 3600:
+        return False
+    layers_changed_at = get_map_layers_changed_at()
+    started_at = run.get("started_at")
+    return not (layers_changed_at and started_at and started_at < layers_changed_at)
 
 
 # ---- worker lifecycle -------------------------------------------------------
@@ -181,6 +189,7 @@ def _ensure_geo_data_loaded():
     manual scan. Each loader returns at once when already loaded, and waits
     when the startup preload thread is still loading it."""
     preload_hazard_layer_cache()
+    preload_zoning_layer_cache()
     preload_pbf_competitor_cache()
     preload_pbf_spatial_context_cache()
 

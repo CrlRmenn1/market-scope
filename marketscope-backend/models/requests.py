@@ -164,3 +164,16 @@ class ReportRequest(BaseModel):
     business_type: str | None = None
     use_llm: bool = True
     gemini_model: str = "gemini-1.5-pro"
+
+class AdminMapLayerCreateRequest(BaseModel):
+    category: str
+    name: str
+    source_note: str | None = None
+    geojson: dict
+    activate: bool = False
+
+
+class AdminMapLayerUpdateRequest(BaseModel):
+    name: str
+    source_note: str | None = None
+    geojson: dict

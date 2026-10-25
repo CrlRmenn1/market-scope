@@ -23,6 +23,7 @@ from routers import (
     analysis,
     auth,
     health,
+    map_layers,
     msmes,
     reports,
     spaces,
@@ -32,12 +33,14 @@ from routers import (
 )
 from services.ahp_weights import _load_ahp_weights_cache
 from services.hazard import preload_hazard_layer_cache
+from services.map_layers import seed_builtin_map_layers
 from services.osm_data import preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
 from services.trend_scan import (
     mark_interrupted_trend_runs,
     start_trend_scan_worker,
     stop_trend_scan_worker,
 )
+from services.zoning import preload_zoning_layer_cache
 
 
 @asynccontextmanager
@@ -47,6 +50,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[DB Schema] Error creating tables: {e}", flush=True)
         # Continue startup even if table creation fails
+
+    # First startup only: copy the old flood file and zoning boxes into map_layers.
+    # Runs before the cache preloads so they never load an empty layer by mistake.
+    seed_builtin_map_layers()
     
     # Create asyncpg pool with retry logic
     app.state.db_pool = await connect_with_retry()
@@ -62,6 +69,7 @@ async def lifespan(app: FastAPI):
     # (road/building spatial context), so this is safe.
     def _preload_geo_caches():
         preload_hazard_layer_cache()
+        preload_zoning_layer_cache()
         preload_pbf_competitor_cache()
         preload_pbf_spatial_context_cache()
 
@@ -104,6 +112,7 @@ app.include_router(msmes.router)
 app.include_router(verified_features.router)
 app.include_router(analysis.router)
 app.include_router(trends.router)
+app.include_router(map_layers.router)
 
 
 if __name__ == "__main__":

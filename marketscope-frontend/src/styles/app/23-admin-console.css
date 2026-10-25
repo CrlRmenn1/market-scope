@@ -166,3 +166,24 @@
   .admin-tabbar-item,
   .admin-table tbody tr { transition: none; }
 }
+
+/* Map Layer Studio: handles for lining up a traced reference image */
+.trace-handle {
+  border-radius: 999px;
+  background: var(--bg-sheet);
+  border: 3px solid var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  cursor: nwse-resize;
+}
+
+.trace-handle--move {
+  cursor: move;
+  background:
+    linear-gradient(var(--accent), var(--accent)) center / 12px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) center / 2px 12px no-repeat,
+    var(--bg-sheet);
+}
+
+.map-layer-studio-map {
+  background: var(--bg-app);
+}

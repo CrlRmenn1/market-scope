@@ -10,7 +10,9 @@ import AnalysisLoader from '../components/common/AnalysisLoader';
 import Modal from '../components/common/Modal';
 import TourSpotlight from '../components/common/TourSpotlight';
 import { EASE_STANDARD } from '../constants/motion';
-import { getHazardStyle } from '../utils/hazardStyle';
+import { getHazardStyle, getHazardVar } from '../utils/hazardStyle';
+import { getZoneStyle, getZoningClass, ZONING_CLASSES } from '../utils/zoneStyle';
+import { fetchActiveMapLayer, PANABO_BOUNDS } from '../utils/mapLayers';
 
 // Fix for Vite + Leaflet image bug
 delete L.Icon.Default.prototype._getIconUrl;
@@ -20,12 +22,12 @@ L.Icon.Default.mergeOptions({
   shadowUrl: ''
 });
 
-const PANABO_BOUNDS = {
-  south: 7.269,
-  north: 7.333,
-  west: 125.636,
-  east: 125.742
-};
+// Map view modes and the overlay layer each one shows.
+const MAP_VIEW_MODES = [
+  { id: 'normal', label: 'Normal Map' },
+  { id: 'flood', label: 'Flood Zones' },
+  { id: 'zoning', label: 'Zoning' }
+];
 
 // Matches the app's --ease-standard CSS token, for JS-driven Framer Motion
 // transitions to feel consistent with the rest of the UI's motion.
@@ -41,6 +43,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
   const mapInstance = useRef(null);
   const hazardLayerGroup = useRef(null);
   const hazardGeoJsonLayerRef = useRef(null);
+  const zoningGeoJsonLayerRef = useRef(null);
   const spaceMarkerLayerGroup = useRef(null);
   const spaceHoverTimers = useRef(new Map());
   const selectedMarkerRef = useRef(null);
@@ -225,6 +228,9 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
 
   useEffect(() => {
     let handleSpaceMarkersUpdated = null;
+    // Set on cleanup, so a layer fetch that resolves after an unmount/remount
+    // (React StrictMode mounts twice in dev) can't add an orphaned copy to the new map.
+    let disposed = false;
 
     if (!mapInstance.current) {
       mapInstance.current = L.map(mapRef.current, {
@@ -363,25 +369,16 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       loadSpaceMarkers();
       window.addEventListener('marketscope-space-markers-updated', handleSpaceMarkersUpdated);
 
-      fetch('/panabo_hazard_5yr.geojson')
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error('Unable to load hazard zone layer');
-          }
-          return response.json();
-        })
+      fetchActiveMapLayer('hazard')
         .then((geojson) => {
-          if (!mapInstance.current || !hazardLayerGroup.current) return;
+          if (disposed || !mapInstance.current || !hazardLayerGroup.current || !geojson) return;
 
           const layer = L.geoJSON(geojson, {
-            style: (feature) => {
-              const hazardVar = Number(feature?.properties?.Var);
-              return getHazardStyle(hazardVar);
-            },
+            style: (feature) => getHazardStyle(getHazardVar(feature)),
             onEachFeature: (feature, layerInstance) => {
-              const hazardVar = Number(feature?.properties?.Var);
-              const zoneName = hazardNameByVar[hazardVar] || 'Flood Hazard Zone';
-              layerInstance.bindTooltip(zoneName, {
+              const zoneName = hazardNameByVar[getHazardVar(feature)] || 'Flood Hazard Zone';
+              const label = feature?.properties?.label;
+              layerInstance.bindTooltip(label ? `${zoneName}: ${label}` : zoneName, {
                 className: 'hazard-zone-tooltip'
               });
             }
@@ -391,6 +388,29 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
           setPreviewError('');
           setPreviewMessage(previewBusinessType ? 'Adjust the radius or choose another MSME to preview competitors.' : 'Choose an MSME and radius to preview competitors.');
           if (mapViewModeRef.current === 'flood') {
+            layer.addTo(hazardLayerGroup.current);
+          }
+        })
+        .catch((error) => {
+          console.error(error);
+        });
+
+      fetchActiveMapLayer('zoning')
+        .then((geojson) => {
+          if (disposed || !mapInstance.current || !hazardLayerGroup.current || !geojson) return;
+
+          const layer = L.geoJSON(geojson, {
+            style: (feature) => getZoneStyle(feature?.properties?.zone_class),
+            onEachFeature: (feature, layerInstance) => {
+              const zoneName = `${getZoningClass(feature?.properties?.zone_class).label} Zone`;
+              const label = feature?.properties?.label;
+              layerInstance.bindTooltip(label ? `${zoneName}: ${label}` : zoneName, {
+                className: 'hazard-zone-tooltip'
+              });
+            }
+          });
+          zoningGeoJsonLayerRef.current = layer;
+          if (mapViewModeRef.current === 'zoning') {
             layer.addTo(hazardLayerGroup.current);
           }
         })
@@ -422,6 +442,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     }
 
     return () => {
+      disposed = true;
       if (selectedMarkerRef.current) {
         selectedMarkerRef.current.remove();
         selectedMarkerRef.current = null;
@@ -447,6 +468,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
 
       hazardLayerGroup.current = null;
       hazardGeoJsonLayerRef.current = null;
+      zoningGeoJsonLayerRef.current = null;
       if (handleSpaceMarkersUpdated) {
         window.removeEventListener('marketscope-space-markers-updated', handleSpaceMarkersUpdated);
       }
@@ -474,16 +496,20 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
   useEffect(() => {
     mapViewModeRef.current = mapViewMode;
 
-    if (!mapInstance.current || !hazardLayerGroup.current || !hazardGeoJsonLayerRef.current) return;
+    if (!mapInstance.current || !hazardLayerGroup.current) return;
 
-    const layer = hazardGeoJsonLayerRef.current;
-    const onMap = mapInstance.current.hasLayer(layer);
-
-    if (mapViewMode === 'flood' && !onMap) {
-      layer.addTo(hazardLayerGroup.current);
-    } else if (mapViewMode !== 'flood' && onMap) {
-      hazardLayerGroup.current.removeLayer(layer);
-    }
+    [
+      ['flood', hazardGeoJsonLayerRef.current],
+      ['zoning', zoningGeoJsonLayerRef.current]
+    ].forEach(([mode, layer]) => {
+      if (!layer) return;
+      const onMap = mapInstance.current.hasLayer(layer);
+      if (mapViewMode === mode && !onMap) {
+        layer.addTo(hazardLayerGroup.current);
+      } else if (mapViewMode !== mode && onMap) {
+        hazardLayerGroup.current.removeLayer(layer);
+      }
+    });
   }, [mapViewMode]);
 
   useEffect(() => {
@@ -1109,7 +1135,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       {legendOpen ? (
         <div className="map-legend">
           <div className="map-legend__head">
-            <h4 className="legend-title">{mapViewMode === 'flood' ? 'Flood Zones' : 'Map Legend'}</h4>
+            <h4 className="legend-title">{mapViewMode === 'flood' ? 'Flood Zones' : mapViewMode === 'zoning' ? 'Zoning' : 'Map Legend'}</h4>
             <button type="button" className="map-legend__close" onClick={() => setLegendOpen(false)} aria-label="Collapse legend">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6 6 18" /><path d="m6 6 12 12" />
@@ -1130,6 +1156,15 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                 <span className="legend-color flood-moderate"></span>
                 <span className="legend-text">Moderate Flood Danger</span>
               </div>
+            </>
+          ) : mapViewMode === 'zoning' ? (
+            <>
+              {ZONING_CLASSES.map((zone) => (
+                <div key={zone.id} className="legend-item">
+                  <span className="legend-color" style={{ background: zone.fill, border: `2px solid ${zone.color}` }}></span>
+                  <span className="legend-text">{zone.label}</span>
+                </div>
+              ))}
             </>
           ) : (
             <>
@@ -1168,20 +1203,16 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       )}
 
       <div className="map-mode-toggle" role="tablist" aria-label="Map view mode">
-        <button
-          type="button"
-          className={`map-mode-btn ${mapViewMode === 'normal' ? 'active' : ''}`}
-          onClick={() => setMapViewMode('normal')}
-        >
-          Normal Map
-        </button>
-        <button
-          type="button"
-          className={`map-mode-btn ${mapViewMode === 'flood' ? 'active' : ''}`}
-          onClick={() => setMapViewMode('flood')}
-        >
-          Flood Zones
-        </button>
+        {MAP_VIEW_MODES.map((mode) => (
+          <button
+            key={mode.id}
+            type="button"
+            className={`map-mode-btn ${mapViewMode === mode.id ? 'active' : ''}`}
+            onClick={() => setMapViewMode(mode.id)}
+          >
+            {mode.label}
+          </button>
+        ))}
       </div>
 
     </div>

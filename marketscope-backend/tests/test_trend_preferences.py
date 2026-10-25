@@ -7,8 +7,10 @@ No database needed.
 import unittest
 
 from constants.geo import INDUSTRIAL_ZONE_BUSINESSES, PANABO_ANCHORS, ZONING_LAYERS
+from constants.map_layers import builtin_zoning_feature_collection
 from constants.msme import SME_DATABASE, TYPICAL_SETUP
 from services.trend_candidates import build_area_grid_points, build_scan_candidates
+from services.zoning import features_to_zoning_cache
 from services.trend_preferences import (
     describe_setup_match,
     get_same_setup_business_keys,
@@ -17,9 +19,17 @@ from services.trend_preferences import (
 )
 from services.trend_recommendations import rank_setup_matches, summarize_spot
 from utils.geo import check_inside_bounds
+from utils.geo_libs import Point
 
 
 PHARMACY_STOREFRONT = {"primary_business": "pharmacy", "preferred_setup": "storefront"}
+
+# The built-in zoning layer (the old ZONING_LAYERS boxes), so no database is needed.
+BUILTIN_ZONING = features_to_zoning_cache(builtin_zoning_feature_collection()["features"])
+
+
+def candidates_for(business_key, markers=()):
+    return build_scan_candidates(business_key, list(markers), zoning_features=BUILTIN_ZONING)
 
 
 class TypicalSetupTests(unittest.TestCase):
@@ -95,12 +105,12 @@ class RankSetupMatchesTests(unittest.TestCase):
 class BuildScanCandidatesTests(unittest.TestCase):
     def test_listed_spaces_come_first(self):
         markers = [{"id": "admin-1", "title": "Corner lot", "latitude": 7.3101, "longitude": 125.6801}]
-        candidates = build_scan_candidates("coffee", markers)
+        candidates = candidates_for("coffee", markers)
         self.assertEqual(candidates[0]["source"], "space")
         self.assertEqual(candidates[0]["space_id"], "admin-1")
 
     def test_includes_every_anchor(self):
-        candidates = build_scan_candidates("coffee", [])
+        candidates = candidates_for("coffee")
         landmarks = [c for c in candidates if c["source"] == "landmark"]
         self.assertEqual(len(landmarks), len(PANABO_ANCHORS))
 
@@ -109,7 +119,7 @@ class BuildScanCandidatesTests(unittest.TestCase):
             zones = [ZONING_LAYERS["commercial_proper"]]
             if business_key in INDUSTRIAL_ZONE_BUSINESSES:
                 zones.append(ZONING_LAYERS["industrial_anflo"])
-            for candidate in build_scan_candidates(business_key, []):
+            for candidate in candidates_for(business_key):
                 if candidate["source"] != "area":
                     continue
                 self.assertTrue(
@@ -118,14 +128,14 @@ class BuildScanCandidatesTests(unittest.TestCase):
                 )
 
     def test_industrial_zone_only_for_industrial_businesses(self):
-        coffee_areas = [c for c in build_scan_candidates("coffee", []) if c["source"] == "area"]
-        carwash_areas = [c for c in build_scan_candidates("carwash", []) if c["source"] == "area"]
+        coffee_areas = [c for c in candidates_for("coffee") if c["source"] == "area"]
+        carwash_areas = [c for c in candidates_for("carwash") if c["source"] == "area"]
         self.assertGreater(len(carwash_areas), len(coffee_areas))
 
     def test_duplicate_spots_are_dropped(self):
         anchor = PANABO_ANCHORS[0]
         markers = [{"id": "user-9", "title": "Stall", "latitude": anchor["lat"], "longitude": anchor["lon"]}]
-        candidates = build_scan_candidates("coffee", markers)
+        candidates = candidates_for("coffee", markers)
         at_anchor = [
             c for c in candidates
             if (round(c["lat"], 4), round(c["lon"], 4)) == (round(anchor["lat"], 4), round(anchor["lon"], 4))
@@ -134,13 +144,28 @@ class BuildScanCandidatesTests(unittest.TestCase):
         self.assertEqual(at_anchor[0]["source"], "space")
 
     def test_markers_without_coordinates_are_skipped(self):
-        candidates = build_scan_candidates("coffee", [{"id": "user-2", "title": "No coords"}])
+        candidates = candidates_for("coffee", [{"id": "user-2", "title": "No coords"}])
         self.assertFalse(any(c["source"] == "space" for c in candidates))
 
     def test_grid_covers_zone_corners(self):
         min_lat, _, min_lon, _ = ZONING_LAYERS["commercial_proper"]
-        points = build_area_grid_points("commercial_proper")
+        commercial = next(f for f in BUILTIN_ZONING if f["zone_class"] == "commercial")
+        points = build_area_grid_points(commercial)
         self.assertIn((round(min_lat, 6), round(min_lon, 6)), {(p["lat"], p["lon"]) for p in points})
+        self.assertEqual(points[0]["label"], "Commercial center spot 1")
+
+    def test_grid_skips_points_outside_a_polygon(self):
+        triangle = features_to_zoning_cache([{
+            "type": "Feature",
+            "properties": {"zone_class": "commercial"},
+            "geometry": {"type": "Polygon", "coordinates": [[
+                [125.67, 7.30], [125.69, 7.30], [125.67, 7.315], [125.67, 7.30],
+            ]]},
+        }])[0]
+        points = build_area_grid_points(triangle)
+        self.assertTrue(points)
+        self.assertTrue(all(triangle["geometry"].covers(Point(p["lon"], p["lat"])) for p in points))
+        self.assertNotIn((7.315, 125.69), {(p["lat"], p["lon"]) for p in points})
 
 
 class SummarizeSpotTests(unittest.TestCase):

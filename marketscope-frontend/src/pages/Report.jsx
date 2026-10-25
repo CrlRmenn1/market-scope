@@ -7,7 +7,8 @@ import { apiUrl } from '../lib/api';
 import { getBusinessTypeLabel } from '../utils/businessTypes';
 import Modal from '../components/common/Modal';
 import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
-import { getHazardStyle } from '../utils/hazardStyle';
+import { getHazardStyle, getHazardVar } from '../utils/hazardStyle';
+import { fetchActiveMapLayer } from '../utils/mapLayers';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -152,24 +153,14 @@ export default function Report({ data, targetCoords, onClose }) {
         });
       }
 
-      fetch('/panabo_hazard_5yr.geojson')
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error('Unable to load hazard zone layer');
-          }
-          return response.json();
-        })
+      fetchActiveMapLayer('hazard')
         .then((geojson) => {
-          if (!mapInstance.current || !mapFeaturesRef.current) return;
+          if (!mapInstance.current || !mapFeaturesRef.current || !geojson) return;
 
           const hazardLayer = L.geoJSON(geojson, {
-            style: (feature) => {
-              const hazardVar = Number(feature?.properties?.Var);
-              return getHazardStyle(hazardVar);
-            },
+            style: (feature) => getHazardStyle(getHazardVar(feature)),
             onEachFeature: (feature, layerInstance) => {
-              const hazardVar = Number(feature?.properties?.Var);
-              const zoneName = hazardNameByVar[hazardVar] || 'Flood Hazard Zone';
+              const zoneName = hazardNameByVar[getHazardVar(feature)] || 'Flood Hazard Zone';
               layerInstance.bindTooltip(zoneName, {
                 className: 'hazard-zone-tooltip'
               });

@@ -61,6 +61,7 @@ tests/             Unit tests
 | `routers/admin_users.py` | `/admin/users` |
 | `routers/msmes.py` | `/admin/custom-msmes` |
 | `routers/verified_features.py` | `/admin/verified-local-features` |
+| `routers/map_layers.py` | `/admin/map-layers/*` (hazard/zoning layer CRUD, import, activate) and the public `GET /map-layers/active` |
 
 ### Frontend: `marketscope-frontend/src/`
 
@@ -74,15 +75,16 @@ components/
   common/          Modal, AnalysisLoader, TourSpotlight (shared UI pieces)
   map/             MapPicker
   admin/           AdminLayout (desktop sidebar / mobile tab bar), adminNav, ui/ (shared admin pieces,
-                   useAdminApi), FloodZoneManager + ZoningEditor (Map Layers), ZoningManager (unused)
+                   useAdminApi), MapLayerStudio + imageTraceOverlay (Map Layers)
   onboarding/      OnboardingModal, TrendPreferencesGate
   trends/          TrendSpotCard (one scanned spot on the Trends page)
   spaces/          SpaceSubmissionModal
 lib/api.js         Backend URL: VITE_API_BASE_URL, else localhost:8000 locally, else the Render URL
 constants/         layoutIds.js, motion.js (shared animation easing)
-utils/             businessTypes, coordinates, mapTheme, hazardStyle, scoreTone, trendPreferences, useIsDesktop
+utils/             businessTypes, coordinates, mapTheme, hazardStyle, zoneStyle, mapLayers, scoreTone,
+                   trendPreferences, useIsDesktop
 styles/            index.css (Tailwind), auth.css (landing/login), app/ (main app styles, see below)
-public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cache)
+public/            sw.js (map tile cache)
 ```
 
 `styles/app/index.css` imports `01-…` through `22-…` in order. The order matters: later files override earlier ones. They are the original `App.css` cut at its section headings, so each file is named after what it styles: `07-map-overlays.css`, `11-report-dossier.css`, `17-profile-page.css`, and so on.
@@ -94,7 +96,9 @@ public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cach
 | Viability score looks wrong | `services/analysis.py` (`perform_analysis` combines the factors) | `pages/Report.jsx` |
 | Competition / road / anchor / building sub-score | `services/scoring.py` (`_score_*` functions) | |
 | Competitors missing or wrong | `services/osm_data.py` (OSM data), `db/queries.py` (`fetch_custom_msmes`) | |
-| Flood hazard score | `services/hazard.py`, `data/flood/panabo_hazard_5yr.geojson` | `utils/hazardStyle.js`, `public/panabo_hazard_5yr.geojson` |
+| Flood hazard score | `services/hazard.py`, the active hazard layer in `map_layers` | `utils/hazardStyle.js` |
+| Zoning score | `services/zoning.py`, the active zoning layer in `map_layers`, scores in `constants/map_layers.py` | `utils/zoneStyle.js` |
+| Map layers (admin) | `routers/map_layers.py`, `services/map_layers.py`, `db/map_layer_queries.py` | `components/admin/MapLayerStudio.jsx` |
 | AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), seed matrices in `db/schema.py`. There is no admin editor; change weights in the `ahp_weight_configs` table. | |
 | Business categories / profiles | `constants/msme.py` | `utils/businessTypes.js` |
 | Trend analysis | `routers/trends.py`, `services/trend_*.py`, `db/trend_queries.py` (see below) | `pages/Trends.jsx`, `components/trends/TrendSpotCard.jsx` |
@@ -111,36 +115,37 @@ public/            panabo_hazard_5yr.geojson (map overlay), sw.js (map tile cach
 The Trends page shows high-chance spots for the user's business, found by scans that run in the background with the same engine as a manual scan (`perform_analysis`).
 
 1. **Which businesses.** `services/trend_preferences.py` uses the user's two trend preferences: the primary business, plus every other business type usually run in the preferred setup (`TYPICAL_SETUP` in `constants/msme.py`).
-2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart over the commercial zone. Business types allowed in the agri-industrial zone get that zone's grid too.
+2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart inside the active zoning layer's commercial and mixed-use areas. Business types allowed in industrial areas (`INDUSTRIAL_ZONE_BUSINESSES`) get those areas' grid too.
 3. **Scanning.** `services/trend_scan.py` keeps a queue with one worker thread. For each business type it runs `perform_analysis` on every spot (radius 340 m, no history row saved). Each result goes into `trend_scan_results`, and status and progress go into `trend_scan_runs`.
-4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24) is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now".
+4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24), and started after the last change to an active map layer, is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now".
 5. **What the page shows.** `services/trend_recommendations.py` returns the primary business's saved spots scoring at least `MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE` (70), ranked by viability score. Under "Other {setup} businesses" it shows the 2 same-setup businesses whose best spot scored highest. "View full report" opens the saved report, so no rescan is needed.
 
 **Debugging:** `GET /trends/scan-status` lists the newest run of each business type. Backend logs start with `[trend-scan]`. In SQL: `SELECT * FROM trend_scan_runs;`
 
-## Flood hazard data
+## Map layers (flood hazard and zoning)
 
-The backend loads the first file that exists from this list (`services/hazard.py`):
+Flood hazard and zoning areas are stored in the database, in the `map_layers` table (`db/schema.py`). Each layer is a GeoJSON FeatureCollection of polygons, and every polygon has a `zone_class`:
 
-1. `marketscope-backend/data/flood/panabo_hazard_5yr.geojson`
-2. `marketscope-backend/panabo_hazard_5yr.geojson`
-3. `marketscope-frontend/public/panabo_hazard_5yr.geojson`
-4. `marketscope-backend/data/fallback/DavaoDelNorte/DavaoDelNorte_Flood_5year.shp`
-5. `marketscope-backend/data/fallback/Davao_del_Norte.geojson`
+- **Hazard:** `very_high`, `high`, `moderate` (scores 5 / 12 / 18; outside every polygon is Low Risk, 25).
+- **Zoning:** `commercial` 25, `mixed_use` 20, `industrial` 25 for `INDUSTRIAL_ZONE_BUSINESSES` and 5 for others, `residential` 10, `institutional` 5, `agricultural` 5. Outside every polygon scores 0.
 
-Each feature needs a `Var` property: **1 = Very High, 2 = High, 3 = Moderate** flood hazard. The frontend draws its overlay from its own copy in `marketscope-frontend/public/`. When you replace the hazard data, update both copies.
+One layer per type is active, and scans use only the active ones. With no active zoning layer every spot scores 0 for zoning; with no active hazard layer every spot is Low Risk.
+
+**Admin workflow (Admin → Map layers):** draw shapes on the map, trace them over a PDF/PNG/JPG of a printed map (the image stays in the browser and is not saved), or import a GeoJSON, KML or zipped shapefile (the original file is saved in `map_layer_files` and can be downloaded again). On every save the backend keeps only polygons, repairs broken shapes and trims them to the Panabo main area (`PANABO_BOUNDS`). Activating or changing the active layer reloads the scoring caches and marks saved trend scans stale.
+
+**Built-in layers:** on first startup `seed_builtin_map_layers()` (`services/map_layers.py`) copies the old flood file (`data/flood/panabo_hazard_5yr.geojson`, original file kept) and the two `ZONING_LAYERS` boxes into the database as active "Built-in" layers, then sets `map_layers_seeded` in `app_flags` so it never runs again. After that the flood file is only a seed source.
+
+**Debugging:** backend logs start with `[map-layers]`. In SQL: `SELECT id, category, name, origin, is_active FROM map_layers;`
 
 ## Known issues
 
 These were found during the reorganization and left as they are, so behavior stays unchanged:
 
-- **Zoning/flood layer uploads have no backend.** `FloodZoneManager.jsx` and `ZoningManager.jsx` call `/admin/zoning-layers` (list, `/upload`, `/{id}`), but those routes don't exist in the backend, so saving an uploaded layer fails.
-- **`ZoningManager.jsx` is unused.** The old unreachable `clup` admin tab was its only user. The Map Layers page uses `FloodZoneManager`, which has its own CLUP panel.
 - **Pending user spaces count as available.** `fetch_active_space_markers_for_analysis` (`services/spaces.py`) includes `pending` user submissions, so they appear on the map and in trend scans before an admin approves them.
 - **Default admin credentials.** If the `MARKETSCOPE_ADMIN_*` variables aren't set, the admin login is `admin@marketscope.local` / `admin123` with a fixed token. Set them on Render.
 - **`MARKETSCOPE_RESET_CODE_DEV_MODE` does nothing.** `routers/auth.py` reads it but only runs `pass`.
 - **Windows console encoding.** The DB startup logs print ✓/✗. If stdout isn't UTF-8 (for example when output is piped to a file), that print fails and the DB connection is reported as failed. Set `PYTHONIOENCODING=utf-8` when redirecting output.
 - **Unused user columns.** `users.startup_capital` and `users.target_payback_months` are no longer read or written (those preferences were removed). Existing databases still have them; drop them with `ALTER TABLE users DROP COLUMN startup_capital, DROP COLUMN target_payback_months;` if wanted.
-- **Unused code.** `HAZARD_ZONES` (`services/hazard.py`) and `get_generic_nearby_pbf_competitors` (`services/osm_data.py`) aren't used anywhere.
+- **Unused code.** `get_generic_nearby_pbf_competitors` (`services/osm_data.py`) isn't used anywhere.
 - **Unused root `package.json` / `node_modules`.** The frontend has its own. The ones at the repo root aren't used by anything.
 - **30 ESLint problems** (`npm run lint` in the frontend), mostly unused variables.

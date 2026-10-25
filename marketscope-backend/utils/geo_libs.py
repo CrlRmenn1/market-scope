@@ -9,10 +9,14 @@ except Exception:
     gpd = None
 
 try:
-    from shapely.geometry import Point, box
+    from shapely.geometry import Point, box, mapping, shape
     from shapely.ops import nearest_points, unary_union
+    from shapely.validation import make_valid
 except Exception:
     Point = None
     box = None
+    mapping = None
+    shape = None
     nearest_points = None
     unary_union = None
+    make_valid = None

@@ -48,6 +48,7 @@ def create_app_tables(db_config):
             ensure_admin_space_submissions_table(cursor)
             ensure_password_reset_codes_table(cursor, user_pk_column)
             ensure_trend_scan_tables(cursor)
+            ensure_map_layers_tables(cursor)
             ensure_ahp_weight_configs_table(cursor)
             ensure_ahp_seed_data(cursor)
             ensure_default_admin_user(cursor)
@@ -307,6 +308,62 @@ def ensure_trend_scan_tables(cursor):
         """
         CREATE INDEX IF NOT EXISTS idx_trend_scan_results_run_score
         ON trend_scan_results(run_id, viability_score DESC)
+        """
+    )
+
+
+def ensure_map_layers_tables(cursor):
+    """Admin map layers (services/map_layers.py).
+
+    map_layers: one row per hazard or zoning layer; geojson is a FeatureCollection
+        whose features carry properties.zone_class. At most one active layer per category.
+    map_layer_files: original files an admin imported (or the built-in seed source).
+    app_flags: small key/value markers (one-time seed, last layer change).
+    """
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS map_layers (
+            id SERIAL PRIMARY KEY,
+            category VARCHAR(20) NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            source_note TEXT,
+            origin VARCHAR(20) NOT NULL DEFAULT 'drawn',
+            geojson JSONB NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CHECK (category IN ('hazard', 'zoning')),
+            CHECK (origin IN ('drawn', 'imported', 'builtin'))
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_map_layers_one_active
+        ON map_layers(category) WHERE is_active
+        """
+    )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS map_layer_files (
+            id SERIAL PRIMARY KEY,
+            layer_id INTEGER NOT NULL REFERENCES map_layers(id) ON DELETE CASCADE,
+            filename VARCHAR(255) NOT NULL,
+            content_type VARCHAR(100),
+            size_bytes INTEGER NOT NULL,
+            data BYTEA NOT NULL,
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_map_layer_files_layer ON map_layer_files(layer_id)")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_flags (
+            key VARCHAR(64) PRIMARY KEY,
+            value TEXT,
+            set_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
         """
     )
 

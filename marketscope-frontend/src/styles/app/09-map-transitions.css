@@ -11,7 +11,8 @@
 
 /* Animate overlay (geojson) visibility via overlay pane opacity */
 .home-container .leaflet-overlay-pane { transition: opacity 420ms var(--ease-emphatic); opacity: 0.04; }
-.home-container.flood-mode .leaflet-overlay-pane { opacity: 1; }
+.home-container.flood-mode .leaflet-overlay-pane,
+.home-container.zoning-mode .leaflet-overlay-pane { opacity: 1; }
 
 /* Hide any stray scrollbars inside the map container */
 .osm-map-wrapper, .osm-map-wrapper * {

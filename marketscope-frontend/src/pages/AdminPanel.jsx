@@ -77,7 +77,7 @@ export default function AdminPanel({ adminSession, activeTab, onActiveTabChange,
       {tab === 'msmes' && <MsmesPage {...pageProps} />}
       {tab === 'users' && <UsersPage {...pageProps} />}
       {tab === 'spaces' && <SpacesPage {...pageProps} pendingCount={pendingCount} onPendingChanged={refreshPendingCount} />}
-      {tab === 'flood' && <MapLayersPage token={adminSession?.token} />}
+      {tab === 'flood' && <MapLayersPage {...pageProps} token={adminSession?.token} />}
     </AdminLayout>
   );
 }

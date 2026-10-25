@@ -1,6 +1,8 @@
-"""Panabo City bounds, anchor landmarks, and static zoning boxes."""
+"""Panabo City bounds, anchor landmarks, and the original zoning boxes."""
 
 
+# Only used to seed the built-in zoning layer (constants/map_layers.py). Scoring
+# reads the active zoning layer from the database instead.
 ZONING_LAYERS = {
     "commercial_proper": (7.3000, 7.3150, 125.6700, 125.6900),
     "industrial_anflo": (7.2800, 7.2950, 125.6500, 125.6700)

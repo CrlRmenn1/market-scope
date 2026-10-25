@@ -2,16 +2,16 @@
 import psycopg2
 from psycopg2.extras import Json
 
-from constants.geo import INDUSTRIAL_ZONE_BUSINESSES, ZONING_LAYERS
 from constants.msme import SME_DATABASE
 from core.database import DB_CONFIG
 from db.schema import get_analysis_history_pk_column
 from models.requests import AnalysisRequest
 from services import hazard as hazard_service
+from services import zoning as zoning_service
 from services.ahp_weights import get_ahp_weights
 from services.hazard import evaluate_hazard
 from services.scoring import _get_analysis_profile, evaluate_layered_market_context
-from utils.geo import check_inside_bounds
+from services.zoning import evaluate_zoning
 from utils.values import normalize_osm_value
 
 
@@ -26,29 +26,19 @@ def perform_analysis(data: AnalysisRequest):
 
     preflight_context = evaluate_layered_market_context(data.lat, data.lon, data.radius, business_key)
 
-    # FACTOR 1: ZONING - Normalized to 0-25 scale
-    zoning_score = 0
-    zoning_status = "Outside Commercial Zone"
-    if check_inside_bounds(data.lat, data.lon, ZONING_LAYERS["commercial_proper"]):
-        zoning_score = 25
-        zoning_status = "Compliant (Commercial Center)"
-    elif check_inside_bounds(data.lat, data.lon, ZONING_LAYERS["industrial_anflo"]):
-        if business_key in INDUSTRIAL_ZONE_BUSINESSES:
-            zoning_score = 25
-            zoning_status = "Compliant (Agri-Industrial Support)"
-        else:
-            zoning_score = 5
-            zoning_status = "Non-Compliant (Heavy Industrial Zone)"
+    # FACTOR 1: ZONING - Normalized to 0-25 scale, from the active zoning map layer
+    zoning_score, zoning_status, zoning_class = evaluate_zoning(data.lat, data.lon, business_key)
 
     # FACTOR 2: HAZARD
     hazard_score, hazard_status, hazard_matches = evaluate_hazard(data.lat, data.lon)
+    hazard_source = hazard_service.HAZARD_LAYER_SOURCE
     if hazard_service.HAZARD_LAYER_CACHE:
         hazard_description = (
-            "Hazard evaluation uses official Panabo-clipped flood polygons from the Davao del Norte 5-year return period layer. "
+            f"Hazard evaluation uses the active flood hazard map layer ({hazard_source}). "
             + ("Matched zone: " + hazard_matches[0] + "." if hazard_matches else "No mapped hazard zone matched.")
         )
     else:
-        hazard_description = "Hazard layer is unavailable, so no hazard class was applied to this scan."
+        hazard_description = "No flood hazard map layer is active, so no hazard class was applied to this scan."
 
     competition_density = preflight_context["competition_density"]
     road_access = preflight_context["road_access"]
@@ -61,23 +51,27 @@ def perform_analysis(data: AnalysisRequest):
     competitors_found = len(competitors_list)
 
     if hazard_service.HAZARD_LAYER_CACHE:
-        source_label = hazard_service.HAZARD_LAYER_SOURCE or "unknown source"
         hazard_details = (
-            "The hazard score is based on official Panabo-clipped flood polygons from the Davao del Norte 5-year return period dataset. "
-            + f"Loaded source: {source_label}. "
+            f"The hazard score is based on the flood hazard polygons of the active map layer ({hazard_source}), clipped to Panabo. "
             + ("Matched zone: " + hazard_matches[0] + ". " if hazard_matches else "No mapped flood zone matched. ")
             + "Hazard classes are made mutually exclusive by priority (Very High > High > Moderate), so each point can map to at most one zone."
         )
     else:
         hazard_details = (
-            "No valid hazard polygon layer with a Var flood-class field was loaded, so the engine returned Low Risk / Safe "
-            "instead of using temporary placeholder bounds."
+            "No flood hazard map layer is active (or it has no polygons), so the engine returned Low Risk / Safe "
+            "instead of guessing a hazard class."
         )
 
-    zoning_details = (
-        "The zoning score is derived by checking whether the target coordinates fall inside Panabo commercial or industrial polygon bounds. "
-        + "If the site is inside the commercial polygon, it receives 25. If it is in the industrial support polygon and the business fits that category, it also receives 25; otherwise it is penalized."
-    )
+    zoning_source = zoning_service.ZONING_LAYER_SOURCE
+    if zoning_source:
+        zoning_details = (
+            f"The zoning score is derived by checking which polygon of the active zoning map layer ({zoning_source}) contains the target coordinates. "
+            + "Commercial areas score 25, mixed-use 20, residential 10, institutional and agricultural 5. Industrial areas score 25 for businesses "
+            + "that fit agri-industrial support and 5 for everything else. A site outside every mapped zone scores 0."
+            + (f" Matched zone class: {zoning_class.replace('_', '-')}." if zoning_class else "")
+        )
+    else:
+        zoning_details = "No zoning map layer is active, so no zoning credit was applied to this scan."
 
     ahp_criteria = get_ahp_weights("criteria", None)
     if ahp_criteria:
