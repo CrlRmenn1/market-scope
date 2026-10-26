@@ -13,6 +13,7 @@ from threading import Thread
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from core.config import get_allowed_origins
 from core.database import DB_CONFIG, connect_with_retry
@@ -34,7 +35,7 @@ from routers import (
 from services.ahp_weights import _load_ahp_weights_cache
 from services.hazard import preload_hazard_layer_cache
 from services.map_layers import seed_builtin_map_layers
-from services.osm_data import preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
+from services.osm_data import get_reference_map_json, preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
 from services.trend_scan import (
     mark_interrupted_trend_runs,
     start_trend_scan_worker,
@@ -72,6 +73,7 @@ async def lifespan(app: FastAPI):
         preload_zoning_layer_cache()
         preload_pbf_competitor_cache()
         preload_pbf_spatial_context_cache()
+        get_reference_map_json()
 
     Thread(target=_preload_geo_caches, daemon=True).start()
 
@@ -91,6 +93,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 allowed_origins = get_allowed_origins()
+
+# Map layers and the reference road map are large JSON; compress anything over 1 KB.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,

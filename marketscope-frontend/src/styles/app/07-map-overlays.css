@@ -678,3 +678,72 @@ html[data-theme="light"] .map-quick-panel {
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+
+/* Leaflet canvases (road lines) sit in zero-width panes; the global
+   `canvas { max-width: 100% }` reset would squash them to nothing. */
+.leaflet-container canvas { max-width: none; }
+
+/* Street, waterway and place names drawn from the OSM reference map
+   (components/map/referenceMap.js). Dark text with a white halo by default,
+   white text with a dark halo over satellite photos. */
+.ref-label { pointer-events: none; }
+.ref-label span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font: 600 11px/1.15 var(--font-sans);
+  color: #1f2937;
+  text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 5px #fff;
+}
+.ref-label--barangay span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+.ref-label--area span { font-weight: 600; font-style: italic; font-size: 10.5px; color: #6b7280; }
+.ref-label--water span { font-style: italic; color: #1d4ed8; }
+
+.ref-labels--photo .ref-label span {
+  color: #ffffff;
+  text-shadow: 0 0 2px #000, 0 0 3px #000, 0 1px 5px rgba(0, 0, 0, 0.9);
+}
+.ref-labels--photo .ref-label--barangay span { color: #fef3c7; }
+.ref-labels--photo .ref-label--area span { color: #e5e7eb; }
+.ref-labels--photo .ref-label--water span { color: #bae6fd; }
+
+/* Map / Satellite switch on the Home map, under the view-mode toggle. */
+.map-basemap-toggle {
+  position: absolute;
+  top: 128px;
+  right: 15px;
+  z-index: 460;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-glass);
+  backdrop-filter: blur(var(--surface-3-blur));
+  -webkit-backdrop-filter: blur(var(--surface-3-blur));
+  text-shadow: var(--glass-text-shadow);
+  box-shadow: var(--surface-3-shadow);
+}
+
+@media (max-width: 767px) {
+  .map-basemap-toggle { right: 12px; }
+}
+
+@media (max-width: 430px) {
+  .map-basemap-toggle { top: 130px; right: 8px; }
+}
+
+@media (max-height: 520px) {
+  .map-basemap-toggle { top: 112px; }
+}
+
+/* Satellite photos must not get the dark-mode invert filter meant for street tiles. */
+.home-container.satellite-base .osm-map-wrapper .leaflet-tile-pane { filter: none; }

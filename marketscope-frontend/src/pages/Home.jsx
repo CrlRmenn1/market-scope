@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
+import { getTileUrl, getMapInk, SATELLITE_ATTRIBUTION, SATELLITE_TILE_URL, TILE_ATTRIBUTION } from '../utils/mapTheme';
+import { createReferenceLabels, createReferenceLines, loadReferenceMap, referenceStyle } from '../components/map/referenceMap';
 import { apiUrl } from '../lib/api';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeColor } from '../utils/businessTypes';
 import AnalysisLoader from '../components/common/AnalysisLoader';
@@ -23,6 +24,23 @@ L.Icon.Default.mergeOptions({
 });
 
 // Map view modes and the overlay layer each one shows.
+// Background under the map: the regular street map, or satellite photos with
+// road lines and street/barangay names drawn on top.
+const BASEMAPS = [
+  { id: 'map', label: 'Map' },
+  { id: 'satellite', label: 'Satellite' }
+];
+
+const BASEMAP_STORAGE_KEY = 'marketscope_home_basemap';
+
+const readStoredBasemap = () => {
+  try {
+    return localStorage.getItem(BASEMAP_STORAGE_KEY) === 'satellite' ? 'satellite' : 'map';
+  } catch {
+    return 'map';
+  }
+};
+
 const MAP_VIEW_MODES = [
   { id: 'normal', label: 'Normal Map' },
   { id: 'flood', label: 'Flood Zones' },
@@ -59,6 +77,10 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
   const [selectedCoord, setSelectedCoord] = useState(null);
   const [selectedSpaceMarker, setSelectedSpaceMarker] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('normal');
+  const [basemap, setBasemap] = useState(readStoredBasemap);
+  const satelliteLayerRef = useRef(null);
+  const referenceLinesRef = useRef(null);
+  const referenceLabelsRef = useRef(null);
   const mapViewModeRef = useRef('normal');
   const [outOfBounds, setOutOfBounds] = useState(false);
   const [previewBusinessType, setPreviewBusinessType] = useState('');
@@ -270,6 +292,25 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
         errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='
       }).addTo(mapInstance.current);
 
+      // Satellite photos, swapped in for the street tiles by the basemap effect below.
+      satelliteLayerRef.current = L.tileLayer(SATELLITE_TILE_URL, {
+        attribution: SATELLITE_ATTRIBUTION,
+        maxZoom: 19,
+        keepBuffer: 8,
+        updateWhenIdle: true,
+        updateWhenZooming: false,
+        crossOrigin: true
+      });
+
+      // Satellite view extras: road lines under the hazard/zoning overlays, and
+      // street/barangay names above them but below pins and the scan preview.
+      mapInstance.current.createPane('referencePane');
+      mapInstance.current.getPane('referencePane').style.zIndex = 380;
+      mapInstance.current.getPane('referencePane').style.pointerEvents = 'none';
+      mapInstance.current.createPane('referenceLabelPane');
+      mapInstance.current.getPane('referenceLabelPane').style.zIndex = 415;
+      mapInstance.current.getPane('referenceLabelPane').style.pointerEvents = 'none';
+
       const boundaryCoords = [
         [PANABO_BOUNDS.south, PANABO_BOUNDS.west],
         [PANABO_BOUNDS.south, PANABO_BOUNDS.east],
@@ -469,6 +510,10 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       hazardLayerGroup.current = null;
       hazardGeoJsonLayerRef.current = null;
       zoningGeoJsonLayerRef.current = null;
+      referenceLabelsRef.current?.destroy();
+      referenceLabelsRef.current = null;
+      referenceLinesRef.current = null;
+      satelliteLayerRef.current = null;
       if (handleSpaceMarkersUpdated) {
         window.removeEventListener('marketscope-space-markers-updated', handleSpaceMarkersUpdated);
       }
@@ -478,6 +523,53 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       }
     };
   }, []);
+
+  // Street map or satellite: swap the tiles, and on satellite draw the road
+  // lines and street/barangay names (the photos have none of their own).
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return undefined;
+    try {
+      localStorage.setItem(BASEMAP_STORAGE_KEY, basemap);
+    } catch {
+      // Storage can be unavailable (private mode); the choice just isn't remembered.
+    }
+
+    const onSatellite = basemap === 'satellite';
+    const [showLayer, hideLayer] = onSatellite
+      ? [satelliteLayerRef.current, tileLayerRef.current]
+      : [tileLayerRef.current, satelliteLayerRef.current];
+    if (hideLayer && map.hasLayer(hideLayer)) hideLayer.remove();
+    if (showLayer && !map.hasLayer(showLayer)) showLayer.addTo(map);
+
+    if (!onSatellite) {
+      referenceLinesRef.current?.remove();
+      referenceLabelsRef.current?.hide();
+      return undefined;
+    }
+
+    let cancelled = false;
+    const restyleLines = () => referenceLinesRef.current?.setStyle(referenceStyle('satellite', map.getZoom()));
+    loadReferenceMap()
+      .then((data) => {
+        if (cancelled || mapInstance.current !== map) return;
+        if (!referenceLinesRef.current) {
+          referenceLinesRef.current = createReferenceLines(map, data, { pane: 'referencePane', basemap: 'satellite' });
+          referenceLabelsRef.current = createReferenceLabels(map, data, { pane: 'referenceLabelPane' });
+          referenceLabelsRef.current.setOnPhoto(true);
+        }
+        restyleLines();
+        referenceLinesRef.current.addTo(map);
+        referenceLabelsRef.current.show();
+      })
+      .catch((error) => console.error(error));
+    map.on('zoomend', restyleLines);
+
+    return () => {
+      cancelled = true;
+      map.off('zoomend', restyleLines);
+    };
+  }, [basemap]);
 
   // Swap map tiles and vector ink when the app theme changes.
   useEffect(() => {
@@ -817,7 +909,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     : '';
 
   return (
-    <div className={`home-container page-enter ${mapViewMode}-mode`} data-map-mode={mapViewMode}>
+    <div className={`home-container page-enter ${mapViewMode}-mode ${basemap === 'satellite' ? 'satellite-base' : ''}`} data-map-mode={mapViewMode}>
       <div className="osm-map-wrapper" ref={mapRef} style={{ height: '100%', width: '100%', zIndex: 0 }} />
 
       {outOfBounds && (
@@ -1212,6 +1304,21 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
             onClick={() => setMapViewMode(mode.id)}
           >
             {mode.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="map-basemap-toggle" role="radiogroup" aria-label="Background map">
+        {BASEMAPS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={basemap === item.id}
+            className={`map-mode-btn ${basemap === item.id ? 'active' : ''}`}
+            onClick={() => setBasemap(item.id)}
+          >
+            {item.label}
           </button>
         ))}
       </div>

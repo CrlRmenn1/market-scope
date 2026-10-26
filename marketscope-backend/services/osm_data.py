@@ -1,6 +1,8 @@
-"""OpenStreetMap (panabo.pbf) caches: competitors, roads, and buildings."""
+"""OpenStreetMap (panabo.pbf) caches: competitors, roads, buildings, and the reference road map."""
+import json
 from threading import Lock
 
+from constants.geo import PANABO_BOUNDS
 from constants.msme import (
     COMMERCIAL_AMENITY_VALUES,
     PBF_NAME_KEYWORD_FALLBACK,
@@ -8,7 +10,7 @@ from constants.msme import (
 )
 from core.paths import PBF_PATH
 from utils.geo import calculate_distance
-from utils.geo_libs import gpd
+from utils.geo_libs import box, gpd, mapping
 from utils.values import normalize_osm_value, to_finite_number
 
 
@@ -291,3 +293,132 @@ def get_generic_nearby_pbf_competitors(lat, lon, radius_meters, limit=80):
                 break
 
     return nearby
+
+
+# ---- reference road map (admin Map Layer Studio "Roads only" view) ----------------
+
+REFERENCE_MAP_JSON = None
+
+
+REFERENCE_MAP_LOCK = Lock()
+
+
+REFERENCE_MAJOR_ROADS = {"motorway", "trunk", "primary", "secondary"}
+
+
+REFERENCE_PATHS = {"track", "path", "footway", "pedestrian", "cycleway", "steps", "bridleway"}
+
+
+REFERENCE_SKIPPED_ROADS = {"construction", "proposed", "platform", "raceway", "bus_stop"}
+
+
+REFERENCE_WATERWAYS = {"river", "stream", "canal", "drain", "ditch"}
+
+
+# OSM place types: Panabo's barangays are mapped as suburb/village/quarter,
+# subdivisions and puroks as neighbourhood/hamlet.
+REFERENCE_BARANGAY_PLACES = {"suburb", "village", "quarter", "town"}
+
+
+REFERENCE_AREA_PLACES = {"neighbourhood", "hamlet", "isolated_dwelling"}
+
+
+def _round_coordinates(value):
+    if isinstance(value, (list, tuple)):
+        if value and isinstance(value[0], float):
+            return [round(number, 6) for number in value]
+        return [_round_coordinates(item) for item in value]
+    return value
+
+
+def _reference_road_class(highway):
+    highway = normalize_osm_value(highway)
+    if not highway or highway in REFERENCE_SKIPPED_ROADS:
+        return None
+    if highway.endswith("_link"):
+        highway = highway[:-5]
+    if highway in REFERENCE_MAJOR_ROADS:
+        return "major"
+    if highway in REFERENCE_PATHS:
+        return "path"
+    return "minor"
+
+
+def get_reference_map_json():
+    """Roads, waterways and place names around Panabo as compact GeoJSON text (cached).
+
+    Feature properties: kind ("road" | "water" | "place"), cls (major/minor/path,
+    the waterway type, or barangay/area for places) and name. Used for the plain
+    road map in the admin map editor and the satellite view's labels.
+    """
+    global REFERENCE_MAP_JSON
+    if REFERENCE_MAP_JSON is not None:
+        return REFERENCE_MAP_JSON
+    if gpd is None or not PBF_PATH.exists():
+        return None
+
+    with REFERENCE_MAP_LOCK:
+        if REFERENCE_MAP_JSON is not None:
+            return REFERENCE_MAP_JSON
+
+        lines = gpd.read_file(str(PBF_PATH), layer="lines", engine="pyogrio")
+        pad = 0.01
+        clip = box(PANABO_BOUNDS[2] - pad, PANABO_BOUNDS[0] - pad, PANABO_BOUNDS[3] + pad, PANABO_BOUNDS[1] + pad)
+
+        features = []
+        for _, row in lines.iterrows():
+            geometry = row.geometry
+            if geometry is None or geometry.is_empty:
+                continue
+
+            road_class = _reference_road_class(row.get("highway")) if "highway" in lines.columns else None
+            waterway = normalize_osm_value(row.get("waterway")) if "waterway" in lines.columns else None
+            if road_class:
+                properties = {"kind": "road", "cls": road_class}
+            elif waterway in REFERENCE_WATERWAYS:
+                properties = {"kind": "water", "cls": waterway}
+            else:
+                continue
+
+            geometry = geometry.intersection(clip)
+            if geometry.is_empty or geometry.geom_type not in ("LineString", "MultiLineString"):
+                continue
+            geometry = geometry.simplify(0.00001)
+
+            name = row.get("name")
+            if isinstance(name, str) and name.strip():
+                properties["name"] = name.strip()
+
+            shape_json = mapping(geometry)
+            features.append({
+                "type": "Feature",
+                "properties": properties,
+                "geometry": {"type": shape_json["type"], "coordinates": _round_coordinates(shape_json["coordinates"])},
+            })
+
+        try:
+            points = gpd.read_file(str(PBF_PATH), layer="points", engine="pyogrio")
+        except Exception as exc:
+            points = None
+            print(f"Reference map place names skipped: {exc}")
+        if points is not None and "place" in points.columns:
+            for _, row in points[points["place"].notna() & points["name"].notna()].iterrows():
+                place = normalize_osm_value(row.get("place"))
+                if place in REFERENCE_BARANGAY_PLACES:
+                    place_class = "barangay"
+                elif place in REFERENCE_AREA_PLACES:
+                    place_class = "area"
+                else:
+                    continue
+                point = row.geometry
+                if point is None or point.is_empty or not clip.contains(point):
+                    continue
+                features.append({
+                    "type": "Feature",
+                    "properties": {"kind": "place", "cls": place_class, "name": str(row.get("name")).strip()},
+                    "geometry": {"type": "Point", "coordinates": [round(point.x, 6), round(point.y, 6)]},
+                })
+
+        REFERENCE_MAP_JSON = json.dumps({"type": "FeatureCollection", "features": features}, separators=(",", ":"))
+        print(f"Reference road map cached: {len(features)} features, {len(REFERENCE_MAP_JSON) // 1024} KB")
+        return REFERENCE_MAP_JSON

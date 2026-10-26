@@ -161,6 +161,7 @@
   .detail-toggle,
   .history-breakdown-toggle,
   .map-mode-toggle,
+  .map-basemap-toggle,
   .map-legend {
     display: none !important;
   }

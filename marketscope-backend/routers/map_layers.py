@@ -18,6 +18,7 @@ from services.map_layers import (
     set_map_layer_active,
     update_map_layer,
 )
+from services.osm_data import get_reference_map_json
 
 
 router = APIRouter()
@@ -34,6 +35,15 @@ def _run(action, *args, **kwargs):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/map-layers/reference")
+def public_reference_map():
+    """Roads and waterways from the local OpenStreetMap file, for the admin map editor's plain road view."""
+    data = _run(get_reference_map_json)
+    if data is None:
+        raise HTTPException(status_code=503, detail="The road map data (panabo.pbf) is not available on the server.")
+    return Response(content=data, media_type="application/json", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/map-layers/active")

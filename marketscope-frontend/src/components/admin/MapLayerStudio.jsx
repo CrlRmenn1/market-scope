@@ -12,13 +12,14 @@ import {
   PlusIcon
 } from '@heroicons/react/24/outline';
 import { apiUrl } from '../../lib/api';
-import { getMapInk, getTileUrl, TILE_ATTRIBUTION } from '../../utils/mapTheme';
+import { getMapInk, getTileUrl, SATELLITE_ATTRIBUTION, SATELLITE_TILE_URL, TILE_ATTRIBUTION } from '../../utils/mapTheme';
 import { getHazardStyle, getHazardVar, HAZARD_CLASSES } from '../../utils/hazardStyle';
 import { getZoneStyle, ZONING_CLASSES } from '../../utils/zoneStyle';
 import { PANABO_BOUNDS } from '../../utils/mapLayers';
 import { Card, CardHeader, EmptyState, Field, SegmentedTabs, SkeletonRows, StatusBadge } from './ui/AdminUi';
 import { buttonClass, inputClass } from './ui/adminStyles';
 import { createTraceOverlay, openPdfFile, readImageFile, renderPdfPage } from './imageTraceOverlay';
+import { createLineNameFinder, createReferenceLabels, createReferenceLines, loadReferenceMap, referenceStyle } from '../map/referenceMap';
 
 // Map Layer Studio: the admin draws, traces (over a PDF/PNG) or imports the
 // flood hazard and zoning polygons that scans score against. Layers are saved
@@ -48,6 +49,28 @@ const ZONE_CLASSES = {
     return { id: item.id, label: item.label, color: style.color, fill: style.fillColor, hint: 'flood level' };
   }),
   zoning: ZONING_CLASSES.map((item) => ({ ...item, hint: `scores ${item.score}` }))
+};
+
+// Background maps the admin can draw over. "Roads only" is a plain white map
+// with just roads and waterways, like the LGU's printed maps.
+const BASEMAPS = [
+  { id: 'street', label: 'Street map' },
+  { id: 'roads', label: 'Roads only' },
+  { id: 'satellite', label: 'Satellite' }
+];
+
+const MAP_VIEW_STORAGE_KEY = 'marketscope_studio_map_view';
+
+const readStoredMapView = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MAP_VIEW_STORAGE_KEY) || 'null');
+    return {
+      basemap: BASEMAPS.some((item) => item.id === stored?.basemap) ? stored.basemap : 'street',
+      roadLines: Boolean(stored?.roadLines)
+    };
+  } catch {
+    return { basemap: 'street', roadLines: false };
+  }
 };
 
 const IMPORT_ACCEPT = '.geojson,.json,.kml,.zip';
@@ -119,8 +142,17 @@ export default function MapLayerStudio({ api, notify, token }) {
   const [selected, setSelected] = useState(null); // { zoneClass, label, editing, moving }
   const [trace, setTrace] = useState(null); // { name, pageCount, page, opacity, visible, adjustable, lockAspect }
   const [busy, setBusy] = useState('');
+  const [mapView, setMapView] = useState(readStoredMapView); // { basemap, roadLines }
+  const [referenceState, setReferenceState] = useState('idle'); // 'loading' | 'ready' | 'error'
+  const [lineName, setLineName] = useState(null); // { name, kind } of the road under the cursor
 
   const containerRef = useRef(null);
+  const baseLayersRef = useRef({});
+  const referenceLayerRef = useRef(null);
+  const findLineNameRef = useRef(null);
+  const referenceLabelsRef = useRef(null);
+  const referenceLoadingRef = useRef(false);
+  const mapViewRef = useRef(mapView);
   const mapRef = useRef(null);
   const previewLayerRef = useRef(null);
   const drawGroupRef = useRef(null);
@@ -148,7 +180,19 @@ export default function MapLayerStudio({ api, notify, token }) {
       maxBoundsViscosity: 0.8
     });
     map.fitBounds(panabo);
-    L.tileLayer(getTileUrl(), { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
+    baseLayersRef.current = {
+      street: L.tileLayer(getTileUrl(), { attribution: TILE_ATTRIBUTION, maxZoom: 19 }),
+      satellite: L.tileLayer(SATELLITE_TILE_URL, { attribution: SATELLITE_ATTRIBUTION, maxZoom: 19 })
+    };
+    // Road lines sit above a trace image (350) and below the drawn shapes (400),
+    // and never take clicks, so drawing works through them.
+    map.createPane('referencePane');
+    map.getPane('referencePane').style.zIndex = 360;
+    map.getPane('referencePane').style.pointerEvents = 'none';
+    // Street and barangay names sit above the drawn shapes so they stay readable.
+    map.createPane('referenceLabelPane');
+    map.getPane('referenceLabelPane').style.zIndex = 420;
+    map.getPane('referenceLabelPane').style.pointerEvents = 'none';
     L.rectangle(panabo, {
       color: getMapInk(),
       weight: 2.5,
@@ -171,15 +215,31 @@ export default function MapLayerStudio({ api, notify, token }) {
     map.on('click', () => {
       if (!toolRef.current) handlersRef.current.select?.(null);
     });
+    map.on('zoomend', () => handlersRef.current.restyleReference?.());
+    let nameFrame = null;
+    map.on('mousemove', (event) => {
+      if (nameFrame) return;
+      nameFrame = requestAnimationFrame(() => {
+        nameFrame = null;
+        handlersRef.current.nameAt?.(event.latlng);
+      });
+    });
+    map.on('mouseout', () => handlersRef.current.nameAt?.(null));
 
     mapRef.current = map;
     drawGroupRef.current = drawGroup;
+    handlersRef.current.applyMapView?.(mapViewRef.current);
 
     const resizeObserver = new ResizeObserver(() => map.invalidateSize());
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      if (nameFrame) cancelAnimationFrame(nameFrame);
       resizeObserver.disconnect();
+      referenceLabelsRef.current?.destroy();
+      referenceLayerRef.current = null;
+      referenceLabelsRef.current = null;
+      findLineNameRef.current = null;
       traceRef.current?.remove();
       traceRef.current = null;
       map.remove();
@@ -240,8 +300,94 @@ export default function MapLayerStudio({ api, notify, token }) {
     layer.on('pm:dragend', () => handlersRef.current.changed?.());
   };
 
+  // ---- background map (street / roads only / satellite) --------------------------
+
+  const showReferenceLines = (view) => view.basemap === 'roads' || view.roadLines;
+
+  const applyMapView = (view) => {
+    const map = mapRef.current;
+    if (!map) return;
+    mapViewRef.current = view;
+    Object.entries(baseLayersRef.current).forEach(([id, layer]) => {
+      if (id === view.basemap) {
+        if (!map.hasLayer(layer)) layer.addTo(map);
+      } else if (map.hasLayer(layer)) {
+        layer.remove();
+      }
+    });
+    // Leaflet owns this element's classes, so set the paper background inline.
+    containerRef.current.style.background = view.basemap === 'roads' ? '#ffffff' : '';
+
+    const reference = referenceLayerRef.current;
+    const labels = referenceLabelsRef.current;
+    if (!showReferenceLines(view)) {
+      reference?.remove();
+      labels?.hide();
+      setLineName(null);
+      return;
+    }
+    if (reference) {
+      reference.setStyle(referenceStyle(view.basemap, map.getZoom()));
+      if (!map.hasLayer(reference)) reference.addTo(map);
+      labels.setOnPhoto(view.basemap === 'satellite');
+      labels.show();
+      return;
+    }
+    if (referenceLoadingRef.current) return;
+    referenceLoadingRef.current = true;
+    setReferenceState('loading');
+    loadReferenceMap()
+      .finally(() => {
+        referenceLoadingRef.current = false;
+      })
+      .then((data) => {
+        // The map may have been recreated while loading (React remounts it in dev),
+        // so attach to whichever map is current now.
+        const liveMap = mapRef.current;
+        if (!liveMap) return;
+        const layer = createReferenceLines(liveMap, data, { pane: 'referencePane', basemap: mapViewRef.current.basemap });
+        const labels = createReferenceLabels(liveMap, data, { pane: 'referenceLabelPane' });
+        referenceLayerRef.current = layer;
+        referenceLabelsRef.current = labels;
+        findLineNameRef.current = createLineNameFinder(liveMap, layer);
+        if (showReferenceLines(mapViewRef.current)) {
+          layer.addTo(liveMap);
+          labels.setOnPhoto(mapViewRef.current.basemap === 'satellite');
+          labels.show();
+        }
+        setReferenceState('ready');
+      })
+      .catch(() => setReferenceState('error'));
+  };
+
+  const changeMapView = (changes) => {
+    const next = { ...mapView, ...changes };
+    setMapView(next);
+    applyMapView(next);
+    try {
+      localStorage.setItem(MAP_VIEW_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Storage can be unavailable (private mode); the choice just isn't remembered.
+    }
+  };
+
+  const nameAt = (latlng) => {
+    const map = mapRef.current;
+    const reference = referenceLayerRef.current;
+    const found = latlng && map && reference && map.hasLayer(reference) ? findLineNameRef.current?.(latlng) : null;
+    setLineName((current) => (
+      current?.name === found?.name && current?.kind === found?.kind ? current : (found ? { name: found.name, kind: found.kind } : null)
+    ));
+  };
+
   useLayoutEffect(() => {
     handlersRef.current = {
+      applyMapView,
+      nameAt,
+      restyleReference: () => {
+        const map = mapRef.current;
+        referenceLayerRef.current?.setStyle(referenceStyle(mapViewRef.current.basemap, map.getZoom()));
+      },
       select: selectLayer,
       changed: markChanged,
       onCreate: ({ layer }) => {
@@ -915,13 +1061,51 @@ export default function MapLayerStudio({ api, notify, token }) {
           <div className="relative">
             <div ref={containerRef} className="map-layer-studio-map h-[60svh] min-h-[360px] w-full lg:h-[620px]" />
             {!editing && (
-              <div className="pointer-events-none absolute bottom-3 left-3 z-[450] flex flex-wrap gap-x-3 gap-y-1 rounded-lg bg-[var(--bg-glass)] px-3 py-2 text-xs text-[var(--text-main)] shadow">
+              <div className="pointer-events-none absolute bottom-14 left-3 z-[450] flex flex-wrap sm:bottom-9 gap-x-3 gap-y-1 rounded-lg bg-[var(--bg-glass)] px-3 py-2 text-xs text-[var(--text-main)] shadow">
                 {ZONE_CLASSES[category].map((item) => (
                   <span key={item.id} className="inline-flex items-center gap-1.5">
                     <ClassSwatch color={item.color} fill={item.fill} />
                     {item.label}
                   </span>
                 ))}
+              </div>
+            )}
+            <div className="absolute right-3 top-3 z-[450] flex flex-col items-end gap-2">
+              <div role="radiogroup" aria-label="Background map" className="flex rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-1 shadow-md">
+                {BASEMAPS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={mapView.basemap === item.id}
+                    onClick={() => changeMapView({ basemap: item.id })}
+                    className={`min-h-[36px] cursor-pointer rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] ${mapView.basemap === item.id ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {mapView.basemap !== 'roads' && (
+                <label className="flex min-h-[36px] cursor-pointer items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 text-xs font-semibold text-[var(--text-main)] shadow-md">
+                  <input
+                    type="checkbox"
+                    checked={mapView.roadLines}
+                    onChange={(event) => changeMapView({ roadLines: event.target.checked })}
+                    className="h-4 w-4 accent-[var(--accent)]"
+                  />
+                  Show road lines
+                </label>
+              )}
+              {referenceState === 'loading' && (mapView.basemap === 'roads' || mapView.roadLines) && (
+                <span className="rounded-lg bg-[var(--bg-sheet)] px-2.5 py-1 text-xs text-[var(--text-muted)] shadow">Loading roads…</span>
+              )}
+              {referenceState === 'error' && (mapView.basemap === 'roads' || mapView.roadLines) && (
+                <span role="alert" className="rounded-lg bg-[var(--bg-sheet)] px-2.5 py-1 text-xs font-medium text-[var(--trend-down)] shadow">Road map unavailable</span>
+              )}
+            </div>
+            {lineName && (
+              <div className="pointer-events-none absolute left-3 top-[84px] z-[450] max-w-[55%] truncate rounded-lg bg-[var(--bg-sheet)] px-3 py-1.5 text-xs font-semibold text-[var(--text-main)] shadow-md">
+                {lineName.kind === 'water' ? 'Waterway' : 'Street'}: {lineName.name}
               </div>
             )}
           </div>

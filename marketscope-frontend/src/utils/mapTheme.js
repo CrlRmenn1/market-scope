@@ -16,3 +16,7 @@ export const getTileUrl = () => (isDarkTheme() ? TILE_URLS.dark : TILE_URLS.ligh
 
 // Ink for map vector overlays (boundary, radius circles) — violet accent, readable on both tile sets.
 export const getMapInk = () => (isDarkTheme() ? '#a78bfa' : '#7c3aed');
+
+// Esri World Imagery (satellite photos). No API key; the attribution must stay visible.
+export const SATELLITE_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+export const SATELLITE_ATTRIBUTION = 'Imagery &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community';
