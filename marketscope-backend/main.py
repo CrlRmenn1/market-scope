@@ -23,6 +23,7 @@ from routers import (
     admin_users,
     analysis,
     auth,
+    data_backup,
     health,
     map_layers,
     msmes,
@@ -118,6 +119,7 @@ app.include_router(verified_features.router)
 app.include_router(analysis.router)
 app.include_router(trends.router)
 app.include_router(map_layers.router)
+app.include_router(data_backup.router)
 
 
 if __name__ == "__main__":

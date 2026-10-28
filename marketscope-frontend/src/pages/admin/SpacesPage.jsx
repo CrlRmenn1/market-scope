@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowPathIcon, HomeModernIcon, InboxIcon, PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeLabel } from '../../utils/businessTypes';
 import CoordinateFields from '../../components/admin/ui/CoordinateFields';
+import DataBackupButtons from '../../components/admin/ui/DataBackupButtons';
 import {
   Card,
   CardHeader,
@@ -146,7 +147,7 @@ function SubmissionCard({ item, busy, onReview }) {
 // Commercial spaces: review what users submit, add verified listings, and
 // switch admin listings on or off. What appears on the map / in trend scans comes
 // from services/spaces.py (pending + approved user spaces, active admin listings).
-export default function SpacesPage({ api, notify, isDesktop, pendingCount, onPendingChanged }) {
+export default function SpacesPage({ api, notify, isDesktop, token, pendingCount, onPendingChanged }) {
   const [view, setView] = useState('review');
   const [statusFilter, setStatusFilter] = useState('pending');
   const [submissions, setSubmissions] = useState([]);
@@ -189,6 +190,8 @@ export default function SpacesPage({ api, notify, isDesktop, pendingCount, onPen
   useEffect(() => {
     loadListings();
   }, [loadListings]);
+
+  const reloadAll = () => Promise.all([loadSubmissions(), loadListings(), onPendingChanged?.()]);
 
   const review = async (item, status) => {
     setBusyId(`user-${item.id}`);
@@ -473,7 +476,11 @@ export default function SpacesPage({ api, notify, isDesktop, pendingCount, onPen
 
   return (
     <>
-      <PageHeader title="Spaces" description="Commercial spaces for rent or sale. Pending and approved user spaces, plus active admin listings, appear on the map and in Business Trends scans. Reject or archive a space to take it off." />
+      <PageHeader
+        title="Spaces"
+        description="Commercial spaces for rent or sale. Pending and approved user spaces, plus active admin listings, appear on the map and in Business Trends scans. Reject or archive a space to take it off."
+        actions={<DataBackupButtons token={token} dataset="spaces" label="spaces" notify={notify} onImported={reloadAll} />}
+      />
       <div className="mb-5">
         <SegmentedTabs
           ariaLabel="Spaces views"

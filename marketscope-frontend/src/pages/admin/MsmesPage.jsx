@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BuildingStorefrontIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeColor, getBusinessTypeLabel } from '../../utils/businessTypes';
 import CoordinateFields from '../../components/admin/ui/CoordinateFields';
+import DataBackupButtons from '../../components/admin/ui/DataBackupButtons';
 import {
   Card,
   CardHeader,
@@ -35,7 +36,7 @@ const TypeLabel = ({ item }) => (
 
 // Custom MSMEs: businesses the admin adds by hand. Every scan counts them as
 // competitors for their business type, next to the OpenStreetMap data.
-export default function MsmesPage({ api, notify, isDesktop }) {
+export default function MsmesPage({ api, notify, isDesktop, token }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -238,10 +239,15 @@ export default function MsmesPage({ api, notify, isDesktop }) {
     <PageHeader
       title="MSMEs"
       description="Businesses added here count as competitors in every scan, alongside OpenStreetMap data."
-      actions={!isDesktop && !showMobileForm && (
-        <button type="button" className={buttonClass.primary} onClick={() => setShowMobileForm(true)}>
-          <PlusIcon className="h-4 w-4" aria-hidden="true" /> Add MSME
-        </button>
+      actions={(
+        <>
+          <DataBackupButtons token={token} dataset="msmes" label="MSMEs" notify={notify} onImported={load} />
+          {!isDesktop && !showMobileForm && (
+            <button type="button" className={buttonClass.primary} onClick={() => setShowMobileForm(true)}>
+              <PlusIcon className="h-4 w-4" aria-hidden="true" /> Add MSME
+            </button>
+          )}
+        </>
       )}
     />
   );

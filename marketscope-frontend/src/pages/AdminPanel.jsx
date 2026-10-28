@@ -57,7 +57,7 @@ export default function AdminPanel({ adminSession, activeTab, onActiveTabChange,
     onActiveTabChange(nextTab);
   };
 
-  const pageProps = { api, notify, isDesktop };
+  const pageProps = { api, notify, isDesktop, token: adminSession?.token };
 
   return (
     <AdminLayout
@@ -77,7 +77,7 @@ export default function AdminPanel({ adminSession, activeTab, onActiveTabChange,
       {tab === 'msmes' && <MsmesPage {...pageProps} />}
       {tab === 'users' && <UsersPage {...pageProps} />}
       {tab === 'spaces' && <SpacesPage {...pageProps} pendingCount={pendingCount} onPendingChanged={refreshPendingCount} />}
-      {tab === 'flood' && <MapLayersPage {...pageProps} token={adminSession?.token} />}
+      {tab === 'flood' && <MapLayersPage {...pageProps} />}
     </AdminLayout>
   );
 }

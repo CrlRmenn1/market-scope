@@ -11,6 +11,7 @@ import {
   SkeletonRows
 } from '../../components/admin/ui/AdminUi';
 import { buttonClass } from '../../components/admin/ui/adminStyles';
+import DataBackupButtons from '../../components/admin/ui/DataBackupButtons';
 
 const SETUP_LABELS = {
   kiosk: 'Kiosk',
@@ -29,7 +30,7 @@ const formatDate = (value) => {
 const Muted = ({ children }) => <span className="text-[var(--text-muted)]">{children}</span>;
 
 // Read-only directory of registered users and their trend preferences.
-export default function UsersPage({ api, notify, isDesktop }) {
+export default function UsersPage({ api, notify, isDesktop, token }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -64,7 +65,11 @@ export default function UsersPage({ api, notify, isDesktop }) {
 
   return (
     <>
-      <PageHeader title="Users" description="Everyone who registered in MarketScope, with the preferences used by Business Trends." />
+      <PageHeader
+        title="Users"
+        description="Everyone who registered in MarketScope, with the preferences used by Business Trends."
+        actions={<DataBackupButtons token={token} dataset="users" label="users" notify={notify} onImported={load} />}
+      />
 
       <Card className="min-w-0">
         <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border-color)] px-5 py-4">

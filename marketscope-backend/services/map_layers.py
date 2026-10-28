@@ -287,6 +287,14 @@ def _apply_active_layer_change(change):
     _log(f"active {category} layer changed; caches reloaded and saved trend scans marked stale")
 
 
+def map_layers_replaced():
+    """Call after a backup upload replaced the map layer tables (services/data_backup.py)."""
+    with open_map_layer_cursor() as cursor:
+        changed_at = set_flag(cursor, CHANGED_FLAG)
+    for category in MAP_LAYER_CATEGORIES:
+        _apply_active_layer_change((category, changed_at))
+
+
 # ---- admin operations --------------------------------------------------------------
 
 def _check_category(category: str):
