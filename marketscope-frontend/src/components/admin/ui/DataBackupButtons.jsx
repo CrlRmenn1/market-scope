@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { apiUrl } from '../../../lib/api';
 import { buttonClass } from './adminStyles';
+import { useConfirm } from '../../common/useConfirm';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -21,6 +22,7 @@ const readDetail = async (response) => {
 export default function DataBackupButtons({ token, dataset, label, notify, onImported }) {
   const fileInput = useRef(null);
   const [busy, setBusy] = useState('');
+  const confirm = useConfirm();
 
   const download = async () => {
     setBusy('download');
@@ -56,11 +58,25 @@ export default function DataBackupButtons({ token, dataset, label, notify, onImp
       notify('error', `${file.name} holds ${backup?.dataset || 'unknown'} data. Upload it on its own page.`);
       return;
     }
-    const counts = Object.entries(backup.tables || {})
-      .map(([table, { rows = [] } = {}]) => `${rows.length} ${table}`)
-      .join(', ');
-    const source = backup.source_host ? ` (from ${backup.source_host}, ${backup.exported_at})` : '';
-    if (!window.confirm(`Replace all ${label} in this database with ${file.name}${source}?\n\nIt holds ${counts}. Rows that aren't in the file will be deleted.`)) return;
+    const confirmed = await confirm({
+      title: `Replace all ${label} in this database?`,
+      message: (
+        <>
+          <p className="break-all">
+            From <span className="font-medium text-[var(--text-main)]">{file.name}</span>
+            {backup.source_host && <> ({backup.source_host}, {backup.exported_at})</>}
+          </p>
+          <ul className="mt-2 list-disc pl-5">
+            {Object.entries(backup.tables || {}).map(([table, { rows = [] } = {}]) => (
+              <li key={table}><span className="tabular-nums">{rows.length}</span> rows in {table}</li>
+            ))}
+          </ul>
+          <p className="mt-2">Rows that aren&apos;t in the file will be deleted. This cannot be undone.</p>
+        </>
+      ),
+      confirmLabel: 'Replace data'
+    });
+    if (!confirmed) return;
 
     setBusy('upload');
     try {

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { MotionConfig } from 'framer-motion'
 // IMPORTANT: Leaflet CSS MUST be imported before App and index.css
 import App from './App'
+import { ConfirmProvider } from './components/common/ConfirmDialog'
 import './styles/index.css'
 import 'leaflet/dist/leaflet.css';
 
@@ -20,7 +21,9 @@ if ('serviceWorker' in navigator) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <MotionConfig reducedMotion="user">
-      <App />
+      <ConfirmProvider>
+        <App />
+      </ConfirmProvider>
     </MotionConfig>
   </React.StrictMode>,
 )

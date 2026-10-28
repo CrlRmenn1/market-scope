@@ -3,6 +3,7 @@ import { BuildingStorefrontIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeColor, getBusinessTypeLabel } from '../../utils/businessTypes';
 import CoordinateFields from '../../components/admin/ui/CoordinateFields';
 import DataBackupButtons from '../../components/admin/ui/DataBackupButtons';
+import { useConfirm } from '../../components/common/useConfirm';
 import {
   Card,
   CardHeader,
@@ -47,6 +48,7 @@ export default function MsmesPage({ api, notify, isDesktop, token }) {
   const [busyId, setBusyId] = useState(null);
   const [showMobileForm, setShowMobileForm] = useState(false);
   const formRef = useRef(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,7 +124,12 @@ export default function MsmesPage({ api, notify, isDesktop, token }) {
   };
 
   const remove = async (item) => {
-    if (!window.confirm(`Delete "${item.name}"? It will stop counting as a competitor in scans.`)) return;
+    const confirmed = await confirm({
+      title: `Delete "${item.name}"?`,
+      message: 'It will stop counting as a competitor in scans. This cannot be undone.',
+      confirmLabel: 'Delete MSME'
+    });
+    if (!confirmed) return;
     setBusyId(item.id);
     try {
       await api(`/admin/custom-msmes/${item.id}`, { method: 'DELETE' });

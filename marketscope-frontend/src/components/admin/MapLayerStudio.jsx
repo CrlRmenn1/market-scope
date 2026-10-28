@@ -18,6 +18,7 @@ import { getZoneStyle, ZONING_CLASSES } from '../../utils/zoneStyle';
 import { PANABO_BOUNDS } from '../../utils/mapLayers';
 import { Card, CardHeader, EmptyState, Field, SegmentedTabs, SkeletonRows, StatusBadge } from './ui/AdminUi';
 import { buttonClass, inputClass } from './ui/adminStyles';
+import { useConfirm } from '../common/useConfirm';
 import { createTraceOverlay, openPdfFile, readImageFile, renderPdfPage } from './imageTraceOverlay';
 import { createLineNameFinder, createReferenceLabels, createReferenceLines, loadReferenceMap, referenceStyle } from '../map/referenceMap';
 
@@ -129,6 +130,7 @@ function ClassPicker({ category, value, onChange, label }) {
 }
 
 export default function MapLayerStudio({ api, notify, token }) {
+  const confirm = useConfirm();
   const [category, setCategory] = useState('hazard');
   const [layers, setLayers] = useState([]);
   const [loadingLayers, setLoadingLayers] = useState(true);
@@ -505,10 +507,15 @@ export default function MapLayerStudio({ api, notify, token }) {
     loadLayers(category);
   }, [category, loadLayers]);
 
-  const confirmDiscard = () => !dirty || window.confirm('Discard the unsaved changes to this layer?');
+  const confirmDiscard = async () => !dirty || confirm({
+    title: 'Discard unsaved changes?',
+    message: 'The changes you made to this layer since the last save will be lost.',
+    confirmLabel: 'Discard changes',
+    cancelLabel: 'Keep editing'
+  });
 
-  const changeCategory = (next) => {
-    if (next === category || !confirmDiscard()) return;
+  const changeCategory = async (next) => {
+    if (next === category || !(await confirmDiscard())) return;
     closeEditor();
     setLayers([]);
     setCategory(next);
@@ -559,8 +566,8 @@ export default function MapLayerStudio({ api, notify, token }) {
     }
   };
 
-  const cancelEdit = () => {
-    if (!confirmDiscard()) return;
+  const cancelEdit = async () => {
+    if (!(await confirmDiscard())) return;
     closeEditor();
     loadLayers(category);
   };
@@ -616,8 +623,13 @@ export default function MapLayerStudio({ api, notify, token }) {
   };
 
   const deleteLayer = async (layer) => {
-    const warning = layer.is_active ? ' It is the active layer, so scans will stop using it.' : '';
-    if (!window.confirm(`Delete "${layer.name}"?${warning} This cannot be undone.`)) return;
+    const warning = layer.is_active ? 'It is the active layer, so scans will stop using it. ' : '';
+    const confirmed = await confirm({
+      title: `Delete "${layer.name}"?`,
+      message: `${warning}This cannot be undone.`,
+      confirmLabel: 'Delete layer'
+    });
+    if (!confirmed) return;
     setBusy(`delete-${layer.id}`);
     try {
       await api(`/admin/map-layers/${layer.id}`, { method: 'DELETE' });
