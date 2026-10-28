@@ -6,6 +6,7 @@ import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import {
   ArrowDownTrayIcon,
   ArrowUpTrayIcon,
+  ChevronDownIcon,
   ExclamationTriangleIcon,
   MapIcon,
   PhotoIcon,
@@ -14,17 +15,23 @@ import {
 import { apiUrl } from '../../lib/api';
 import { getMapInk, getTileUrl, SATELLITE_ATTRIBUTION, SATELLITE_TILE_URL, TILE_ATTRIBUTION } from '../../utils/mapTheme';
 import { getHazardStyle, getHazardVar, HAZARD_CLASSES } from '../../utils/hazardStyle';
-import { getZoneStyle, ZONING_CLASSES } from '../../utils/zoneStyle';
+import { getZoneStyle, getZoningClass, ZONING_CLASSES, ZONING_GROUPS, zoningClassesIn } from '../../utils/zoneStyle';
 import { PANABO_BOUNDS } from '../../utils/mapLayers';
+import { resolveStack } from '../../utils/layerStack';
 import { Card, CardHeader, EmptyState, Field, SegmentedTabs, SkeletonRows, StatusBadge } from './ui/AdminUi';
 import { buttonClass, inputClass } from './ui/adminStyles';
 import { useConfirm } from '../common/useConfirm';
 import { createTraceOverlay, openPdfFile, readImageFile, renderPdfPage } from './imageTraceOverlay';
+import ZoningAllowedUses from './ZoningAllowedUses';
 import { createLineNameFinder, createReferenceLabels, createReferenceLines, loadReferenceMap, referenceStyle } from '../map/referenceMap';
 
 // Map Layer Studio: the admin draws, traces (over a PDF/PNG) or imports the
 // flood hazard and zoning polygons that scans score against. Layers are saved
 // in the database; one layer per category is active at a time.
+//
+// Shapes in a layer form a stack: where they overlap, the shape on top wins
+// (utils/layerStack.js). Editable shapes are drawn as outlines; a separate
+// fill layer shows each shape minus whatever sits on top of it.
 
 const CATEGORY_TABS = [
   { id: 'hazard', label: 'Flood hazard' },
@@ -49,7 +56,7 @@ const ZONE_CLASSES = {
     const style = getHazardStyle(item.var);
     return { id: item.id, label: item.label, color: style.color, fill: style.fillColor, hint: 'flood level' };
   }),
-  zoning: ZONING_CLASSES.map((item) => ({ ...item, hint: `scores ${item.score}` }))
+  zoning: ZONING_CLASSES.map((item) => ({ ...item, hint: item.group }))
 };
 
 // Background maps the admin can draw over. "Roads only" is a plain white map
@@ -104,7 +111,58 @@ function ClassSwatch({ color, fill }) {
   return <span className="h-3.5 w-3.5 flex-none rounded" style={{ background: fill, boxShadow: `inset 0 0 0 2px ${color}` }} aria-hidden="true" />;
 }
 
+// The 23 LGU zones are too many for buttons: a grouped drop-down list instead.
+function ZoneClassSelect({ value, onChange, label }) {
+  const [open, setOpen] = useState(false);
+  const current = getZoningClass(value);
+  return (
+    <div>
+      <span className="mb-1.5 block text-sm font-medium text-[var(--text-main)]">{label}</span>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        onClick={() => setOpen((isOpen) => !isOpen)}
+        className="flex min-h-[44px] w-full cursor-pointer items-center gap-2 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] px-3 py-2 text-left text-sm text-[var(--text-main)] hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+      >
+        <ClassSwatch color={current.color} fill={current.fill} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium leading-tight">{current.label}</span>
+          <span className="block text-[0.7rem] leading-tight text-[var(--text-muted)]">{current.group}</span>
+        </span>
+        <ChevronDownIcon className={`h-4 w-4 flex-none text-[var(--text-muted)] transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="listbox" aria-label={label} className="mt-1.5 max-h-72 overflow-y-auto rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] p-1 shadow-md">
+          {ZONING_GROUPS.map(([group, zones]) => (
+            <div key={group}>
+              <p className="px-2 pb-1 pt-2 text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{group}</p>
+              {zones.map((zone) => (
+                <button
+                  key={zone.id}
+                  type="button"
+                  role="option"
+                  aria-selected={zone.id === value}
+                  onClick={() => {
+                    onChange(zone.id);
+                    setOpen(false);
+                  }}
+                  className={`flex min-h-[36px] w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${zone.id === value ? 'bg-[var(--accent-hover)] font-semibold text-[var(--text-main)]' : 'text-[var(--text-main)] hover:bg-[var(--accent-hover)]'}`}
+                >
+                  <ClassSwatch color={zone.color} fill={zone.fill} />
+                  {zone.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClassPicker({ category, value, onChange, label }) {
+  if (category === 'zoning') return <ZoneClassSelect value={value} onChange={onChange} label={label} />;
   return (
     <fieldset>
       <legend className="mb-1.5 text-sm font-medium text-[var(--text-main)]">{label}</legend>
@@ -135,12 +193,13 @@ export default function MapLayerStudio({ api, notify, token }) {
   const [layers, setLayers] = useState([]);
   const [loadingLayers, setLoadingLayers] = useState(true);
   const [previewId, setPreviewId] = useState(null);
+  const [previewZones, setPreviewZones] = useState([]); // zoning classes in the previewed layer, for its legend
   const [draft, setDraft] = useState(null); // { id, name, source_note, origin, is_active } while editing
   const [dirty, setDirty] = useState(false);
   const [shapeCount, setShapeCount] = useState(0);
   const [outsideArea, setOutsideArea] = useState(false);
   const [tool, setTool] = useState(null); // 'Polygon' | 'Rectangle' | 'Cut'
-  const [newClass, setNewClass] = useState({ hazard: 'very_high', zoning: 'commercial' });
+  const [newClass, setNewClass] = useState({ hazard: 'very_high', zoning: 'general_commercial' });
   const [selected, setSelected] = useState(null); // { zoneClass, label, editing, moving }
   const [trace, setTrace] = useState(null); // { name, pageCount, page, opacity, visible, adjustable, lockAspect }
   const [busy, setBusy] = useState('');
@@ -158,6 +217,8 @@ export default function MapLayerStudio({ api, notify, token }) {
   const mapRef = useRef(null);
   const previewLayerRef = useRef(null);
   const drawGroupRef = useRef(null);
+  const stackFillRef = useRef(null);
+  const stackFillTimerRef = useRef(null);
   const selectedLayerRef = useRef(null);
   const traceRef = useRef(null);
   const pdfRef = useRef(null);
@@ -179,7 +240,9 @@ export default function MapLayerStudio({ api, notify, token }) {
     const map = L.map(containerRef.current, {
       minZoom: 12,
       maxBounds: panabo.pad(0.35),
-      maxBoundsViscosity: 0.8
+      maxBoundsViscosity: 0.8,
+      // Clicking a spot twice cycles through stacked shapes, so a double-click must not zoom.
+      doubleClickZoom: false
     });
     map.fitBounds(panabo);
     baseLayersRef.current = {
@@ -204,6 +267,11 @@ export default function MapLayerStudio({ api, notify, token }) {
       interactive: false,
       pmIgnore: true
     }).addTo(map);
+
+    // Stack fills (each shape minus what's on top of it) sit just under the editable outlines.
+    map.createPane('stackFillPane');
+    map.getPane('stackFillPane').style.zIndex = 395;
+    map.getPane('stackFillPane').style.pointerEvents = 'none';
 
     const drawGroup = L.featureGroup().addTo(map);
     map.pm.setGlobalOptions({ layerGroup: drawGroup, allowSelfIntersection: false, snapDistance: 14 });
@@ -237,6 +305,8 @@ export default function MapLayerStudio({ api, notify, token }) {
 
     return () => {
       if (nameFrame) cancelAnimationFrame(nameFrame);
+      window.clearTimeout(stackFillTimerRef.current);
+      stackFillRef.current = null;
       resizeObserver.disconnect();
       referenceLabelsRef.current?.destroy();
       referenceLayerRef.current = null;
@@ -258,14 +328,73 @@ export default function MapLayerStudio({ api, notify, token }) {
     setOutsideArea(shapes.some((layer) => layer.getBounds && !panabo.contains(layer.getBounds())));
   };
 
+  // ---- the stack (top shape wins) ---------------------------------------------------
+
+  // Polygons in the editor, bottom to top.
+  const stackedShapes = () => {
+    const shapes = [];
+    const add = (layer) => {
+      if (layer instanceof L.Polygon) shapes.push(layer);
+      else if (layer instanceof L.LayerGroup) layer.eachLayer(add);
+    };
+    drawGroupRef.current?.eachLayer(add);
+    return shapes.sort((a, b) => (a._stackOrder ?? 0) - (b._stackOrder ?? 0));
+  };
+
+  const topStackOrder = () => stackedShapes().reduce((top, layer) => Math.max(top, layer._stackOrder ?? 0), -1);
+
+  // Shapes under a clicked point, top first. A second click on the selected
+  // shape moves on to the one underneath, so fully covered shapes stay reachable.
+  const selectAtPoint = (clicked, latlng) => {
+    const point = mapRef.current.latLngToLayerPoint(latlng);
+    const under = stackedShapes()
+      .filter((layer) => layer.getBounds().contains(latlng) && layer._containsPoint?.(point))
+      .reverse();
+    const current = under.indexOf(selectedLayerRef.current);
+    selectLayer(current === -1 ? (under[0] || clicked) : under[(current + 1) % under.length]);
+  };
+
+  const shapeFeature = (layer) => {
+    const feature = layer.toGeoJSON(7);
+    feature.properties = { ...(layer.feature?.properties || {}) };
+    return feature;
+  };
+
+  // Keep the SVG paint order the same as the stack, so clicking an overlap picks the top shape.
+  const restack = () => stackedShapes().forEach((layer) => layer.bringToFront());
+
+  const drawStackFills = () => {
+    const map = mapRef.current;
+    stackFillRef.current?.remove();
+    stackFillRef.current = null;
+    if (!map) return;
+    const visible = resolveStack(stackedShapes().map(shapeFeature));
+    if (!visible.length) return;
+    stackFillRef.current = L.geoJSON(visible, {
+      pane: 'stackFillPane',
+      interactive: false,
+      pmIgnore: true,
+      style: (feature) => ({ ...featureStyle(categoryRef.current, feature?.properties?.zone_class), stroke: false })
+    }).addTo(map);
+  };
+
+  // Cutting polygons is the slow part, so wait until a burst of changes settles.
+  const refreshStackFills = () => {
+    window.clearTimeout(stackFillTimerRef.current);
+    stackFillTimerRef.current = window.setTimeout(drawStackFills, 150);
+  };
+
   const markChanged = () => {
     setDirty(true);
     refreshShapeStats();
+    refreshStackFills();
   };
 
+  // Editable shapes are outlines only; their fill comes from the stack fill layer.
+  // fillOpacity 0 (not fill: false) keeps the inside clickable.
   const applyStyle = (layer) => {
     const zoneClass = layer.feature?.properties?.zone_class;
-    const style = featureStyle(categoryRef.current, zoneClass);
+    const style = { ...featureStyle(categoryRef.current, zoneClass), fillOpacity: 0 };
     layer.setStyle(layer === selectedLayerRef.current ? { ...style, weight: 4, opacity: 1, dashArray: null } : style);
   };
 
@@ -283,7 +412,6 @@ export default function MapLayerStudio({ api, notify, token }) {
       return;
     }
     applyStyle(layer);
-    layer.bringToFront();
     const properties = layer.feature?.properties || {};
     setSelected({ zoneClass: properties.zone_class, label: properties.label || '', editing: false, moving: false });
   };
@@ -296,7 +424,7 @@ export default function MapLayerStudio({ api, notify, token }) {
     layer.on('click', (event) => {
       if (toolRef.current) return;
       L.DomEvent.stopPropagation(event);
-      handlersRef.current.select?.(layer);
+      handlersRef.current.selectAt?.(layer, event.latlng);
     });
     layer.on('pm:edit', () => handlersRef.current.changed?.());
     layer.on('pm:dragend', () => handlersRef.current.changed?.());
@@ -391,17 +519,25 @@ export default function MapLayerStudio({ api, notify, token }) {
         referenceLayerRef.current?.setStyle(referenceStyle(mapViewRef.current.basemap, map.getZoom()));
       },
       select: selectLayer,
+      selectAt: selectAtPoint,
       changed: markChanged,
       onCreate: ({ layer }) => {
+        // A new shape goes on top of the stack, so it wins where it overlaps.
+        layer._stackOrder = topStackOrder() + 1;
         decorateLayer(layer, { zone_class: newClass[categoryRef.current] });
+        restack();
         markChanged();
         selectLayer(layer);
       },
       onCut: ({ layer, originalLayer }) => {
         const properties = originalLayer?.feature?.properties || layer?.feature?.properties || {};
         const pieces = layer instanceof L.LayerGroup && !(layer instanceof L.Polygon) ? layer.getLayers() : [layer];
-        pieces.forEach((piece) => decorateLayer(piece, properties));
+        pieces.forEach((piece) => {
+          piece._stackOrder = originalLayer?._stackOrder ?? topStackOrder() + 1;
+          decorateLayer(piece, properties);
+        });
         if (selectedLayerRef.current === originalLayer) selectLayer(null);
+        restack();
         markChanged();
       }
     };
@@ -419,6 +555,9 @@ export default function MapLayerStudio({ api, notify, token }) {
     stopTools();
     selectLayer(null);
     drawGroupRef.current?.clearLayers();
+    window.clearTimeout(stackFillTimerRef.current);
+    stackFillRef.current?.remove();
+    stackFillRef.current = null;
     setShapeCount(0);
     setOutsideArea(false);
     setDirty(false);
@@ -431,36 +570,32 @@ export default function MapLayerStudio({ api, notify, token }) {
 
   const loadIntoEditor = (geojson) => {
     clearEditor();
+    let order = 0;
     L.geoJSON(geojson).eachLayer((layer) => {
+      // The saved feature order is the stack: first = bottom.
+      layer._stackOrder = order;
+      order += 1;
       drawGroupRef.current.addLayer(layer);
       decorateLayer(layer, layer.feature?.properties || {});
     });
+    restack();
     refreshShapeStats();
+    drawStackFills();
     fitTo(drawGroupRef.current);
   };
 
-  const collectGeoJSON = () => {
-    const features = [];
-    const add = (layer) => {
-      if (layer instanceof L.Polygon) {
-        const feature = layer.toGeoJSON(7);
-        feature.properties = { ...(layer.feature?.properties || {}) };
-        features.push(feature);
-      } else if (layer instanceof L.LayerGroup) {
-        layer.eachLayer(add);
-      }
-    };
-    drawGroupRef.current?.eachLayer(add);
-    return { type: 'FeatureCollection', features };
-  };
+  // Saved bottom to top, so the backend scores the stack the same way.
+  const collectGeoJSON = () => ({ type: 'FeatureCollection', features: stackedShapes().map(shapeFeature) });
 
   // ---- read-only preview of a saved layer ------------------------------------------
 
   const showPreview = useCallback((geojson, previewCategory) => {
     previewLayerRef.current?.remove();
     previewLayerRef.current = null;
+    setPreviewZones(previewCategory === 'zoning' ? zoningClassesIn(geojson) : []);
     if (!geojson || !mapRef.current) return;
-    previewLayerRef.current = L.geoJSON(geojson, {
+    // Show what scans read: each shape minus whatever is stacked on top of it.
+    previewLayerRef.current = L.geoJSON(resolveStack(geojson.features), {
       pmIgnore: true,
       style: (feature) => featureStyle(previewCategory, feature?.properties?.zone_class),
       onEachFeature: (feature, layer) => {
@@ -749,6 +884,15 @@ export default function MapLayerStudio({ api, notify, token }) {
     setSelected((current) => ({ ...current, moving: layer.pm.layerDragEnabled(), editing: false }));
   };
 
+  const moveSelectedInStack = (toTop) => {
+    const layer = selectedLayerRef.current;
+    if (!layer) return;
+    const orders = stackedShapes().map((shape) => shape._stackOrder ?? 0);
+    layer._stackOrder = toTop ? Math.max(...orders) + 1 : Math.min(...orders) - 1;
+    restack();
+    markChanged();
+  };
+
   const deleteSelected = () => {
     const layer = selectedLayerRef.current;
     if (!layer) return;
@@ -926,6 +1070,11 @@ export default function MapLayerStudio({ api, notify, token }) {
               </button>
               <button type="button" className={`${buttonClass.danger} px-2`} onClick={deleteSelected}>Delete</button>
             </div>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <button type="button" className={`${buttonClass.secondary} px-2`} onClick={() => moveSelectedInStack(true)}>Bring to front</button>
+              <button type="button" className={`${buttonClass.secondary} px-2`} onClick={() => moveSelectedInStack(false)}>Send to back</button>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-muted)]">Where shapes overlap, the one on top wins. New shapes go on top. Click again to select the shape underneath.</p>
             {selected.editing && <p className="mt-2 text-xs text-[var(--text-muted)]">Drag a corner to move it, drag a midpoint to add one, right-click a corner to remove it.</p>}
           </div>
         )}
@@ -1072,9 +1221,9 @@ export default function MapLayerStudio({ api, notify, token }) {
           )}
           <div className="relative">
             <div ref={containerRef} className="map-layer-studio-map h-[60svh] min-h-[360px] w-full lg:h-[620px]" />
-            {!editing && (
-              <div className="pointer-events-none absolute bottom-14 left-3 z-[450] flex flex-wrap sm:bottom-9 gap-x-3 gap-y-1 rounded-lg bg-[var(--bg-glass)] px-3 py-2 text-xs text-[var(--text-main)] shadow">
-                {ZONE_CLASSES[category].map((item) => (
+            {!editing && (category === 'hazard' || previewZones.length > 0) && (
+              <div className="pointer-events-none absolute bottom-14 left-3 z-[450] flex max-w-[calc(100%-1.5rem)] flex-wrap sm:bottom-9 gap-x-3 gap-y-1 rounded-lg bg-[var(--bg-glass)] px-3 py-2 text-xs text-[var(--text-main)] shadow">
+                {(category === 'zoning' ? previewZones : ZONE_CLASSES[category]).map((item) => (
                   <span key={item.id} className="inline-flex items-center gap-1.5">
                     <ClassSwatch color={item.color} fill={item.fill} />
                     {item.label}
@@ -1127,6 +1276,12 @@ export default function MapLayerStudio({ api, notify, token }) {
           {editing ? editorPanel : layerList}
         </Card>
       </div>
+
+      {category === 'zoning' && !editing && (
+        <Card className="min-w-0 overflow-hidden">
+          <ZoningAllowedUses api={api} notify={notify} />
+        </Card>
+      )}
     </div>
   );
 }

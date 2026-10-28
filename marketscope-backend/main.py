@@ -35,7 +35,12 @@ from routers import (
 )
 from services.ahp_weights import _load_ahp_weights_cache
 from services.hazard import preload_hazard_layer_cache
-from services.map_layers import seed_builtin_map_layers
+from services.map_layers import (
+    migrate_layers_to_stack_order,
+    migrate_zoning_to_lgu_classes,
+    seed_builtin_map_layers,
+    seed_zoning_allowed_uses,
+)
 from services.osm_data import get_reference_map_json, preload_pbf_competitor_cache, preload_pbf_spatial_context_cache
 from services.trend_scan import (
     mark_interrupted_trend_runs,
@@ -56,6 +61,11 @@ async def lifespan(app: FastAPI):
     # First startup only: copy the old flood file and zoning boxes into map_layers.
     # Runs before the cache preloads so they never load an empty layer by mistake.
     seed_builtin_map_layers()
+    # One time: reorder saved layers so the "top shape wins" rule keeps their old results.
+    migrate_layers_to_stack_order()
+    # One time: old zoning classes become LGU zones; default allowed-uses table.
+    migrate_zoning_to_lgu_classes()
+    seed_zoning_allowed_uses()
     
     # Create asyncpg pool with retry logic
     app.state.db_pool = await connect_with_retry()

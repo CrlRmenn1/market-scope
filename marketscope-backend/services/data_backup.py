@@ -35,7 +35,7 @@ BACKUP_DATASETS = {
     "msmes": ["custom_msme"],
     "users": ["users"],
     "spaces": ["user_space_submissions", "admin_space_submissions"],
-    "map-layers": ["map_layers", "map_layer_files", "app_flags"],
+    "map-layers": ["map_layers", "map_layer_files", "zoning_allowed_uses", "app_flags"],
 }
 
 MISSING_PARENT_MESSAGES = {

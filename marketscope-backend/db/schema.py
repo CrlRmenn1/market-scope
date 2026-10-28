@@ -318,6 +318,7 @@ def ensure_map_layers_tables(cursor):
     map_layers: one row per hazard or zoning layer; geojson is a FeatureCollection
         whose features carry properties.zone_class. At most one active layer per category.
     map_layer_files: original files an admin imported (or the built-in seed source).
+    zoning_allowed_uses: business types allowed in each LGU zone (admin-editable).
     app_flags: small key/value markers (one-time seed, last layer change).
     """
     cursor.execute(
@@ -357,6 +358,17 @@ def ensure_map_layers_tables(cursor):
         """
     )
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_map_layer_files_layer ON map_layer_files(layer_id)")
+    # Which business types are allowed in which LGU zone (services/zoning.py).
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS zoning_allowed_uses (
+            id SERIAL PRIMARY KEY,
+            zone_class VARCHAR(40) NOT NULL,
+            business_type VARCHAR(64) NOT NULL,
+            UNIQUE (zone_class, business_type)
+        )
+        """
+    )
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS app_flags (

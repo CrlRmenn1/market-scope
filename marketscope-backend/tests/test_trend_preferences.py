@@ -149,7 +149,7 @@ class BuildScanCandidatesTests(unittest.TestCase):
 
     def test_grid_covers_zone_corners(self):
         min_lat, _, min_lon, _ = ZONING_LAYERS["commercial_proper"]
-        commercial = next(f for f in BUILTIN_ZONING if f["zone_class"] == "commercial")
+        commercial = next(f for f in BUILTIN_ZONING if f["zone_class"] == "general_commercial")
         points = build_area_grid_points(commercial)
         self.assertIn((round(min_lat, 6), round(min_lon, 6)), {(p["lat"], p["lon"]) for p in points})
         self.assertEqual(points[0]["label"], "Commercial center spot 1")
@@ -157,7 +157,7 @@ class BuildScanCandidatesTests(unittest.TestCase):
     def test_grid_skips_points_outside_a_polygon(self):
         triangle = features_to_zoning_cache([{
             "type": "Feature",
-            "properties": {"zone_class": "commercial"},
+            "properties": {"zone_class": "general_commercial"},
             "geometry": {"type": "Polygon", "coordinates": [[
                 [125.67, 7.30], [125.69, 7.30], [125.67, 7.315], [125.67, 7.30],
             ]]},

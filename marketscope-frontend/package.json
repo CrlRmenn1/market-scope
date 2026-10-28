@@ -12,6 +12,7 @@
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "2.20.2",
     "@heroicons/react": "^2.2.0",
+    "@turf/difference": "7.4.0",
     "framer-motion": "^13.1.0",
     "html2pdf.js": "^0.14.0",
     "leaflet": "^1.9.4",

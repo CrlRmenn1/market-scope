@@ -1,8 +1,10 @@
 """Map layer categories and the zone classes an admin can give each polygon.
 
 Every polygon in a map layer carries properties.zone_class. Hazard classes map
-onto the flood Var levels used by services/hazard.py; zoning classes carry the
-zoning score used by services/zoning.py.
+onto the flood Var levels used by services/hazard.py. Zoning classes are the
+zones of the Panabo City Integrated Zoning Map C.Y. 2020-2029; a business is
+either allowed in a zone (full zoning score) or not (zero), per the admin's
+allowed-uses table (services/zoning.py).
 """
 from constants.geo import ZONING_LAYERS
 
@@ -21,20 +23,83 @@ HAZARD_CLASS_VARS = {
 HAZARD_VAR_CLASSES = {var: zone_class for zone_class, var in HAZARD_CLASS_VARS.items()}
 
 
-# Industrial gives its score to INDUSTRIAL_ZONE_BUSINESSES and other_score to everything else.
+# Zones of the Panabo City Integrated Zoning Map C.Y. 2020-2029, in legend
+# order, with the group the admin picker shows them under.
 ZONING_CLASSES = {
-    "commercial": {"label": "Commercial", "score": 25, "status": "Compliant (Commercial Center)"},
-    "mixed_use": {"label": "Mixed-use", "score": 20, "status": "Compliant (Mixed-Use Zone)"},
-    "industrial": {
-        "label": "Industrial",
-        "score": 25,
-        "status": "Compliant (Agri-Industrial Support)",
-        "other_score": 5,
-        "other_status": "Non-Compliant (Heavy Industrial Zone)",
-    },
-    "residential": {"label": "Residential", "score": 10, "status": "Limited (Residential Zone)"},
-    "institutional": {"label": "Institutional", "score": 5, "status": "Restricted (Institutional Zone)"},
-    "agricultural": {"label": "Agricultural", "score": 5, "status": "Restricted (Agricultural Zone)"},
+    "general_commercial": {"label": "General Commercial Zone", "group": "Commercial"},
+    "commercial_2": {"label": "Commercial-2 (C-2) Zone", "group": "Commercial"},
+    "commercial_3": {"label": "Commercial-3 (C-3) Zone", "group": "Commercial"},
+    "tourism": {"label": "Tourism Zone", "group": "Commercial"},
+    "general_residential": {"label": "General Residential Zone", "group": "Residential"},
+    "residential_1": {"label": "Residential-1 (R-1) Zone", "group": "Residential"},
+    "socialized_housing": {"label": "Socialized Housing Zone", "group": "Residential"},
+    "agri_industrial": {"label": "Agri-Industrial Zone", "group": "Industrial"},
+    "industrial_1": {"label": "Industrial-1 (I-1) Zone", "group": "Industrial"},
+    "industrial_2": {"label": "Industrial-2 (I-2) Zone", "group": "Industrial"},
+    "industrial_3": {"label": "Industrial-3 (I-3) Zone", "group": "Industrial"},
+    "general_institutional": {"label": "General Institutional Zone", "group": "Institutional & services"},
+    "special_institutional": {"label": "Special Institutional Zone", "group": "Institutional & services"},
+    "utilities_transport": {"label": "Utilities, Transportation and Services Zone", "group": "Institutional & services"},
+    "parks_recreation": {"label": "Parks and Recreation Zone", "group": "Open space"},
+    "cemetery": {"label": "Cemetery/Memorial Park Zone", "group": "Open space"},
+    "buffer_greenbelt": {"label": "Buffer/Greenbelt Zone", "group": "Open space"},
+    "production_agricultural": {"label": "Production Agricultural Sub-Zone", "group": "Agriculture & environment"},
+    "aquaculture": {"label": "Aquaculture Sub-Zone", "group": "Agriculture & environment"},
+    "mangrove": {"label": "Mangrove Sub-Zone", "group": "Agriculture & environment"},
+    "forest_reserve": {"label": "Forest Reserve Sub-Zone", "group": "Agriculture & environment"},
+    "quarry": {"label": "Quarry Sub-Zone", "group": "Agriculture & environment"},
+    "special_use": {"label": "Special Used Zone", "group": "Agriculture & environment"},
+}
+
+
+# Zoning score a business gets in a zone where it is allowed (0 otherwise).
+ZONING_ALLOWED_SCORE = 25
+
+
+_ALL_BUSINESSES = ("coffee", "print", "laundry", "carwash", "kiosk", "water", "bakery", "pharmacy", "barber", "moto", "internet", "meat", "hardware")
+_INDUSTRIAL_BUSINESSES = ("laundry", "carwash", "hardware", "moto")
+
+
+# Starting allowed-uses table (zone -> business types), loosely following the
+# HLURB model zoning ordinance. The admin edits the live copy in the database
+# to match Panabo's zoning ordinance; zones left out allow nothing.
+DEFAULT_ZONING_ALLOWED_USES = {
+    "general_commercial": _ALL_BUSINESSES,
+    "commercial_2": _ALL_BUSINESSES,
+    "commercial_3": _ALL_BUSINESSES,
+    "tourism": ("coffee", "kiosk", "bakery", "pharmacy", "barber", "water", "print", "internet"),
+    "general_residential": ("kiosk", "water", "bakery", "pharmacy", "barber", "print", "laundry", "coffee", "internet", "meat"),
+    "residential_1": ("kiosk", "water", "bakery", "barber"),
+    "socialized_housing": ("kiosk", "water", "bakery", "barber"),
+    "industrial_1": _INDUSTRIAL_BUSINESSES + ("water", "print"),
+    "industrial_2": _INDUSTRIAL_BUSINESSES,
+    "industrial_3": _INDUSTRIAL_BUSINESSES,
+    "agri_industrial": _INDUSTRIAL_BUSINESSES,
+    "general_institutional": ("kiosk", "coffee", "print", "pharmacy", "bakery"),
+    "utilities_transport": ("kiosk", "coffee", "bakery", "pharmacy", "moto", "carwash", "water"),
+    "parks_recreation": ("kiosk", "coffee"),
+}
+
+
+# The six zoning classes used before the LGU zones, and what they became.
+LEGACY_ZONE_CLASSES = {
+    "commercial": "general_commercial",
+    "mixed_use": "commercial_2",
+    "industrial": "agri_industrial",
+    "residential": "general_residential",
+    "institutional": "general_institutional",
+    "agricultural": "production_agricultural",
+}
+
+
+# Their old scores; the one-time stack-order migration ranks overlaps by these.
+LEGACY_ZONING_SCORES = {
+    "commercial": 25,
+    "mixed_use": 20,
+    "industrial": 25,
+    "residential": 10,
+    "institutional": 5,
+    "agricultural": 5,
 }
 
 
@@ -47,19 +112,14 @@ ZONE_CLASSES_BY_CATEGORY = {
 # Class given to imported polygons that carry no usable class; the admin reassigns it.
 DEFAULT_IMPORT_CLASS = {
     "hazard": "high",
-    "zoning": "commercial",
+    "zoning": "general_commercial",
 }
-
-
-# Zoning classes the trend scan places "area" candidates in.
-TREND_SCAN_ZONE_CLASSES = ("commercial", "mixed_use")
-TREND_SCAN_INDUSTRIAL_ZONE_CLASSES = ("industrial",)
 
 
 # The zoning boxes the system used before zoning became an admin layer.
 BUILTIN_ZONING_CLASSES = {
-    "commercial_proper": ("commercial", "Commercial center"),
-    "industrial_anflo": ("industrial", "Agri-industrial zone"),
+    "commercial_proper": ("general_commercial", "Commercial center"),
+    "industrial_anflo": ("agri_industrial", "Agri-industrial zone"),
 }
 
 

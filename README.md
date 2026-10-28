@@ -97,7 +97,7 @@ public/            sw.js (map tile cache)
 | Competition / road / anchor / building sub-score | `services/scoring.py` (`_score_*` functions) | |
 | Competitors missing or wrong | `services/osm_data.py` (OSM data), `db/queries.py` (`fetch_custom_msmes`) | |
 | Flood hazard score | `services/hazard.py`, the active hazard layer in `map_layers` | `utils/hazardStyle.js` |
-| Zoning score | `services/zoning.py`, the active zoning layer in `map_layers`, scores in `constants/map_layers.py` | `utils/zoneStyle.js` |
+| Zoning score | `services/zoning.py`, the active zoning layer in `map_layers`, allowed uses in `zoning_allowed_uses` (zones in `constants/map_layers.py`) | `utils/zoneStyle.js`, `components/admin/ZoningAllowedUses.jsx` |
 | Map layers (admin) | `routers/map_layers.py`, `services/map_layers.py`, `db/map_layer_queries.py` | `components/admin/MapLayerStudio.jsx` |
 | AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), seed matrices in `db/schema.py`. There is no admin editor; change weights in the `ahp_weight_configs` table. | |
 | Business categories / profiles | `constants/msme.py` | `utils/businessTypes.js` |
@@ -115,7 +115,7 @@ public/            sw.js (map tile cache)
 The Trends page shows high-chance spots for the user's business, found by scans that run in the background with the same engine as a manual scan (`perform_analysis`).
 
 1. **Which businesses.** `services/trend_preferences.py` uses the user's two trend preferences: the primary business, plus every other business type usually run in the preferred setup (`TYPICAL_SETUP` in `constants/msme.py`).
-2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart inside the active zoning layer's commercial and mixed-use areas. Business types allowed in industrial areas (`INDUSTRIAL_ZONE_BUSINESSES`) get those areas' grid too.
+2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart inside every zone of the active zoning layer where the business type is allowed (the admin's allowed-uses table).
 3. **Scanning.** `services/trend_scan.py` keeps a queue with one worker thread. For each business type it runs `perform_analysis` on every spot (radius 340 m, no history row saved). Each result goes into `trend_scan_results`, and status and progress go into `trend_scan_runs`.
 4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24), and started after the last change to an active map layer, is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now".
 5. **What the page shows.** `services/trend_recommendations.py` returns the primary business's saved spots scoring at least `MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE` (70), ranked by viability score. Under "Other {setup} businesses" it shows the 2 same-setup businesses whose best spot scored highest. "View full report" opens the saved report, so no rescan is needed.
@@ -126,8 +126,9 @@ The Trends page shows high-chance spots for the user's business, found by scans 
 
 Flood hazard and zoning areas are stored in the database, in the `map_layers` table (`db/schema.py`). Each layer is a GeoJSON FeatureCollection of polygons, and every polygon has a `zone_class`:
 
+- **Stacking:** where shapes overlap, the shape on top of the layer wins (`services/layer_stack.py`); new shapes go on top.
 - **Hazard:** `very_high`, `high`, `moderate` (scores 5 / 12 / 18; outside every polygon is Low Risk, 25).
-- **Zoning:** `commercial` 25, `mixed_use` 20, `industrial` 25 for `INDUSTRIAL_ZONE_BUSINESSES` and 5 for others, `residential` 10, `institutional` 5, `agricultural` 5. Outside every polygon scores 0.
+- **Zoning:** the 23 zones of the Panabo City Integrated Zoning Map C.Y. 2020-2029 (`ZONING_CLASSES` in `constants/map_layers.py`, e.g. `general_commercial`, `commercial_2`, `tourism`, `general_residential`, `industrial_1`, `agri_industrial`, `quarry`). Zoning is pass/fail: a business type allowed in the zone scores 25, otherwise 0; outside every polygon scores 0. Which business types are allowed where is the `zoning_allowed_uses` table, edited in Admin → Map layers → Zoning → Allowed businesses (seeded once from `DEFAULT_ZONING_ALLOWED_USES`). The six older classes (`commercial`, `mixed_use`, …) are converted once on startup (`LEGACY_ZONE_CLASSES`).
 
 One layer per type is active, and scans use only the active ones. With no active zoning layer every spot scores 0 for zoning; with no active hazard layer every spot is Low Risk.
 

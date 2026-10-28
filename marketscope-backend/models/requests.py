@@ -177,3 +177,7 @@ class AdminMapLayerUpdateRequest(BaseModel):
     name: str
     source_note: str | None = None
     geojson: dict
+
+class AdminZoningAllowedUsesRequest(BaseModel):
+    # zone_class -> business types allowed there
+    allowed: dict[str, list[str]]

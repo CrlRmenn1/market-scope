@@ -12,7 +12,7 @@ import Modal from '../components/common/Modal';
 import TourSpotlight from '../components/common/TourSpotlight';
 import { EASE_STANDARD } from '../constants/motion';
 import { getHazardStyle, getHazardVar } from '../utils/hazardStyle';
-import { getZoneStyle, getZoningClass, ZONING_CLASSES } from '../utils/zoneStyle';
+import { getZoneStyle, getZoningClass, zoningClassesIn } from '../utils/zoneStyle';
 import { fetchActiveMapLayer, PANABO_BOUNDS } from '../utils/mapLayers';
 
 // Fix for Vite + Leaflet image bug
@@ -50,9 +50,9 @@ const MAP_VIEW_MODES = [
 // Matches the app's --ease-standard CSS token, for JS-driven Framer Motion
 // transitions to feel consistent with the rest of the UI's motion.
 const hazardNameByVar = {
-  1: 'Very High Flood Hazard (5-Year)',
-  2: 'High Flood Hazard (5-Year)',
-  3: 'Moderate Flood Hazard (5-Year)'
+  1: 'Very High Flood Hazard',
+  2: 'High Flood Hazard',
+  3: 'Moderate Flood Hazard'
 };
 
 export default function Home({ onViewReport, theme, userId, previewSelection, onSpaceDetailOpenChange, tourActive = false, onTourEnd, isActive = true }) {
@@ -78,6 +78,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
   const [selectedSpaceMarker, setSelectedSpaceMarker] = useState(null);
   const [mapViewMode, setMapViewMode] = useState('normal');
   const [basemap, setBasemap] = useState(readStoredBasemap);
+  const [zoningLegend, setZoningLegend] = useState([]); // zones drawn in the active zoning layer
   const satelliteLayerRef = useRef(null);
   const referenceLinesRef = useRef(null);
   const referenceLabelsRef = useRef(null);
@@ -443,7 +444,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
           const layer = L.geoJSON(geojson, {
             style: (feature) => getZoneStyle(feature?.properties?.zone_class),
             onEachFeature: (feature, layerInstance) => {
-              const zoneName = `${getZoningClass(feature?.properties?.zone_class).label} Zone`;
+              const zoneName = getZoningClass(feature?.properties?.zone_class).label;
               const label = feature?.properties?.label;
               layerInstance.bindTooltip(label ? `${zoneName}: ${label}` : zoneName, {
                 className: 'hazard-zone-tooltip'
@@ -451,6 +452,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
             }
           });
           zoningGeoJsonLayerRef.current = layer;
+          setZoningLegend(zoningClassesIn(geojson));
           if (mapViewModeRef.current === 'zoning') {
             layer.addTo(hazardLayerGroup.current);
           }
@@ -1252,7 +1254,8 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
             </>
           ) : mapViewMode === 'zoning' ? (
             <>
-              {ZONING_CLASSES.map((zone) => (
+              {zoningLegend.length === 0 && <div className="legend-item"><span className="legend-text">No zoning map yet</span></div>}
+              {zoningLegend.map((zone) => (
                 <div key={zone.id} className="legend-item">
                   <span className="legend-color" style={{ background: zone.fill, border: `2px solid ${zone.color}` }}></span>
                   <span className="legend-text">{zone.label}</span>

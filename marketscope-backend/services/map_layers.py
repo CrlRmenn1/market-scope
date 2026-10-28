@@ -5,6 +5,8 @@ How it fits together
     save goes through normalize_layer_geojson(): only polygons are kept, broken
     shapes are repaired, each polygon needs a valid zone_class, and everything
     is clipped to PANABO_BOUNDS.
+  - Shapes in a layer form a stack (first = bottom, last = top): where they
+    overlap, the shape on top wins (services/layer_stack.py).
   - One layer per category can be active. services/hazard.py and
     services/zoning.py score against the active layer and keep it in memory;
     changing the active layer reloads those caches and marks saved trend scans
@@ -21,11 +23,15 @@ from threading import Lock
 from constants.geo import PANABO_BOUNDS
 from constants.map_layers import (
     DEFAULT_IMPORT_CLASS,
+    DEFAULT_ZONING_ALLOWED_USES,
     HAZARD_VAR_CLASSES,
+    LEGACY_ZONE_CLASSES,
     MAP_LAYER_CATEGORIES,
     ZONE_CLASSES_BY_CATEGORY,
+    ZONING_CLASSES,
     builtin_zoning_feature_collection,
 )
+from constants.msme import SME_DATABASE
 from core.paths import BACKEND_DIR
 from db.map_layer_queries import (
     delete_layer,
@@ -35,15 +41,20 @@ from db.map_layer_queries import (
     get_layer_file,
     insert_layer,
     insert_layer_file,
+    list_layer_stacks,
     list_layers,
+    list_zoning_allowed_uses,
     open_map_layer_cursor,
+    replace_zoning_allowed_uses,
     set_flag,
     set_layer_active,
+    set_layer_geojson,
     update_layer,
 )
 from services import hazard as hazard_service
 from services import zoning as zoning_service
-from utils.geo_libs import box, gpd, make_valid, mapping, shape, unary_union
+from services.layer_stack import flatten_feature_collection, order_by_old_priority, polygonal
+from utils.geo_libs import box, gpd, make_valid, mapping, shape
 
 
 MAX_IMPORT_BYTES = 20 * 1024 * 1024
@@ -59,6 +70,12 @@ IMPORT_CONTENT_TYPES = {
 
 SEED_FLAG = "map_layers_seeded"
 CHANGED_FLAG = "map_layers_changed_at"
+# Set once existing layers were reordered for the "top shape wins" stacking rule.
+STACK_ORDER_FLAG = "map_layers_stack_order_v1"
+# Set once old zoning classes were converted to the LGU zones.
+LGU_ZONES_FLAG = "zoning_lgu_classes_v1"
+# Set once the default allowed-uses table was written.
+ALLOWED_USES_SEED_FLAG = "zoning_allowed_uses_seeded"
 
 # Where the built-in flood layer was read from before layers moved into the database.
 BUILTIN_HAZARD_SOURCES = [
@@ -87,19 +104,6 @@ def _panabo_clip():
     return box(PANABO_BOUNDS[2], PANABO_BOUNDS[0], PANABO_BOUNDS[3], PANABO_BOUNDS[1])
 
 
-def _polygonal(geometry):
-    """Keep only the polygon parts of a geometry (drops stray lines/points)."""
-    if geometry is None or geometry.is_empty:
-        return None
-    if geometry.geom_type in ("Polygon", "MultiPolygon"):
-        return geometry
-    if geometry.geom_type == "GeometryCollection":
-        parts = [part for part in geometry.geoms if part.geom_type in ("Polygon", "MultiPolygon") and not part.is_empty]
-        if parts:
-            return unary_union(parts)
-    return None
-
-
 def _clean_geometry(raw_geometry, clip):
     try:
         geometry = shape(raw_geometry)
@@ -107,10 +111,10 @@ def _clean_geometry(raw_geometry, clip):
         return None
     if not geometry.is_valid:
         geometry = make_valid(geometry)
-    geometry = _polygonal(geometry)
+    geometry = polygonal(geometry)
     if geometry is None:
         return None
-    return _polygonal(geometry.intersection(clip))
+    return polygonal(geometry.intersection(clip))
 
 
 def _raw_features(geojson):
@@ -129,6 +133,9 @@ def resolve_zone_class(category: str, properties: dict, default: str | None = No
     """properties.zone_class when valid; for hazard layers a flood Var column also works."""
     properties = properties or {}
     zone_class = str(properties.get("zone_class") or "").strip().lower()
+    if category == "zoning":
+        # Files and backups from before the LGU zones use the old class names.
+        zone_class = LEGACY_ZONE_CLASSES.get(zone_class, zone_class)
     if zone_class in ZONE_CLASSES_BY_CATEGORY[category]:
         return zone_class
 
@@ -238,6 +245,8 @@ def gis_file_to_feature_collection(category: str, filename: str, data: bytes):
         properties["zone_class"] = resolve_zone_class(category, properties, DEFAULT_IMPORT_CLASS[category])
         properties["label"] = str(row[label_column]) if label_column and row[label_column] is not None else ""
         raw_features.append({"type": "Feature", "properties": properties, "geometry": mapping(row.geometry)})
+    # A file's row order means nothing, so stack it the way overlaps used to resolve.
+    raw_features = order_by_old_priority(category, raw_features)
     return normalize_layer_geojson(category, {"type": "FeatureCollection", "features": raw_features})
 
 
@@ -335,6 +344,28 @@ def get_active_map_layer(category: str):
     category = _check_category(category)
     with open_map_layer_cursor() as cursor:
         return get_active_layer(cursor, category)
+
+
+_FLATTENED_CACHE = {}  # category -> ((layer id, updated_at), flattened geojson)
+_FLATTENED_LOCK = Lock()
+
+
+def get_active_map_layer_flattened(category: str):
+    """The active layer with its stack flattened (no overlaps), for the user maps."""
+    layer = get_active_map_layer(category)
+    if not layer:
+        return None
+    key = (layer["id"], layer["updated_at"])
+    with _FLATTENED_LOCK:
+        cached = _FLATTENED_CACHE.get(category)
+        if cached and cached[0] == key:
+            layer["geojson"] = cached[1]
+            return layer
+    flattened = flatten_feature_collection(layer["geojson"])
+    with _FLATTENED_LOCK:
+        _FLATTENED_CACHE[category] = (key, flattened)
+    layer["geojson"] = flattened
+    return layer
 
 
 def create_map_layer(category: str, name: str, source_note: str | None, geojson, activate: bool = False):
@@ -437,6 +468,8 @@ def _load_builtin_hazard_layer():
                 if zone_class is None:
                     continue
                 raw_features.append({"type": "Feature", "properties": {"zone_class": zone_class}, "geometry": mapping(row.geometry)})
+            # Most severe level on top, matching how the flood file was always scored.
+            raw_features = order_by_old_priority("hazard", raw_features)
             return normalize_layer_geojson("hazard", {"type": "FeatureCollection", "features": raw_features}), path
         except MapLayerError as exc:
             _log(f"built-in flood source skipped ({path}): {exc}")
@@ -472,3 +505,111 @@ def seed_builtin_map_layers():
         _log("seeded the built-in hazard and zoning layers")
     except Exception as exc:
         _log(f"seeding built-in layers failed (will retry next startup): {exc}")
+
+
+def migrate_layers_to_stack_order():
+    """One time: reorder every saved layer so the stacking rule gives the old results.
+
+    Before stacking, overlaps went to the most severe flood level / the
+    best-scoring zone. Putting those shapes on top keeps every existing layer
+    scoring as it did; shapes drawn afterwards go on top of them. Only the
+    order changes, never the shapes.
+    """
+    try:
+        with open_map_layer_cursor() as cursor:
+            if get_flag(cursor, STACK_ORDER_FLAG):
+                return
+            layers = list_layer_stacks(cursor)
+            for layer in layers:
+                geojson = layer["geojson"] or {}
+                features = geojson.get("features") or []
+                ordered = order_by_old_priority(layer["category"], features)
+                if ordered != features:
+                    set_layer_geojson(cursor, layer["id"], {**geojson, "features": ordered})
+            set_flag(cursor, STACK_ORDER_FLAG, "1")
+        _log(f"reordered {len(layers)} layer(s) for the stacking rule")
+    except Exception as exc:
+        _log(f"stack-order migration failed (will retry next startup): {exc}")
+
+
+def migrate_zoning_to_lgu_classes():
+    """One time: switch saved zoning shapes from the six old classes to the LGU zones.
+
+    Runs after migrate_layers_to_stack_order, which still needs the old classes
+    to rank overlaps.
+    """
+    try:
+        with open_map_layer_cursor() as cursor:
+            if get_flag(cursor, LGU_ZONES_FLAG):
+                return
+            converted = 0
+            for layer in list_layer_stacks(cursor):
+                if layer["category"] != "zoning":
+                    continue
+                geojson = layer["geojson"] or {}
+                features = []
+                changed = False
+                for feature in geojson.get("features") or []:
+                    properties = feature.get("properties") or {}
+                    new_class = LEGACY_ZONE_CLASSES.get(properties.get("zone_class"))
+                    if new_class:
+                        feature = {**feature, "properties": {**properties, "zone_class": new_class}}
+                        changed = True
+                    features.append(feature)
+                if changed:
+                    set_layer_geojson(cursor, layer["id"], {**geojson, "features": features})
+                    converted += 1
+            set_flag(cursor, LGU_ZONES_FLAG, "1")
+        _log(f"converted {converted} zoning layer(s) to the LGU zones")
+    except Exception as exc:
+        _log(f"LGU zone migration failed (will retry next startup): {exc}")
+
+
+def seed_zoning_allowed_uses():
+    """First startup only: write the default allowed-uses table for the admin to adjust."""
+    try:
+        with open_map_layer_cursor() as cursor:
+            if get_flag(cursor, ALLOWED_USES_SEED_FLAG):
+                return
+            replace_zoning_allowed_uses(cursor, [
+                (zone_class, business_type)
+                for zone_class, businesses in DEFAULT_ZONING_ALLOWED_USES.items()
+                for business_type in businesses
+            ])
+            set_flag(cursor, ALLOWED_USES_SEED_FLAG, "1")
+        _log("seeded the default zoning allowed-uses table")
+    except Exception as exc:
+        _log(f"seeding zoning allowed uses failed (will retry next startup): {exc}")
+
+
+# ---- zoning allowed uses (admin) ---------------------------------------------------------
+
+def get_zoning_allowed_uses():
+    """{zone_class: [business types]} for every LGU zone (empty list = nothing allowed)."""
+    with open_map_layer_cursor() as cursor:
+        rows = list_zoning_allowed_uses(cursor)
+    allowed = {zone_class: [] for zone_class in ZONING_CLASSES}
+    for row in rows:
+        if row["zone_class"] in allowed:
+            allowed[row["zone_class"]].append(row["business_type"])
+    return allowed
+
+
+def update_zoning_allowed_uses(allowed):
+    """Replace the allowed-uses table. Scans re-score and saved trend scans go stale."""
+    if not isinstance(allowed, dict):
+        raise MapLayerError("Allowed uses must map each zone to a list of business types.")
+    pairs = []
+    for zone_class, businesses in allowed.items():
+        if zone_class not in ZONING_CLASSES:
+            raise MapLayerError(f"Unknown zone: {zone_class}")
+        for business_type in businesses or []:
+            if business_type not in SME_DATABASE:
+                raise MapLayerError(f"Unknown business type: {business_type}")
+            pairs.append((zone_class, business_type))
+
+    with open_map_layer_cursor() as cursor:
+        replace_zoning_allowed_uses(cursor, sorted(set(pairs)))
+        change = _active_layer_changed(cursor, "zoning")
+    _apply_active_layer_change(change)
+    return get_zoning_allowed_uses()

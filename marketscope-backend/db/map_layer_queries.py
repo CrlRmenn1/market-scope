@@ -101,6 +101,17 @@ def update_layer(cursor, layer_id: int, name: str, source_note: str | None, geoj
     return cursor.fetchone()
 
 
+def list_layer_stacks(cursor):
+    """id, category and geojson of every layer (for one-time data migrations)."""
+    cursor.execute("SELECT id, category, geojson FROM map_layers ORDER BY id")
+    return cursor.fetchall()
+
+
+def set_layer_geojson(cursor, layer_id: int, geojson: dict):
+    """Rewrite a layer's shapes without touching updated_at (migrations only)."""
+    cursor.execute("UPDATE map_layers SET geojson = %s WHERE id = %s", (Json(geojson), layer_id))
+
+
 def set_layer_active(cursor, layer_id: int, is_active: bool):
     """Activating a layer deactivates the other layers in its category."""
     cursor.execute("SELECT id, category FROM map_layers WHERE id = %s", (layer_id,))
@@ -144,6 +155,23 @@ def get_layer_file(cursor, layer_id: int, file_id: int):
         (file_id, layer_id),
     )
     return cursor.fetchone()
+
+
+# ---- zoning allowed uses ----------------------------------------------------------
+
+def list_zoning_allowed_uses(cursor):
+    cursor.execute("SELECT zone_class, business_type FROM zoning_allowed_uses ORDER BY zone_class, business_type")
+    return cursor.fetchall()
+
+
+def replace_zoning_allowed_uses(cursor, pairs):
+    """Replace the whole table with (zone_class, business_type) pairs."""
+    cursor.execute("DELETE FROM zoning_allowed_uses")
+    for zone_class, business_type in pairs:
+        cursor.execute(
+            "INSERT INTO zoning_allowed_uses (zone_class, business_type) VALUES (%s, %s)",
+            (zone_class, business_type),
+        )
 
 
 # ---- flags --------------------------------------------------------------------

@@ -2,6 +2,7 @@
 import psycopg2
 from psycopg2.extras import Json
 
+from constants.map_layers import ZONING_ALLOWED_SCORE, ZONING_CLASSES
 from constants.msme import SME_DATABASE
 from core.database import DB_CONFIG
 from db.schema import get_analysis_history_pk_column
@@ -64,11 +65,12 @@ def perform_analysis(data: AnalysisRequest):
 
     zoning_source = zoning_service.ZONING_LAYER_SOURCE
     if zoning_source:
+        zone_label = ZONING_CLASSES[zoning_class]["label"] if zoning_class else None
         zoning_details = (
-            f"The zoning score is derived by checking which polygon of the active zoning map layer ({zoning_source}) contains the target coordinates. "
-            + "Commercial areas score 25, mixed-use 20, residential 10, institutional and agricultural 5. Industrial areas score 25 for businesses "
-            + "that fit agri-industrial support and 5 for everything else. A site outside every mapped zone scores 0."
-            + (f" Matched zone class: {zoning_class.replace('_', '-')}." if zoning_class else "")
+            f"The zoning check finds which zone of the active zoning map layer ({zoning_source}), based on the Panabo City "
+            + "Integrated Zoning Map C.Y. 2020-2029, contains the target coordinates. Zoning is pass/fail: if this business type "
+            + f"is allowed in that zone it scores {ZONING_ALLOWED_SCORE}, otherwise 0. A site outside every mapped zone scores 0."
+            + (f" Matched zone: {zone_label}." if zone_label else "")
         )
     else:
         zoning_details = "No zoning map layer is active, so no zoning credit was applied to this scan."
@@ -101,7 +103,11 @@ def perform_analysis(data: AnalysisRequest):
 
     # STATIC REPORTING MODULE (Combinational Matrix)
     if zoning_score <= 5:
-        generated_insight = f"Critical Warning: This location is in a {zoning_status.lower()}. Even if market conditions are favorable, securing BPLO permits will be highly unlikely. Reconsider this site."
+        if zoning_class:
+            zoning_problem = f"{sme_profile['name']} are not allowed in the {ZONING_CLASSES[zoning_class]['label']} under the city zoning map"
+        else:
+            zoning_problem = "This location is outside every zone of the city zoning map, so the business can't be confirmed as allowed here"
+        generated_insight = f"Critical Warning: {zoning_problem}. Even if market conditions are favorable, securing BPLO permits will be highly unlikely. Reconsider this site."
     elif hazard_score <= 5 and anchor_proximity["score"] >= 15:
         generated_insight = f"High Risk, High Reward (Score: {int(total_score)}). The location attracts strong traffic generators, but it is also exposed to severe flood risk. Any development plan must account for mitigation, insurance, and resilient design."
     elif saturation_score >= 20 and road_access["score"] >= 18 and anchor_proximity["score"] >= 18:

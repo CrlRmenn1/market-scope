@@ -3,20 +3,22 @@ from fastapi import APIRouter, File, Form, Header, HTTPException, Response, Uplo
 from starlette.concurrency import run_in_threadpool
 
 from core.security import verify_admin_token
-from models.requests import AdminMapLayerCreateRequest, AdminMapLayerUpdateRequest
+from models.requests import AdminMapLayerCreateRequest, AdminMapLayerUpdateRequest, AdminZoningAllowedUsesRequest
 from services.map_layers import (
     MAX_IMPORT_BYTES,
     MapLayerError,
     MapLayerNotFound,
     create_map_layer,
     delete_map_layer,
-    get_active_map_layer,
+    get_active_map_layer_flattened,
     get_map_layer,
     get_map_layer_file,
+    get_zoning_allowed_uses,
     import_map_layer,
     list_map_layers,
     set_map_layer_active,
     update_map_layer,
+    update_zoning_allowed_uses,
 )
 from services.osm_data import get_reference_map_json
 
@@ -48,7 +50,8 @@ def public_reference_map():
 
 @router.get("/map-layers/active")
 def public_active_map_layer(category: str):
-    layer = _run(get_active_map_layer, category)
+    # Flattened: each spot shows only the shape on top, as scans score it.
+    layer = _run(get_active_map_layer_flattened, category)
     if not layer:
         return {"status": "success", "layer": None, "geojson": None}
     geojson = layer.pop("geojson")
@@ -125,3 +128,15 @@ def admin_download_map_layer_file(layer_id: int, file_id: int, x_admin_token: st
         media_type=found["content_type"] or "application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/admin/zoning-allowed-uses")
+def admin_get_zoning_allowed_uses(x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    return {"status": "success", "allowed": _run(get_zoning_allowed_uses)}
+
+
+@router.put("/admin/zoning-allowed-uses")
+def admin_update_zoning_allowed_uses(payload: AdminZoningAllowedUsesRequest, x_admin_token: str | None = Header(default=None)):
+    verify_admin_token(x_admin_token)
+    return {"status": "success", "allowed": _run(update_zoning_allowed_uses, payload.allowed)}
