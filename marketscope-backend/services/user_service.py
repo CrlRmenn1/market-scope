@@ -1,3 +1,5 @@
+import json
+
 from fastapi import HTTPException
 
 from db.schema import (
@@ -55,7 +57,20 @@ def build_legacy_breakdown(row):
     }
 
 
+def _decode_json_column(value):
+    # asyncpg returns json/jsonb columns as text (the pool sets no JSON codec).
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return None
+    return value
+
+
 def normalize_history_row(row):
+    for column in ("breakdown", "competitor_locations"):
+        row[column] = _decode_json_column(row.get(column))
+
     if row.get("competitors_found") is None:
         competitor_locations = row.get("competitor_locations") or []
         if isinstance(competitor_locations, list):
