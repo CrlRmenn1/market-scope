@@ -24,9 +24,9 @@ const normalizeCoords = (coords) => {
 };
 
 const hazardNameByVar = {
-  1: 'Very High Flood Hazard (5-Year)',
-  2: 'High Flood Hazard (5-Year)',
-  3: 'Moderate Flood Hazard (5-Year)'
+  1: 'Very High Flood Hazard',
+  2: 'High Flood Hazard',
+  3: 'Moderate Flood Hazard'
 };
 
 export default function Report({ data, targetCoords, onClose }) {
@@ -296,7 +296,7 @@ export default function Report({ data, targetCoords, onClose }) {
 
     if (key === 'hazard') {
       return (
-        'Hazard is scored by comparing the location to official Davao del Norte 5-year flood return period zones from the NOAH hazard assessment layer. ' +
+        'Hazard is scored by comparing the location to the flood hazard zones in the active hazard map layer. ' +
         'The lowest matched zone score becomes the factor result: Very High (score 5), High (score 12), or Moderate (score 18).'
       );
     }
@@ -496,38 +496,25 @@ export default function Report({ data, targetCoords, onClose }) {
       .save();
   };
 
-  const buildAnalysisPayloadFromReport = () => {
-    const breakdownSafe = data?.breakdown || {};
-    const zoningRestricted = Number(breakdownSafe?.zoning?.score ?? 0) < 12;
-    const floodProne = Number(breakdownSafe?.hazard?.score ?? 0) < 12;
-
-    return {
-      target_lat: resolvedTargetCoords?.lat ?? null,
-      target_lon: resolvedTargetCoords?.lng ?? null,
-      radius: Number(radius_meters || 340),
-      competitors: Array.isArray(competitorLocations)
-        ? competitorLocations.map((item, index) => ({
-            name: item?.name || `Competitor ${index + 1}`,
-            latitude: item?.latitude ?? item?.lat ?? null,
-            longitude: item?.longitude ?? item?.lng ?? null,
-            confidence_score: Number(item?.confidence_score ?? 70)
-          }))
-        : [],
-      anchors: [],
-      roads: [],
-      building_density: null,
-      zoning_flags: { restricted: zoningRestricted },
-      hazards: { flood_prone: floodProne }
-    };
-  };
+  // The scan result exactly as shown on this page, so the AI narrative quotes the same
+  // scores. Competitor coordinates are left out; the narrative only needs the count.
+  const buildScanPayloadFromReport = () => ({
+    viability_score,
+    business_type,
+    business_label: data?.business_label,
+    competitors_found: strictCompetitorsFound,
+    target_coords: resolvedTargetCoords || data?.target_coords || null,
+    radius_meters: Number(radius_meters || 340),
+    insight,
+    breakdown: breakdown || {}
+  });
 
   const requestAiReport = async (exportPdf = false) => {
     const payload = {
-      analysis: buildAnalysisPayloadFromReport(),
+      scan: buildScanPayloadFromReport(),
       category: business_type || '',
       business_type: business_type || '',
       use_llm: true,
-      gemini_model: 'gemini-1.5-pro',
       export_pdf: exportPdf
     };
 

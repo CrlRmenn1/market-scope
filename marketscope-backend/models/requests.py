@@ -158,12 +158,17 @@ class AdminReviewUserSpaceSubmissionRequest(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    analysis: dict
+    analysis: dict | None = None
+    # The full POST /analyze result. When present, the narrative is built from it
+    # instead of re-scoring the thinner `analysis` payload.
+    scan: dict | None = None
     category: str | None = None
     export_pdf: bool = False
     business_type: str | None = None
     use_llm: bool = True
-    gemini_model: str = "gemini-1.5-pro"
+    # None uses services.reporting.DEFAULT_GEMINI_MODEL (the GEMINI_MODEL env var).
+    gemini_model: str | None = None
+
 
 class AdminMapLayerCreateRequest(BaseModel):
     category: str
@@ -177,6 +182,7 @@ class AdminMapLayerUpdateRequest(BaseModel):
     name: str
     source_note: str | None = None
     geojson: dict
+
 
 class AdminZoningAllowedUsesRequest(BaseModel):
     # zone_class -> business types allowed there
