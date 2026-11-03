@@ -105,6 +105,8 @@ def perform_analysis(data: AnalysisRequest):
     if zoning_score <= 5:
         if zoning_class:
             zoning_problem = f"{sme_profile['name']} are not allowed in the {ZONING_CLASSES[zoning_class]['label']} under the city zoning map"
+        elif not zoning_source:
+            zoning_problem = "No zoning map layer is active, so the business can't be confirmed as allowed here"
         else:
             zoning_problem = "This location is outside every zone of the city zoning map, so the business can't be confirmed as allowed here"
         generated_insight = f"Critical Warning: {zoning_problem}. Even if market conditions are favorable, securing BPLO permits will be highly unlikely. Reconsider this site."
