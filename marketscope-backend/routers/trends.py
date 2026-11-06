@@ -3,9 +3,12 @@
 The scanning itself lives in services/trend_scan.py; what the page receives is
 assembled in services/trend_recommendations.py.
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from core.auth import internal_error, require_same_user, require_user
+from core.rate_limit import check_rate_limit
+from core.security import verify_admin_token
 from db.queries import fetch_user_profile_by_id_async
 from db.schema import get_users_primary_key_column_async
 from db.trend_queries import fetch_latest_runs_status, fetch_result_report, open_trend_cursor
@@ -37,7 +40,7 @@ async def _load_user_with_preferences(request: Request, user_id: int):
     return user_profile
 
 
-@router.get("/users/{user_id}/trends")
+@router.get("/users/{user_id}/trends", dependencies=[Depends(require_same_user)])
 async def get_user_trends(request: Request, user_id: int):
     try:
         user_profile = await _load_user_with_preferences(request, user_id)
@@ -45,18 +48,19 @@ async def get_user_trends(request: Request, user_id: int):
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "get trends")
 
 
-@router.post("/users/{user_id}/trends/rescan")
+@router.post("/users/{user_id}/trends/rescan", dependencies=[Depends(require_same_user)])
 async def rescan_user_trends(request: Request, user_id: int):
+    check_rate_limit(f"rescan:user:{user_id}", 10, 60 * 60, "Too many rescans. Try again in a little while.")
     try:
         user_profile = await _load_user_with_preferences(request, user_id)
         return await run_in_threadpool(build_user_trends, user_profile, "manual", True)
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "rescan trends")
 
 
 def _read_result_report(result_id: int):
@@ -64,7 +68,7 @@ def _read_result_report(result_id: int):
         return fetch_result_report(cursor, result_id)
 
 
-@router.get("/trends/results/{result_id}")
+@router.get("/trends/results/{result_id}", dependencies=[Depends(require_user)])
 async def get_trend_result_report(result_id: int):
     """The full saved /analyze report of one scanned spot (opens in the Report view)."""
     try:
@@ -75,7 +79,7 @@ async def get_trend_result_report(result_id: int):
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "get trend result")
 
 
 def _read_scan_status():
@@ -93,8 +97,9 @@ def _read_scan_status():
 
 
 @router.get("/trends/scan-status")
-async def get_trend_scan_status():
+async def get_trend_scan_status(x_admin_token: str | None = Header(default=None)):
     """Debug view: the newest run of every business type and what is queued now."""
+    verify_admin_token(x_admin_token)
     try:
         runs = await run_in_threadpool(_read_scan_status)
         return {
@@ -103,4 +108,4 @@ async def get_trend_scan_status():
             "runs": runs,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "trend scan status")

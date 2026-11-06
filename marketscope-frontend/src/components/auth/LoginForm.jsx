@@ -53,7 +53,11 @@ export default function LoginForm({
       if (admin.status === 404) {
         throw new Error('Admin login endpoint not found. Restart backend server and try again.');
       }
-      throw new Error(errorDetail(admin.data, errorDetail(user.data, 'Invalid email or password')));
+      // A wrong password reads the same either way, without mentioning admin logins.
+      if (admin.status === 401) {
+        throw new Error(errorDetail(user.data, 'Invalid email or password'));
+      }
+      throw new Error(errorDetail(admin.data, 'Invalid email or password'));
     } catch (error) {
       setErrorMsg(error.message);
     } finally {

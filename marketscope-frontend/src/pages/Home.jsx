@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { getTileUrl, getMapInk, SATELLITE_ATTRIBUTION, SATELLITE_TILE_URL, TILE_ATTRIBUTION } from '../utils/mapTheme';
 import { createReferenceLabels, createReferenceLines, loadReferenceMap, referenceStyle } from '../components/map/referenceMap';
-import { apiUrl } from '../lib/api';
+import { apiUrl, authFetch } from '../lib/api';
 import { BUSINESS_TYPE_OPTIONS, getBusinessTypeColor } from '../utils/businessTypes';
 import AnalysisLoader from '../components/common/AnalysisLoader';
 import Modal from '../components/common/Modal';
@@ -757,7 +757,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       setPreviewMessage('Scanning nearby competitors...');
 
       try {
-        const response = await fetch(apiUrl('/competitors/preview'), {
+        const response = await authFetch('/competitors/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -854,7 +854,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
     setPreviewError('');
 
     try {
-      const response = await fetch(apiUrl('/analyze'), {
+      const response = await authFetch('/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -60,8 +60,8 @@ export default function RegisterForm({ focusTitle, onLoginSuccess, onLogin, onOp
     const file = input.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setErrors((current) => ({ ...current, avatar: 'Choose an image file, such as a JPG or PNG.' }));
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      setErrors((current) => ({ ...current, avatar: 'Choose a JPG, PNG, WebP or GIF image.' }));
       input.value = '';
       return;
     }
@@ -215,7 +215,7 @@ export default function RegisterForm({ focusTitle, onLoginSuccess, onLogin, onOp
                 ref={avatarInputRef}
                 className="upload-input-hidden"
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 tabIndex={-1}
                 aria-hidden="true"
                 onChange={handleAvatarChange}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../../lib/api';
+import { authFetch } from '../../lib/api';
 import { parseCoordinatePairText } from '../../utils/coordinates';
 import MapPicker from '../map/MapPicker';
 import Modal from '../common/Modal';
@@ -104,6 +104,18 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     const remainingSlots = Math.max(0, 4 - (form.photo_urls?.length || 0));
     const selectedFiles = files.slice(0, remainingSlots);
 
+    // Same rules as the server, so a photo is refused now rather than at the last step.
+    if (selectedFiles.some((file) => !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type))) {
+      setErrorMessage('Photos must be JPG, PNG, WebP or GIF images.');
+      event.target.value = '';
+      return;
+    }
+    if (selectedFiles.some((file) => file.size > 2 * 1024 * 1024)) {
+      setErrorMessage('Each photo must be 2MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+
     try {
       const encodedPhotos = await Promise.all(selectedFiles.map((file) => readFileAsDataUrl(file)));
       setForm((current) => ({
@@ -193,7 +205,7 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
     setSuccessMessage('');
 
     try {
-      const response = await fetch(apiUrl('/spaces/user-submissions'), {
+      const response = await authFetch('/spaces/user-submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -330,8 +342,8 @@ export default function SpaceSubmissionModal({ isOpen, onClose, userId }) {
 
                   <div className="input-group">
                     <label className="input-label">Photos for Preview</label>
-                    <input className="history-search-input" type="file" accept="image/*" multiple onChange={handlePhotoUpload} />
-                    <p className="form-hint">Upload up to 4 photos. They will be shown on the map popup.</p>
+                    <input className="history-search-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={handlePhotoUpload} />
+                    <p className="form-hint">Upload up to 4 photos, each 2MB or smaller. They will be shown on the map popup.</p>
                     {form.photo_urls?.length > 0 && (
                       <div className="photo-review-shell">
                         <div className="photo-review-strip" role="list" aria-label="Uploaded photos">

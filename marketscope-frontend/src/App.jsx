@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import AuthPages from './pages/AuthPages';
 import Header from './components/layout/Header';
 import Home from './pages/Home';
@@ -10,7 +10,7 @@ import Report from './pages/Report';
 import AdminPanel from './pages/AdminPanel';
 import OnboardingModal from './components/onboarding/OnboardingModal';
 import SpaceSubmissionModal from './components/spaces/SpaceSubmissionModal';
-import { apiUrl } from './lib/api';
+import { SESSION_EXPIRED_EVENT, authFetch, revokeSession } from './lib/api';
 import './styles/app/index.css';
 import { getMissingTrendPreferenceFields } from './utils/trendPreferences';
 import { removeStoredPassword } from './utils/rememberedLogin';
@@ -33,6 +33,7 @@ export default function App() {
   const [reportData, setReportData] = useState(null);
   const [mapPreviewSelection, setMapPreviewSelection] = useState(null);
   const [justLoggedOut, setJustLoggedOut] = useState(false);
+  const [sessionEnded, setSessionEnded] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showSpaceSubmissionModal, setShowSpaceSubmissionModal] = useState(false);
   const [missingTrendPreferences, setMissingTrendPreferences] = useState([]);
@@ -66,9 +67,13 @@ export default function App() {
   useEffect(() => {
     removeStoredPassword();
 
-    const savedUser = localStorage.getItem('marketscope_session');
-    if (savedUser) {
-      setSession(JSON.parse(savedUser));
+    // A session saved before login tokens existed can't call the server, so it
+    // counts as logged out.
+    const savedUser = JSON.parse(localStorage.getItem('marketscope_session') || 'null');
+    if (savedUser?.token) {
+      setSession(savedUser);
+    } else if (savedUser) {
+      localStorage.removeItem('marketscope_session');
     }
 
     const savedAdmin = localStorage.getItem(ADMIN_SESSION_KEY);
@@ -127,7 +132,7 @@ export default function App() {
 
     const userId = session.user_id || session.id;
     if (userId) {
-      fetch(apiUrl(`/users/${userId}/onboarding-seen`), { method: 'POST' }).catch(() => {});
+      authFetch(`/users/${userId}/onboarding-seen`, { method: 'POST' }).catch(() => {});
     }
 
     const nextSession = { ...session, onboarding_seen: true };
@@ -176,12 +181,14 @@ export default function App() {
 
     const nextSession = {
       ...userData,
+      token: authMeta?.token,
       name: userData.full_name || userData.name || userData.email,
       trend_preferences_completed: serverMissing.length === 0,
       missing_trend_preferences: serverMissing,
     };
 
     localStorage.setItem('marketscope_session', JSON.stringify(nextSession));
+    setSessionEnded(false);
     setSession(nextSession);
   };
 
@@ -214,15 +221,33 @@ export default function App() {
     setAdminSession(null);
   };
 
-  const handleLogout = () => {
+  const clearUserSession = useCallback(() => {
     localStorage.removeItem('marketscope_session');
     localStorage.removeItem('marketscope_active_tab');
-    clearOpenReport();
+    localStorage.removeItem(OPEN_REPORT_KEY);
     reportCacheRef.current = new Map();
     setSession(null);
     setShowOnboarding(false);
     setJustLoggedOut(true);
+  }, []);
+
+  const handleLogout = () => {
+    // Reads the token before it's cleared below.
+    revokeSession();
+    clearUserSession();
   };
+
+  // The server rejected the session: expired, revoked, or the password was reset.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      if (!localStorage.getItem('marketscope_session')) return;
+      clearUserSession();
+      setSessionEnded(true);
+    };
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, [clearUserSession]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -269,6 +294,7 @@ export default function App() {
         onLoginSuccess={handleLoginSuccess} 
         onAdminLoginSuccess={handleAdminLoginSuccess}
         initialView={initialView}
+        initialNotice={sessionEnded ? 'Your session ended. Log in again to continue.' : ''}
         onAuthPagesMounted={() => setJustLoggedOut(false)}
       />
     );

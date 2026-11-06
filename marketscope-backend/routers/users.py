@@ -1,7 +1,8 @@
 """User profile and analysis history routes. Trend routes live in routers/trends.py."""
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from core.auth import internal_error, require_same_user
 from models.requests import UpdateUserProfile
 from services.auth_service import get_missing_trend_preferences
 from services.trend_scan import queue_scans_for_user
@@ -15,7 +16,8 @@ from services.user_service import (
 )
 
 
-router = APIRouter()
+# Every route here is /users/{user_id}/...: only that logged-in user may use it.
+router = APIRouter(dependencies=[Depends(require_same_user)])
 
 
 @router.get("/users/{user_id}")
@@ -29,7 +31,7 @@ async def get_user_profile(request: Request, user_id: int):
         return {"status": "success", "user": dict(profile)}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "get profile")
 
 
 @router.put("/users/{user_id}")
@@ -43,7 +45,7 @@ async def update_user_profile(request: Request, user_id: int, payload: UpdateUse
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "update profile")
 
 
 @router.post("/users/{user_id}/onboarding-seen")
@@ -54,7 +56,7 @@ async def mark_onboarding_seen(request: Request, user_id: int):
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "mark onboarding seen")
 
 
 @router.get("/users/{user_id}/history")
@@ -64,7 +66,7 @@ async def get_user_history(request: Request, user_id: int):
         return {"status": "success", "history": history}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "get history")
 
 
 @router.get("/users/{user_id}/history/{history_id}")
@@ -78,7 +80,7 @@ async def get_user_history_item(request: Request, user_id: int, history_id: int)
         return {"status": "success", "history": history_item}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "get history item")
 
 
 @router.delete("/users/{user_id}/history/{history_id}")
@@ -92,4 +94,4 @@ async def delete_user_history_item(request: Request, user_id: int, history_id: i
         return {"status": "success", "deleted_history_id": deleted_row[0]}
     except Exception as e:
         if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(e, "delete history item")

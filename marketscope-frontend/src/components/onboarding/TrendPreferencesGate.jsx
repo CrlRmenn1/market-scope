@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { apiUrl } from '../../lib/api';
+import { authFetch } from '../../lib/api';
 import { getMissingTrendPreferenceFields } from '../../utils/trendPreferences';
 import Modal from '../common/Modal';
 
@@ -61,7 +61,7 @@ export default function TrendPreferencesGate({ isOpen, user, onSaved, onLater })
 
     setSaving(true);
     try {
-      const response = await fetch(apiUrl(`/users/${userId}`), {
+      const response = await authFetch(`/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

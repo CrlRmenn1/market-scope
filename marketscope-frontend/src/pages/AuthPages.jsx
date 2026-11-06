@@ -17,12 +17,12 @@ const getInitialAuthView = (initialView) => {
   return savedView === 'register' || savedView === 'login' ? savedView : 'hero';
 };
 
-export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', onAuthPagesMounted }) {
+export default function AuthPages({ onLoginSuccess, onAdminLoginSuccess, initialView = 'landing', initialNotice = '', onAuthPagesMounted }) {
   const shouldReduceMotion = useReducedMotion();
   const [currentView, setCurrentView] = useState(() => getInitialAuthView(initialView));
   const [hasNavigated, setHasNavigated] = useState(false);
   const [email, setEmail] = useState(readRememberedEmail);
-  const [loginNotice, setLoginNotice] = useState('');
+  const [loginNotice, setLoginNotice] = useState(initialNotice);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
   const containerRef = useRef(null);
 
