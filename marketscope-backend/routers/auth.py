@@ -4,7 +4,6 @@ from starlette.concurrency import run_in_threadpool
 
 from core.config import RESET_CODE_DEV_MODE, RESET_CODE_TTL_MINUTES
 from models.requests import (
-    DirectResetPasswordRequest,
     ForgotPasswordRequest,
     LoginUser,
     RegisterUser,
@@ -15,7 +14,6 @@ from services.auth_service import (
     login_user as auth_login_user,
     register_user as auth_register_user,
     reset_password as auth_reset_password,
-    reset_password_direct as auth_reset_password_direct,
 )
 from services.trend_scan import queue_scans_for_user
 
@@ -63,15 +61,6 @@ async def forgot_password(request: Request, payload: ForgotPasswordRequest):
 async def reset_password(request: Request, payload: ResetPasswordRequest):
     try:
         return await auth_reset_password(request.app.state.db_pool, payload)
-    except Exception as e:
-        if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/reset-password-direct")
-async def reset_password_direct(request: Request, payload: DirectResetPasswordRequest):
-    try:
-        return await auth_reset_password_direct(request.app.state.db_pool, payload)
     except Exception as e:
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))

@@ -13,6 +13,7 @@ import SpaceSubmissionModal from './components/spaces/SpaceSubmissionModal';
 import { apiUrl } from './lib/api';
 import './styles/app/index.css';
 import { getMissingTrendPreferenceFields } from './utils/trendPreferences';
+import { removeStoredPassword } from './utils/rememberedLogin';
 
 export default function App() {
   const validTabs = ['home', 'trends', 'profile', 'history'];
@@ -27,7 +28,7 @@ export default function App() {
     const savedTab = localStorage.getItem('marketscope_active_tab');
     return validTabs.includes(savedTab) ? savedTab : 'home';
   });
-  const [theme, setTheme] = useState(() => localStorage.getItem('marketscope_theme') || 'light');
+  const [theme, setTheme] = useState(() => localStorage.getItem('marketscope_theme') || 'dark');
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [mapPreviewSelection, setMapPreviewSelection] = useState(null);
@@ -63,6 +64,8 @@ export default function App() {
   };
 
   useEffect(() => {
+    removeStoredPassword();
+
     const savedUser = localStorage.getItem('marketscope_session');
     if (savedUser) {
       setSession(JSON.parse(savedUser));
@@ -73,7 +76,7 @@ export default function App() {
       setAdminSession(JSON.parse(savedAdmin));
     }
 
-    const savedTheme = localStorage.getItem('marketscope_theme') || 'light';
+    const savedTheme = localStorage.getItem('marketscope_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 

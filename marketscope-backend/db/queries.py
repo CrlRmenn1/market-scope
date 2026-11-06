@@ -108,6 +108,12 @@ def fetch_user_profile_by_id(cursor, user_pk_column: str, user_id: int):
             birthday,
             primary_business,
             preferred_setup,
+            first_name,
+            last_name,
+            street,
+            barangay,
+            city,
+            region,
             created_at
         FROM users
         WHERE {user_pk_column} = %s
@@ -132,6 +138,12 @@ async def fetch_user_profile_by_id_async(conn, user_pk_column: str, user_id: int
             birthday,
             primary_business,
             preferred_setup,
+            first_name,
+            last_name,
+            street,
+            barangay,
+            city,
+            region,
             created_at
         FROM users
         WHERE {user_pk_column} = $1

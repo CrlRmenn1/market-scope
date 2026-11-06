@@ -7,6 +7,7 @@ from core.database import DB_CONFIG
 from core.security import verify_admin_token
 from db.schema import get_users_primary_key_column
 from models.requests import AdminUpdateUser
+from services.user_fields import resolve_age
 
 
 router = APIRouter()
@@ -26,7 +27,13 @@ def fetch_user_for_admin(cursor, user_pk_column: str, user_id: int):
             age,
             birthday,
             primary_business,
-            preferred_setup
+            preferred_setup,
+            first_name,
+            last_name,
+            street,
+            barangay,
+            city,
+            region
         FROM users
         WHERE {user_pk_column} = %s
         """,
@@ -55,7 +62,13 @@ def admin_list_users(x_admin_token: str | None = Header(default=None)):
                 age,
                 birthday,
                 primary_business,
-                preferred_setup
+                preferred_setup,
+                first_name,
+                last_name,
+                street,
+                barangay,
+                city,
+                region
             FROM users
             ORDER BY created_at DESC, {user_pk_column} DESC
             """
@@ -102,6 +115,12 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
             conn.close()
             raise HTTPException(status_code=400, detail="Email already registered")
 
+        # Admins edit the combined name and address. If either changes, clear
+        # its split columns rather than leave them saying something different.
+        new_address = payload.address or None
+        name_unchanged = existing["full_name"] == payload.full_name
+        address_unchanged = existing["address"] == new_address
+
         cursor.execute(
             f"""
             UPDATE users
@@ -114,7 +133,13 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 age = %s,
                 birthday = %s,
                 primary_business = %s,
-                preferred_setup = %s
+                preferred_setup = %s,
+                first_name = %s,
+                last_name = %s,
+                street = %s,
+                barangay = %s,
+                city = %s,
+                region = %s
             WHERE {user_pk_column} = %s
             RETURNING
                 {user_pk_column} AS user_id,
@@ -127,18 +152,30 @@ def admin_update_user(user_id: int, payload: AdminUpdateUser, x_admin_token: str
                 age,
                 birthday,
                 primary_business,
-                preferred_setup
+                preferred_setup,
+                first_name,
+                last_name,
+                street,
+                barangay,
+                city,
+                region
             """,
             (
                 payload.full_name,
                 payload.email,
-                payload.address or None,
+                new_address,
                 payload.cellphone_number or None,
                 payload.avatar_url or None,
-                payload.age,
+                resolve_age(payload.birthday, payload.age),
                 payload.birthday,
                 payload.primary_business or None,
                 payload.preferred_setup or None,
+                existing["first_name"] if name_unchanged else None,
+                existing["last_name"] if name_unchanged else None,
+                existing["street"] if address_unchanged else None,
+                existing["barangay"] if address_unchanged else None,
+                existing["city"] if address_unchanged else None,
+                existing["region"] if address_unchanged else None,
                 user_id
             )
         )

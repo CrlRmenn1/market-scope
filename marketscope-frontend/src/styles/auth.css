@@ -1,44 +1,881 @@
 /* =========================================
-   1. CORE LAYOUT
+   1. PAGE
+   The container is the only scroller (html and body don't scroll), so the brand
+   bar scrolls away with the form on phones.
    ========================================= */
 .auth-container {
   position: fixed;
   inset: 0;
-  display: flex;
-  min-height: 100svh;
-  height: 100svh;
   width: 100%;
   background-color: var(--bg-app);
+  color: var(--text-main);
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
-  overflow: hidden;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   transition: background-color var(--motion-normal) var(--ease-standard);
-  overscroll-behavior: none;
 }
 
-.mobile-auth-hero {
-  display: none;
+.auth-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100%;
+}
+
+.auth-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
+}
+
+.auth-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: calc(env(safe-area-inset-top) + 6px) 16px 6px 6px;
+}
+
+.auth-column {
+  width: 100%;
+  max-width: 472px;
+  margin: 0 auto;
+  padding: 12px 16px calc(env(safe-area-inset-bottom) + 32px);
+}
+
+/* =========================================
+   2. BRAND
+   ========================================= */
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-brand-name {
+  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
+  font-size: 1.0625rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.auth-brand-highlight {
+  color: var(--accent);
+}
+
+.auth-brand-on-dark {
+  position: relative;
+  color: #ffffff;
+}
+
+.auth-brand-on-dark .auth-brand-highlight {
+  color: #c4b5fd;
+}
+
+.auth-back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.auth-back:hover {
+  background-color: var(--accent-hover);
+}
+
+.auth-back svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* =========================================
+   3. HEADINGS & FORM LAYOUT
+   ========================================= */
+.auth-heading {
+  margin-bottom: 24px;
+}
+
+.auth-title {
+  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-main);
+}
+
+.auth-title:focus {
+  outline: none;
+}
+
+.auth-subtitle {
+  margin-top: 8px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-field,
+.auth-field-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.auth-field-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+@media (min-width: 360px) {
+  .auth-field-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+.auth-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+  margin-bottom: 6px;
+}
+
+.auth-label,
+.auth-legend {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+.auth-hint {
+  margin-top: 6px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* =========================================
+   4. CONTROLS
+   16px text stops iOS Safari zooming the page when a field takes focus.
+   ========================================= */
+.auth-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: var(--bg-sheet);
+  color: var(--text-main);
+  font-size: 1rem;
+  line-height: 1.4;
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.auth-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.auth-input[aria-invalid="true"] {
+  border-color: var(--trend-down);
+}
+
+.auth-input-readonly {
+  border-color: var(--border-color);
+  background-color: transparent;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* Native picker on tap, but its closed state lines up with the text inputs. */
+.auth-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 20px;
+  cursor: pointer;
+}
+
+.auth-select:has(option[value=""]:checked) {
+  color: var(--text-muted);
+}
+
+.auth-select option {
+  color: var(--text-main);
+}
+
+.auth-password {
   position: relative;
 }
 
-/* Left side hero (hidden on mobile, visible on desktop) */
+.auth-password-input {
+  padding-right: 52px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.auth-password-toggle:hover {
+  color: var(--text-main);
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.auth-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text-main);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.auth-check input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.auth-check-top {
+  align-items: flex-start;
+}
+
+.auth-check-top input {
+  margin-top: 2px;
+}
+
+.auth-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+}
+
+.auth-button:hover {
+  background-color: var(--btn-primary-hover);
+}
+
+.auth-button:active {
+  transform: scale(0.985);
+}
+
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.auth-button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: var(--bg-sheet);
+  color: var(--text-main);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.auth-button-secondary:hover {
+  background-color: var(--accent-hover);
+}
+
+.auth-button-secondary svg {
+  width: 18px;
+  height: 18px;
+}
+
+.auth-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-link-quiet {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+/* The row keeps its 24px rhythm while the Forgot link keeps its 44px tap area. */
+.auth-label-row .auth-link {
+  margin-block: -10px;
+}
+
+.auth-back:focus-visible,
+.auth-button:focus-visible,
+.auth-button-secondary:focus-visible,
+.auth-link:focus-visible,
+.auth-password-toggle:focus-visible,
+.auth-details-summary:focus-visible,
+.auth-check input:focus-visible,
+.auth-policy-body:focus-visible,
+.hero-login-btn:focus-visible,
+.get-started-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.auth-switch {
+  margin-top: 16px;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.auth-switch-small {
+  margin-top: 0;
+}
+
+.auth-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 12px;
+  font-size: 0.9375rem;
+}
+
+/* =========================================
+   5. MESSAGES
+   Text stays in the main color with a tinted icon: red on the pale red surface
+   falls just short of 4.5:1 in the light theme.
+   ========================================= */
+.auth-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text-main);
+}
+
+.auth-alert-error {
+  background-color: var(--trend-down-bg);
+}
+
+.auth-alert-success {
+  margin-bottom: 20px;
+  background-color: var(--trend-up-bg);
+}
+
+.auth-alert-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.auth-alert-error .auth-alert-icon {
+  color: var(--trend-down);
+}
+
+.auth-alert-success .auth-alert-icon {
+  color: var(--trend-up);
+}
+
+.auth-field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--trend-down);
+}
+
+.auth-field-error-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+/* =========================================
+   6. PASSWORD STRENGTH
+   ========================================= */
+.auth-strength {
+  margin-top: 10px;
+}
+
+.auth-strength-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background-color: var(--border-color);
+}
+
+.auth-strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
+}
+
+.auth-strength-weak { background-color: var(--trend-down); }
+.auth-strength-fair { background-color: var(--trend-neutral); }
+.auth-strength-strong { background-color: var(--trend-up); }
+
+/* =========================================
+   7. OPTIONAL DETAILS
+   ========================================= */
+.auth-details {
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.auth-details-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 0;
+  list-style: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.auth-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.auth-details-title {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+.auth-details-text {
+  display: block;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.auth-details-chevron {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.auth-details[open] .auth-details-chevron {
+  transform: rotate(90deg);
+}
+
+.auth-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 0 24px;
+}
+
+.auth-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  border: none;
+}
+
+/* A legend isn't a flex item, so the fieldset's gap doesn't apply below it. */
+.auth-fieldset > .auth-legend {
+  margin-bottom: 4px;
+}
+
+.auth-fieldset > .auth-hint {
+  margin-top: 0;
+}
+
+.auth-photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.auth-photo-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.auth-photo-name {
+  overflow-wrap: anywhere;
+}
+
+.auth-consent {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-consent-link {
+  align-self: flex-start;
+  margin-left: 32px;
+  font-size: 0.9375rem;
+}
+
+/* =========================================
+   8. PRIVACY POLICY
+   ========================================= */
+.auth-policy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background-color: var(--overlay-scrim);
+}
+
+.auth-policy-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background-color: var(--bg-sheet);
+  color: var(--text-main);
+  text-align: left;
+}
+
+.auth-policy-header {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 10px 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.auth-policy-header .auth-hint {
+  margin-top: 2px;
+}
+
+.auth-policy-title {
+  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.auth-policy-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px 24px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.auth-policy-body p + p {
+  margin-top: 10px;
+}
+
+.auth-policy-body ul {
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.auth-policy-body li + li {
+  margin-top: 6px;
+}
+
+.auth-policy-body ul + p {
+  margin-top: 10px;
+}
+
+.auth-policy-heading {
+  margin: 22px 0 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.auth-policy-draft {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--trend-neutral-bg);
+  font-weight: 600;
+}
+
+.auth-policy-blank {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background-color: var(--trend-neutral-bg);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+/* =========================================
+   9. DESKTOP PANEL
+   ========================================= */
+.auth-panel {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .auth-shell {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  .auth-panel {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100vh;
+    height: 100dvh;
+    padding: 36px 48px 48px;
+    overflow: hidden;
+    background-color: #17102e;
+    color: #ffffff;
+  }
+
+  .auth-bar-brand {
+    display: none;
+  }
+
+  .auth-bar {
+    padding: 16px 24px 0;
+  }
+
+  .auth-column {
+    margin: auto;
+    padding: 16px 16px 48px;
+  }
+
+  .auth-title {
+    font-size: 2rem;
+  }
+}
+
+.auth-panel-copy {
+  position: relative;
+  max-width: 30rem;
+}
+
+.auth-panel-title {
+  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
+  font-size: clamp(2.25rem, 3.6vw, 3.25rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.06;
+}
+
+.auth-panel-text {
+  max-width: 26rem;
+  margin-top: 14px;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.auth-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+}
+
+.auth-art-river {
+  stroke: rgba(139, 92, 246, 0.16);
+  stroke-width: 34;
+  stroke-linecap: round;
+}
+
+.auth-art-streets {
+  stroke: rgba(255, 255, 255, 0.09);
+  stroke-width: 2;
+}
+
+.auth-art-roads {
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 5;
+}
+
+.auth-art-ring-fill {
+  fill: rgba(139, 92, 246, 0.14);
+}
+
+.auth-art-ring {
+  stroke: #a78bfa;
+  stroke-width: 3;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.auth-art-dots {
+  fill: #c4b5fd;
+}
+
+.auth-art-pin {
+  fill: #ffffff;
+}
+
+.auth-art-pin circle {
+  fill: #17102e;
+}
+
+/* The one unprompted animation on these pages: the pin drops, then the scan ring
+   draws out and the nearby businesses appear. Without motion it's simply finished. */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-art-pin {
+    animation: auth-pin-drop 420ms var(--ease-standard) both;
+  }
+
+  .auth-art-ring {
+    animation: auth-ring-draw 1100ms var(--ease-standard) 300ms both;
+  }
+
+  .auth-art-ring-fill,
+  .auth-art-dots {
+    animation: auth-art-appear 500ms ease-out 1100ms both;
+  }
+}
+
+@keyframes auth-pin-drop {
+  from { opacity: 0; transform: translateY(-36px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes auth-ring-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes auth-art-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* =========================================
+   10. LANDING PAGE
+   ========================================= */
+.auth-container.view-hero {
+  display: flex;
+}
+
 .auth-hero {
-  display: none;
   position: relative;
-  flex: 1.2;
+  display: flex;
+  flex: 1;
+  min-width: 0;
   background-color: #17102e;
   background-image:
     linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
-  background-size: 40px 40px;
+  background-size: 24px 24px, 24px 24px;
   background-position: center center;
   color: white;
-  padding: 80px;
-  border-right: 1px solid rgba(255,255,255,0.05);
-}
-
-.hero-text {
-  max-width: 500px;
 }
 
 .hero-badge {
@@ -74,600 +911,10 @@
   font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
 }
 
-.hero-text h1 {
-  font-family: var(--font-display, "Segoe UI", sans-serif);
-  font-size: 3.5rem;
-  font-weight: 900;
-  line-height: 1.1;
-  margin-bottom: 24px;
-  letter-spacing: -1px;
+.hero-logo-highlight {
+  color: var(--brand);
 }
 
-.hero-text p {
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.72);
-  opacity: 0.9;
-  line-height: 1.6;
-}
-
-.auth-form-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 100dvh;
-  padding: 24px 28px 24px 36px;
-  padding-top: max(24px, env(safe-area-inset-top));
-  padding-bottom: max(24px, env(safe-area-inset-bottom));
-  background-color: transparent;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-  scrollbar-gutter: stable;
-  overscroll-behavior: contain;
-  transition: background-color var(--motion-normal) var(--ease-standard);
-}
-
-.auth-form-wrapper .auth-card {
-  width: 100%;
-  max-width: 440px;
-}
-
-.auth-form-wrapper .auth-card > h2 {
-  color: var(--text-main);
-}
-
-.auth-form-wrapper .auth-card > p,
-.auth-subtitle {
-  color: var(--text-muted);
-}
-
-.remember-me-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: -8px;
-  margin-bottom: 18px;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.remember-me-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-
-.forgot-password-link {
-  display: inline-flex;
-  margin-top: -8px;
-  margin-bottom: 14px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.88rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-.forgot-password-link:hover {
-  text-decoration: underline;
-}
-
-.forgot-password-panel {
-  margin-bottom: 16px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background-color: var(--accent-hover);
-}
-
-.forgot-password-note {
-  margin: 0 0 10px;
-  color: var(--text-muted);
-  font-size: 0.86rem;
-}
-
-.forgot-input-group {
-  margin-bottom: 12px;
-}
-
-.forgot-actions-row {
-  margin-bottom: 12px;
-}
-
-/* =========================================
-   MOBILE LANDING SPECIFICS (Add Life!)
-   ========================================= */
-.mobile-hero-text {
-  text-align: center;
-}
-
-.mobile-hero-text h2 {
-  font-family: var(--font-display, "Segoe UI", sans-serif);
-  font-size: 2.2rem;
-  font-weight: 900;
-  line-height: 1.1;
-  color: white;
-  margin-bottom: 16px;
-  letter-spacing: -0.5px;
-}
-
-.mobile-hero-text p {
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.72);
-  line-height: 1.5;
-}
-
-/* Auth form controls follow theme tokens */
-.auth-form-wrapper .input-group input,
-.auth-form-wrapper .input-group select,
-.auth-form-wrapper .input-group textarea,
-.auth-form-wrapper .input-group select option {
-  color: var(--text-main);
-  background-color: var(--bg-sheet);
-  border-color: var(--border-color);
-}
-
-.auth-form-wrapper .input-group input::placeholder,
-.auth-form-wrapper .input-group select::placeholder,
-.auth-form-wrapper .input-group textarea::placeholder {
-  color: var(--text-muted);
-}
-
-/* Required fields highlight with theme accent */
-.auth-form-wrapper .input-group input:required,
-.auth-form-wrapper .input-group select:required,
-.auth-form-wrapper .input-group textarea:required {
-  box-shadow: none;
-}
-
-.auth-form-wrapper .input-group input:focus,
-.auth-form-wrapper .input-group select:focus,
-.auth-form-wrapper .input-group textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-/* Small tweak: when label shows required state, tint small border */
-.auth-form-wrapper .input-group.required label {
-  color: var(--text-main);
-}
-
-/* On Mobile, give the landing page the cool grid background */
-@media (max-width: 1023px) {
-  .auth-container {
-    flex-direction: column;
-  }
-
-  .mobile-auth-hero {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: flex-end;
-    padding: calc(26px + env(safe-area-inset-top)) 18px 22px;
-    min-height: 215px;
-    background-color: #17102e;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
-    background-size: 24px 24px, 24px 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .mobile-hero-text {
-    width: 100%;
-    max-width: 460px;
-    margin: 0 auto;
-    text-align: left;
-  }
-
-  .mobile-hero-text h2 {
-    font-size: clamp(2rem, 6.4vw, 2.5rem);
-    line-height: 0.98;
-    letter-spacing: -0.04em;
-    margin-bottom: 12px;
-  }
-
-  .mobile-hero-text p {
-    max-width: 320px;
-    font-size: 0.96rem;
-    line-height: 1.45;
-    color: rgba(255, 255, 255, 0.72);
-  }
-
-  .auth-container.view-landing {
-    background-color: var(--bg-app);
-    background-image: none;
-  }
-
-  .auth-form-wrapper {
-    flex: 1 1 auto;
-    min-height: 0;
-    height: auto;
-    padding: 22px 16px 104px;
-    padding-top: 24px;
-    padding-bottom: max(104px, calc(env(safe-area-inset-bottom) + 104px));
-  }
-
-  .auth-form-wrapper .auth-card {
-    max-width: none;
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 6px 4px 24px;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    box-shadow: none;
-  }
-
-  .auth-form-wrapper .auth-card > h2 {
-    font-size: 1.65rem;
-    margin-bottom: 8px;
-  }
-
-  .auth-form-wrapper .auth-card > p {
-    margin-bottom: 14px;
-  }
-
-  .auth-form-wrapper .auth-card h2 {
-    font-size: 1.7rem;
-    line-height: 1.05;
-  }
-
-  .auth-form-wrapper .auth-card p {
-    font-size: 0.95rem;
-    line-height: 1.45;
-  }
-
-  .auth-form-wrapper .input-group {
-    margin-bottom: 16px;
-  }
-
-  .auth-form-wrapper .input-group input {
-    padding: 12px 13px;
-    border-radius: 13px;
-    font-size: 0.94rem;
-  }
-
-  .upload-trigger {
-    width: 100%;
-    justify-content: center;
-    padding: 11px 13px;
-    border-radius: 13px;
-  }
-
-  .error-alert {
-    margin-bottom: 18px;
-    border-radius: 14px;
-    padding: 12px 14px;
-  }
-
-  .auth-footer {
-    font-size: 0.88rem;
-    line-height: 1.45;
-    margin-bottom: 18px;
-  }
-
-  .auth-footer span {
-    display: inline-block;
-    margin-left: 4px;
-  }
-
-  .remember-me-row {
-    margin-top: -10px;
-    margin-bottom: 14px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .mobile-auth-hero { display: none; }
-  .auth-hero { display: flex; align-items: center; justify-content: center; }
-  .auth-form-wrapper {
-    max-width: 600px;
-    align-items: center;
-    justify-content: center;
-    padding-top: 24px;
-    background-color: var(--bg-app);
-  }
-
-  .auth-container.view-landing .auth-form-wrapper {
-    align-items: flex-start;
-    justify-content: flex-start;
-    padding-top: 56px;
-    padding-bottom: 72px;
-    padding-left: 44px;
-    padding-right: 28px;
-  }
-
-  .auth-container.view-landing .auth-form-wrapper .auth-card {
-    margin-top: 0;
-    margin-bottom: 0;
-  }
-  
-  /* Hide the mobile text on desktop so it doesn't duplicate the hero panel */
-  .mobile-hero-text { display: none; }
-}
-
-/* =========================================
-   2. CARDS & TYPOGRAPHY
-   ========================================= */
-.auth-card {
-  /* Sizing/spacing stays owned by the Tailwind classes on authPanelClass
-     (w-full max-w-[520px] p-6 sm:p-8) — this class only owns the surface
-     identity, so it doesn't fight those or drift out of sync with them. */
-  background: var(--surface-modal-bg);
-  backdrop-filter: blur(var(--surface-modal-blur));
-  -webkit-backdrop-filter: blur(var(--surface-modal-blur));
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-  transition: background-color var(--motion-normal) var(--ease-standard), border-color var(--motion-normal) var(--ease-standard);
-}
-
-.landing-brand-container { text-align: center; }
-
-.auth-header h2 {
-  font-family: var(--font-display, "Segoe UI", sans-serif);
-  font-size: 2rem;
-  font-weight: 800;
-  color: var(--text-main);
-  margin-bottom: 8px;
-  letter-spacing: -0.5px;
-}
-.auth-header p { font-size: 1rem; color: var(--text-muted); }
-
-.hero-side-back-btn {
-  position: absolute;
-  top: calc(env(safe-area-inset-top) + 14px);
-  right: 14px;
-  width: 40px;
-  height: 40px;
-  background: transparent;
-  border: none;
-  color: #ffffff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 3;
-}
-
-.hero-side-back-btn svg {
-  width: 22px;
-  height: 22px;
-}
-
-.hero-side-back-btn:hover {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.back-link {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  transition: color var(--motion-normal) var(--ease-standard);
-}
-.back-link:hover { color: var(--text-main); }
-
-/* =========================================
-   3. FORMS & INPUTS
-   ========================================= */
-/* Scoped to .auth-form-wrapper: these used to be bare/global, which both
-   let App.css's own bare .input-group rules win the cascade tie on this
-   page (Auth.css loads first in the bundle, so on equal specificity the
-   later App.css rule wins) and leaked Auth.css's values onto every other
-   page's .input-group (Home's quick-panel, SpaceSubmissionModal, etc). */
-.auth-form-wrapper .input-group {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 24px;
-}
-
-.auth-form-wrapper .input-group input {
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  font-size: 1rem;
-  color: var(--text-main);
-  background-color: var(--bg-sheet);
-  transition: border-color var(--motion-normal) var(--ease-standard), box-shadow var(--motion-normal) var(--ease-standard);
-}
-.auth-form-wrapper .input-group input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.field-hint {
-  margin-top: 6px;
-  margin-bottom: 8px;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
-
-.auth-form-wrapper .input-group input[type="date"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-}
-
-/* =========================================
-   4. BUTTONS
-   ========================================= */
-.btn-primary {
-  flex: 1;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color var(--motion-normal) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
-}
-.btn-primary:hover { background-color: var(--btn-primary-hover); }
-.btn-primary:active { transform: scale(0.98); }
-.btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-
-.btn-secondary {
-  background: var(--bg-sheet);
-  color: var(--text-main);
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-secondary:hover {
-  background: var(--accent-hover);
-  border-color: var(--border-strong);
-}
-
-.btn-secondary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* =========================================
-   5. EXTRAS (Meters, Links, Alerts)
-   ========================================= */
-.password-strength-wrapper {
-  display: flex;
-  align-items: center;
-}
-
-.strength-meter {
-  flex: 1;
-  height: 4px;
-  background-color: var(--border-color);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.strength-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
-}
-
-.auth-footer {
-  text-align: center;
-  font-size: 0.95rem;
-  color: var(--text-muted);
-}
-
-.auth-footer span {
-  color: var(--text-main);
-  font-weight: 600;
-  cursor: pointer;
-  margin-left: 6px;
-}
-.auth-footer span:hover { text-decoration: underline; }
-
-.error-alert {
-  background-color: var(--trend-down-bg);
-  border: 1px solid var(--border-color);
-  color: var(--trend-down);
-  padding: 14px 16px;
-  border-radius: 10px;
-  margin-bottom: 24px;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.info-alert {
-  background-color: rgba(59, 130, 246, 0.1);
-  border: 1px solid var(--border-color);
-  color: #2563eb;
-  padding: 12px 14px;
-  border-radius: 10px;
-  font-size: 0.88rem;
-}
-
-/* Utilities */
-.w-full { width: 100%; }
-.mb-4 { margin-bottom: 16px; }
-.mb-6 { margin-bottom: 24px; }
-.mb-8 { margin-bottom: 32px; }
-.mt-2 { margin-top: 8px; }
-.mt-4 { margin-top: 16px; }
-
-/* =========================================
-   6. PASSWORD REVEAL TOGGLE
-   ========================================= */
-.password-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-/* Ensure the input takes full width and leaves room for the icon */
-.password-input-wrapper input {
-  width: 100%;
-  padding-right: 45px; /* Prevents text from hiding behind the icon */
-}
-
-/* The Eye Button */
-.password-toggle-btn {
-  position: absolute;
-  right: 12px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-  margin-right: -8px;
-  transition: color var(--motion-normal) var(--ease-standard);
-}
-
-.password-toggle-btn:hover {
-  color: var(--text-main);
-}
-
-.password-toggle-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* =========================================
-   HERO VIEW STYLES
-   ========================================= */
-
-.view-hero .auth-hero {
-  display: flex;
-  flex: 1;
-  padding: 0;
-  border-right: none;
-  background-color: #17102e;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
-  background-size: 24px 24px, 24px 24px;
-  background-position: center center;
-}
-
-.view-hero .auth-form-wrapper {
-  display: none;
-}
-
-.view-login .auth-form-wrapper {
-  display: flex;
-}
-
-/* Hero Container */
 .hero-container {
   display: flex;
   flex-direction: column;
@@ -683,111 +930,28 @@
 .hero-header {
   position: absolute;
   top: calc(env(safe-area-inset-top) + 10px);
-  right: 10px;
-  z-index: 120;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  right: 12px;
+  z-index: 40;
 }
 
-.hero-logo-corner {
-  position: absolute;
-  top: calc(env(safe-area-inset-top) + 10px);
-  left: 12px;
-  z-index: 100;
-  padding: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.hero-logo-corner .brand-mark {
-  width: 44px;
-  height: 30px;
-}
-
-.hero-logo-text {
-  margin: 0;
+.hero-login-btn {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  background: transparent;
   color: #ffffff;
-  font-size: 1.08rem;
-  font-weight: 800;
-  font-family: var(--font-brand, "Sora", "Segoe UI", sans-serif);
-  letter-spacing: -0.01em;
-  line-height: 1;
-}
-
-.hero-logo-highlight {
-  color: var(--brand);
-}
-
-/* Burger Menu Button */
-.burger-menu-btn {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: transparent;
-  border: none;
+  font-size: 0.9375rem;
+  font-weight: 600;
   cursor: pointer;
-  padding: 8px;
-  transition: transform var(--motion-normal) var(--ease-standard);
+  touch-action: manipulation;
+  transition: background-color var(--motion-fast) var(--ease-standard);
 }
 
-.burger-menu-btn:hover {
-  transform: scale(1.1);
+.hero-login-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-.burger-menu-btn span {
-  display: block;
-  width: 28px;
-  height: 3px;
-  background-color: white;
-  border-radius: 2px;
-  transition: transform var(--motion-normal) var(--ease-standard), background-color var(--motion-normal) var(--ease-standard);
-}
-
-/* Burger Menu Dropdown */
-.burger-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 10px;
-  z-index: 140;
-  background-color: #221741;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  overflow: hidden;
-  min-width: 200px;
-  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  /* Open/close animation is now driven by Framer Motion in AuthPages.jsx. */
-}
-
-.burger-item {
-  display: block;
-  width: 100%;
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  color: white;
-  text-align: left;
-  cursor: pointer;
-  font-size: 0.95rem;
-  transition: background-color var(--motion-normal) var(--ease-standard);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.burger-item:last-child {
-  border-bottom: none;
-}
-
-.burger-item:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-}
-
-.burger-item:active {
-  background-color: rgba(255, 255, 255, 0.12);
-}
-
-/* Hero Content */
 .hero-content {
   display: flex;
   flex-direction: column;
@@ -839,7 +1003,6 @@
   padding: 8px 14px;
 }
 
-/* Get Started Button */
 .get-started-btn {
   padding: 14px 40px;
   font-size: 1.05rem;
@@ -863,33 +1026,6 @@
   transform: translateY(0);
 }
 
-/* Back Button */
-.back-btn {
-  position: static;
-  width: 40px;
-  height: 40px;
-  background-color: transparent;
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard);
-  z-index: 50;
-}
-
-.back-btn:hover {
-  color: rgba(255, 255, 255, 0.7);
-  transform: translateX(4px);
-}
-
-.back-btn svg {
-  width: 24px;
-  height: 24px;
-}
-
-/* Mobile Responsiveness for Hero */
 @media (max-width: 768px) {
   .hero-content {
     padding: 30px 20px;
@@ -909,47 +1045,9 @@
   }
 
   .get-started-btn {
+    min-height: 48px;
     padding: 12px 32px;
     font-size: 1rem;
-  }
-
-  .hero-header {
-    top: calc(env(safe-area-inset-top) + 8px);
-    right: 8px;
-  }
-
-  .hero-logo-corner {
-    top: calc(env(safe-area-inset-top) + 8px);
-    left: 10px;
-  }
-
-  .hero-logo-corner .brand-mark {
-    width: 40px;
-    height: 28px;
-  }
-
-  .hero-logo-text {
-    font-size: 1rem;
-  }
-
-  .burger-menu-btn span {
-    width: 24px;
-    height: 2.5px;
-  }
-
-  .burger-menu {
-    right: 8px;
-    min-width: 180px;
-  }
-
-  .back-btn {
-    width: 36px;
-    height: 36px;
-  }
-
-  .back-btn svg {
-    width: 20px;
-    height: 20px;
   }
 }
 
@@ -966,16 +1064,32 @@
   .hero-description {
     font-size: 0.95rem;
   }
-
-  .get-started-btn {
-    padding: 10px 24px;
-    font-size: 0.95rem;
-  }
 }
 
 /* =========================================
-   7. FILE UPLOAD CONTROL
+   11. SHARED WITH OTHER PAGES
+   This file loads globally. Home and SpaceSubmissionModal use .error-alert;
+   Profile uses .upload-input-hidden.
    ========================================= */
+.error-alert {
+  background-color: var(--trend-down-bg);
+  border: 1px solid var(--border-color);
+  color: var(--trend-down);
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+@media (max-width: 1023px) {
+  .error-alert {
+    margin-bottom: 18px;
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+}
+
 .upload-input-hidden {
   position: absolute;
   width: 1px;
@@ -989,62 +1103,10 @@
   pointer-events: none;
 }
 
-.upload-trigger {
-  appearance: none;
-  border: 1px solid var(--border-color);
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
-  background: var(--bg-sheet);
-  color: var(--text-main);
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  padding: 10px 14px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: transform var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
-}
-
-.upload-trigger:hover {
-  transform: translateY(-1px);
-  background: var(--accent-hover);
-  border-color: var(--border-strong);
-}
-
-.upload-trigger:active {
-  transform: translateY(0);
-}
-
-.upload-trigger:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.upload-trigger svg {
-  width: 16px;
-  height: 16px;
-}
-
-.upload-file-name {
-  margin-top: 8px;
-  color: var(--text-muted);
-  font-size: 0.84rem;
-  line-height: 1.35;
-  word-break: break-all;
-  min-height: 1.2em;
-}
-
-/* Short viewports: reclaim vertical space on the mobile auth flow */
-@media (max-height: 640px) and (max-width: 1023px) {
-  .mobile-auth-hero {
-    min-height: 130px;
-    padding-top: calc(14px + env(safe-area-inset-top));
-    padding-bottom: 14px;
-  }
-
-  .auth-form-wrapper {
-    padding-bottom: max(56px, calc(env(safe-area-inset-bottom) + 56px));
-  }
-}
+/* Utilities */
+.w-full { width: 100%; }
+.mb-4 { margin-bottom: 16px; }
+.mb-6 { margin-bottom: 24px; }
+.mb-8 { margin-bottom: 32px; }
+.mt-2 { margin-top: 8px; }
+.mt-4 { margin-top: 16px; }

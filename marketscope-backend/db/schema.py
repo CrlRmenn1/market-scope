@@ -102,6 +102,15 @@ def ensure_users_profile_columns(cursor):
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_business VARCHAR(120)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_setup VARCHAR(50)")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_seen BOOLEAN DEFAULT FALSE")
+    # full_name and address stay as the combined values other pages read.
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(120)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(120)")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS street TEXT")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS barangay TEXT")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS city TEXT")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS region TEXT")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_consent_at TIMESTAMP")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_policy_version VARCHAR(20)")
 
 
 def ensure_custom_msme_table(cursor):

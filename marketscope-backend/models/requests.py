@@ -5,16 +5,19 @@ from pydantic import BaseModel
 
 
 class RegisterUser(BaseModel):
-    full_name: str
+    first_name: str
+    last_name: str
     email: str
     password: str
-    address: str | None = None
+    street: str | None = None
+    barangay: str | None = None
     cellphone_number: str | None = None
     avatar_url: str | None = None
-    age: int | None = None
     birthday: date | None = None
     primary_business: str | None = None
     preferred_setup: str | None = None
+    privacy_consent: bool = False
+    privacy_policy_version: str | None = None
 
 
 class LoginUser(BaseModel):
@@ -32,11 +35,6 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-class DirectResetPasswordRequest(BaseModel):
-    email: str
-    new_password: str
-
-
 class UpdateUserProfile(BaseModel):
     full_name: str
     email: str
@@ -47,6 +45,12 @@ class UpdateUserProfile(BaseModel):
     birthday: date | None = None
     primary_business: str | None = None
     preferred_setup: str | None = None
+    # Left out (None) keeps what's saved, so a form that doesn't show these
+    # fields can't erase them. An empty string clears the address parts.
+    first_name: str | None = None
+    last_name: str | None = None
+    street: str | None = None
+    barangay: str | None = None
 
 
 class AnalysisRequest(BaseModel):
@@ -158,12 +162,17 @@ class AdminReviewUserSpaceSubmissionRequest(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    analysis: dict
+    analysis: dict | None = None
+    # The full POST /analyze result. When present, the narrative is built from it
+    # instead of re-scoring the thinner `analysis` payload.
+    scan: dict | None = None
     category: str | None = None
     export_pdf: bool = False
     business_type: str | None = None
     use_llm: bool = True
-    gemini_model: str = "gemini-1.5-pro"
+    # None uses services.reporting.DEFAULT_GEMINI_MODEL (the GEMINI_MODEL env var).
+    gemini_model: str | None = None
+
 
 class AdminMapLayerCreateRequest(BaseModel):
     category: str
@@ -177,6 +186,7 @@ class AdminMapLayerUpdateRequest(BaseModel):
     name: str
     source_note: str | None = None
     geojson: dict
+
 
 class AdminZoningAllowedUsesRequest(BaseModel):
     # zone_class -> business types allowed there

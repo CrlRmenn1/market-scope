@@ -8,6 +8,42 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 
+# A "-latest" alias keeps working when Google retires a pinned version
+# (gemini-1.5-pro was retired, which silently forced the template fallback).
+DEFAULT_GEMINI_MODEL = os.environ.get('GEMINI_MODEL', '').strip() or 'gemini-flash-latest'
+
+REPORT_SYSTEM_PROMPT = (
+    "You are a friendly business location advisor for new Panabo MSME entrepreneurs. "
+    "Write in a gentle, simple, and clear tone aimed at people new to business. "
+    "Prefer short sentences and common words. Never invent facts or numbers; use only the data provided. "
+    "When using an uncommon or technical word, add a short definition in parentheses immediately after the word. "
+    "If you must state assumptions, label them clearly and keep them brief."
+)
+
+REPORT_SECTIONS = [
+    'Executive Summary',
+    'Location Snapshot',
+    'Zoning Status',
+    'Hazard Status',
+    'Saturation Assessment',
+    'Demand and Anchor Commentary',
+    'Recommendation',
+    'Next Actions',
+]
+
+# The /analyze breakdown factors, in the order the report discusses them. Each is scored 0-25.
+SCAN_FACTORS = [
+    ('zoning', 'Zoning (City Land Use Plan)'),
+    ('hazard', 'Flood hazard'),
+    ('competition_density', 'Competition density'),
+    ('road_access', 'Road access'),
+    ('anchor_proximity', 'Nearby traffic generators (anchors)'),
+    ('building_density', 'Building density'),
+    ('saturation', 'Market saturation (combined market score)'),
+]
+SCAN_FACTOR_MAX = 25
+
+
 def _normalize_count_to_0_100(count: float, scale: float = 10.0) -> float:
     # logistic-like transform to keep values in 0-100
     try:
@@ -259,14 +295,6 @@ def try_render_pdf_bytes(html: str) -> Optional[bytes]:
 
 
 def build_llm_prompt_payload(structured: Dict[str, Any], business_type: str = '') -> Dict[str, str]:
-    system_prompt = (
-        "You are a friendly business location advisor for new Panabo MSME entrepreneurs. "
-        "Write in a gentle, simple, and clear tone aimed at people new to business. "
-        "Prefer short sentences and common words. Never invent facts or numbers; use only the data provided. "
-        "When using an uncommon or technical word, add a short definition in parentheses immediately after the word. "
-        "If you must state assumptions, label them clearly and keep them brief."
-    )
-
     payload = {
         'business_type': business_type,
         'coordinates': structured.get('target_coordinates', {}),
@@ -306,9 +334,126 @@ def build_llm_prompt_payload(structured: Dict[str, Any], business_type: str = ''
     )
 
     return {
-        'system_prompt': system_prompt,
+        'system_prompt': REPORT_SYSTEM_PROMPT,
         'user_prompt': user_prompt,
     }
+
+
+def build_scan_payload(scan: Dict[str, Any], business_type: str = '') -> Dict[str, Any]:
+    """The data the LLM may use, taken as-is from a POST /analyze result."""
+    breakdown = scan.get('breakdown') or {}
+    coords = scan.get('target_coords') or {}
+    factors = {}
+    for key, label in SCAN_FACTORS:
+        factor = breakdown.get(key) or {}
+        factors[key] = {
+            'label': label,
+            'score': factor.get('score'),
+            'max_score': SCAN_FACTOR_MAX,
+            'status': factor.get('status'),
+            'description': factor.get('description'),
+            'details': factor.get('details'),
+        }
+    return {
+        'business_type': scan.get('business_label') or business_type or scan.get('business_type'),
+        'location': {'latitude': coords.get('lat'), 'longitude': coords.get('lng')},
+        'scan_radius_m': scan.get('radius_meters'),
+        'viability_score': scan.get('viability_score'),
+        'viability_score_max': 100,
+        'competitors_found': scan.get('competitors_found'),
+        'system_insight': scan.get('insight'),
+        'factors': factors,
+    }
+
+
+def build_scan_simplification_prompt(scan: Dict[str, Any], business_type: str = '') -> Dict[str, str]:
+    """
+    The one prompt used to turn a scan result into a plain-language report.
+    Production (Gemini) and the AI model evaluation (evaluation/ai_simplification) both use it,
+    so the experts rate exactly what the system sends.
+    """
+    payload = build_scan_payload(scan, business_type=business_type)
+    sections = '\n'.join(f"{idx}) {name}" for idx, name in enumerate(REPORT_SECTIONS, start=1))
+    user_prompt = (
+        "Turn the location scan result below into a feasibility report for a first-time entrepreneur.\n"
+        "Write these sections in this exact order, using these exact headings:\n"
+        f"{sections}\n\n"
+        "What each section covers:\n"
+        "- Location Snapshot: the business type, scan radius, and competitors found.\n"
+        "- Zoning Status: the zoning factor.\n"
+        "- Hazard Status: the flood hazard factor.\n"
+        "- Saturation Assessment: competition density, building density, and market saturation.\n"
+        "- Demand and Anchor Commentary: nearby traffic generators (anchors) and road access.\n\n"
+        "How to read the data: the viability score is out of 100; every factor score is out of 25; "
+        "a higher score is always better for the business (for competition density, a higher score means less competition).\n\n"
+        "Use only the data below (JSON):\n"
+        f"{json.dumps(payload, ensure_ascii=True)}\n\n"
+        "Constraints:\n"
+        "- Keep it concise, gentle, and easy to read for new entrepreneurs. Use common words.\n"
+        "- If you use a technical term, include a one-line plain-language definition in parentheses immediately after the term.\n"
+        "- Write the overall score as \"Viability score: N/100\" and keep every other number exactly as provided.\n"
+        "- Do not hide or soften zoning or flood warnings.\n"
+        "- Do not give financial, legal, or engineering advice beyond what the data supports.\n"
+        "- Use only the data below (do not add or invent facts).\n"
+        "- Do not include markdown code fences.\n"
+        "- Do not output JSON."
+    )
+    return {
+        'system_prompt': REPORT_SYSTEM_PROMPT,
+        'user_prompt': user_prompt,
+    }
+
+
+def generate_deterministic_scan_narrative(scan: Dict[str, Any], business_type: str = '') -> str:
+    """Template fallback for the scan path when no LLM is available."""
+    payload = build_scan_payload(scan, business_type=business_type)
+    factors = payload['factors']
+
+    def factor_line(key: str) -> str:
+        f = factors[key]
+        return f"{f['label']}: {f['score']}/{SCAN_FACTOR_MAX} ({f['status'] or 'N/A'})."
+
+    lines: List[str] = [
+        'Executive Summary',
+        f"This report looks at the selected place for {payload['business_type'] or 'your business'}.",
+        f"Viability score: {payload['viability_score']}/100.",
+        payload['system_insight'] or '',
+        '',
+        'Location Snapshot',
+        f"Scan radius: {payload['scan_radius_m'] or 'N/A'} meters. Competitors found: {payload['competitors_found'] or 0}.",
+        '',
+        'Zoning Status',
+        factor_line('zoning'),
+        '',
+        'Hazard Status',
+        factor_line('hazard'),
+        '',
+        'Saturation Assessment',
+        factor_line('competition_density'),
+        factor_line('building_density'),
+        factor_line('saturation'),
+        '',
+        'Demand and Anchor Commentary',
+        factor_line('anchor_proximity'),
+        factor_line('road_access'),
+        '',
+        'Recommendation',
+    ]
+    score = payload['viability_score'] or 0
+    if score >= 70:
+        lines.append('This looks promising. Try a small test (pilot) first to see real customer interest.')
+    elif score >= 45:
+        lines.append('This could work with care. Run a low-cost test and offer something different from nearby shops.')
+    else:
+        lines.append('This site looks challenging right now. Consider scanning nearby spots or a different business idea.')
+    lines += [
+        '',
+        'Next Actions',
+        '1. Visit the site at different times of day to see foot traffic.',
+        '2. Confirm the zoning with the City Planning and Development Office before signing a lease.',
+        '3. Ask neighbors about past flooding at the exact spot.',
+    ]
+    return '\n'.join(lines)
 
 
 def generate_deterministic_narrative(structured: Dict[str, Any], business_type: str = '') -> str:
@@ -496,7 +641,11 @@ def generate_deterministic_narrative(structured: Dict[str, Any], business_type: 
     return "\n".join(lines)
 
 
-def generate_gemini_narrative(structured: Dict[str, Any], business_type: str = '', model: str = 'gemini-1.5-pro') -> Dict[str, Any]:
+def generate_gemini_narrative(structured: Dict[str, Any], business_type: str = '', model: str = DEFAULT_GEMINI_MODEL) -> Dict[str, Any]:
+    return call_gemini(build_llm_prompt_payload(structured, business_type=business_type), model=model)
+
+
+def call_gemini(prompts: Dict[str, str], model: str = DEFAULT_GEMINI_MODEL) -> Dict[str, Any]:
     api_key = os.environ.get('GEMINI_API_KEY', '').strip()
     if not api_key:
         return {
@@ -507,7 +656,6 @@ def generate_gemini_narrative(structured: Dict[str, Any], business_type: str = '
             'model': model,
         }
 
-    prompts = build_llm_prompt_payload(structured, business_type=business_type)
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     body = {
@@ -583,26 +731,29 @@ def generate_gemini_narrative(structured: Dict[str, Any], business_type: str = '
 
 
 def quality_control_narrative(narrative: str, structured: Dict[str, Any]) -> Dict[str, Any]:
-    required_headings = [
-        'Executive Summary',
-        'Location Snapshot',
-        'Zoning Status',
-        'Hazard Status',
-        'Saturation Assessment',
-        'Demand and Anchor Commentary',
-        'Recommendation',
-        'Next Actions',
-    ]
+    return _quality_control(
+        narrative,
+        expected_competitors=int(((structured.get('inputs') or {}).get('competitor_count') or 0)),
+        expected_viability=round(float(((structured.get('scores') or {}).get('final_viability_score') or 0)), 1),
+    )
+
+
+def quality_control_scan_narrative(narrative: str, scan: Dict[str, Any]) -> Dict[str, Any]:
+    return _quality_control(
+        narrative,
+        expected_competitors=int(scan.get('competitors_found') or 0),
+        expected_viability=round(float(scan.get('viability_score') or 0), 1),
+    )
+
+
+def _quality_control(narrative: str, expected_competitors: int, expected_viability: float) -> Dict[str, Any]:
     warnings: List[str] = []
     reviewed = narrative or ''
 
-    for heading in required_headings:
+    for heading in REPORT_SECTIONS:
         if heading.lower() not in reviewed.lower():
             warnings.append(f'Missing heading: {heading}')
             reviewed += f"\n\n{heading}\n[Section auto-inserted by QC. Please regenerate for richer detail.]"
-
-    expected_competitors = int(((structured.get('inputs') or {}).get('competitor_count') or 0))
-    expected_viability = round(float(((structured.get('scores') or {}).get('final_viability_score') or 0)), 1)
 
     competitor_mentions = re.findall(r'competitor[s]?\s*(?:count|observed)?\s*[:=]?\s*(\d+)', reviewed, flags=re.IGNORECASE)
     if competitor_mentions:
@@ -625,7 +776,7 @@ def generate_narrative_with_fallback(
     structured: Dict[str, Any],
     business_type: str = '',
     use_llm: bool = True,
-    gemini_model: str = 'gemini-1.5-pro',
+    gemini_model: str = DEFAULT_GEMINI_MODEL,
 ) -> Dict[str, Any]:
     llm_meta: Dict[str, Any] = {
         'used_llm': False,
@@ -665,4 +816,51 @@ def generate_narrative_with_fallback(
 
     deterministic = generate_deterministic_narrative(structured, business_type=business_type)
     qc = quality_control_narrative(deterministic, structured)
+    return {'narrative': qc['narrative'], 'qc': qc, 'meta': llm_meta}
+
+
+def generate_narrative_from_scan(
+    scan: Dict[str, Any],
+    business_type: str = '',
+    use_llm: bool = True,
+    gemini_model: str = DEFAULT_GEMINI_MODEL,
+) -> Dict[str, Any]:
+    """Same flow as generate_narrative_with_fallback, but fed the real POST /analyze result."""
+    llm_meta: Dict[str, Any] = {
+        'used_llm': False,
+        'provider': None,
+        'model': None,
+        'fallback_reason': None,
+    }
+
+    if use_llm:
+        llm_result = call_gemini(build_scan_simplification_prompt(scan, business_type=business_type), model=gemini_model)
+        if llm_result.get('ok') and llm_result.get('narrative'):
+            qc = quality_control_scan_narrative(llm_result['narrative'], scan)
+            llm_meta.update({
+                'used_llm': True,
+                'provider': llm_result.get('provider'),
+                'model': llm_result.get('model'),
+                'fallback_reason': None if qc.get('valid') else 'qc_warnings',
+            })
+            if qc.get('valid'):
+                return {'narrative': qc['narrative'], 'qc': qc, 'meta': llm_meta}
+
+            # Keep LLM text even with warnings, but still provide deterministic fallback as backup.
+            return {
+                'narrative': qc['narrative'],
+                'qc': qc,
+                'meta': llm_meta,
+                'deterministic_backup': generate_deterministic_scan_narrative(scan, business_type=business_type),
+            }
+
+        llm_meta.update({
+            'used_llm': False,
+            'provider': llm_result.get('provider'),
+            'model': llm_result.get('model'),
+            'fallback_reason': llm_result.get('error') or 'llm_failed',
+        })
+
+    deterministic = generate_deterministic_scan_narrative(scan, business_type=business_type)
+    qc = quality_control_scan_narrative(deterministic, scan)
     return {'narrative': qc['narrative'], 'qc': qc, 'meta': llm_meta}

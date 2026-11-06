@@ -51,7 +51,7 @@ tests/             Unit tests
 | Router file | Routes |
 |---|---|
 | `routers/health.py` | `GET/HEAD /` |
-| `routers/auth.py` | `/register`, `/login`, `/forgot-password`, `/reset-password`, `/reset-password-direct` |
+| `routers/auth.py` | `/register`, `/login`, `/forgot-password`, `/reset-password` |
 | `routers/users.py` | `/users/{id}` profile, history, onboarding |
 | `routers/trends.py` | `GET /users/{id}/trends`, `POST /users/{id}/trends/rescan`, `GET /trends/results/{id}`, `GET /trends/scan-status` |
 | `routers/analysis.py` | `POST /analyze`, `POST /competitors/preview` |

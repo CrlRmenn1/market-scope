@@ -12,3 +12,4 @@ dist/
 !.env.example
 .idea/
 .DS_Store
+.claude/

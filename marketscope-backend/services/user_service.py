@@ -1,9 +1,12 @@
+import json
+
 from fastapi import HTTPException
 
 from db.schema import (
     get_analysis_history_pk_column_async,
     get_users_primary_key_column_async,
 )
+from services.user_fields import build_address_fields, build_name_fields, resolve_age
 
 
 def saturation_score_from_competitors(competitor_count):
@@ -55,7 +58,20 @@ def build_legacy_breakdown(row):
     }
 
 
+def _decode_json_column(value):
+    # asyncpg returns json/jsonb columns as text (the pool sets no JSON codec).
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return None
+    return value
+
+
 def normalize_history_row(row):
+    for column in ("breakdown", "competitor_locations"):
+        row[column] = _decode_json_column(row.get(column))
+
     if row.get("competitors_found") is None:
         competitor_locations = row.get("competitor_locations") or []
         if isinstance(competitor_locations, list):
@@ -89,7 +105,8 @@ async def get_user_profile(pool, user_id: int):
                 full_name, email, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                preferred_setup, onboarding_seen
+                preferred_setup, onboarding_seen,
+                first_name, last_name, street, barangay, city, region
             FROM users
             WHERE {user_pk_column} = $1
             """,
@@ -118,11 +135,43 @@ async def update_user_profile(pool, user_id: int, payload):
     async with pool.acquire() as conn:
         user_pk_column = await get_users_primary_key_column_async(conn)
         existing_user = await conn.fetchrow(
-            f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = $1",
+            f"""
+            SELECT
+                {user_pk_column} AS user_id,
+                first_name, last_name, street, barangay, city, region
+            FROM users
+            WHERE {user_pk_column} = $1
+            """,
             user_id,
         )
         if not existing_user:
             raise HTTPException(status_code=404, detail="User not found")
+
+        # A form that leaves these fields out keeps what's saved.
+        if payload.first_name is not None or payload.last_name is not None:
+            name_fields = build_name_fields(payload.first_name, payload.last_name)
+        else:
+            name_fields = {
+                "full_name": payload.full_name,
+                "first_name": existing_user["first_name"],
+                "last_name": existing_user["last_name"],
+            }
+
+        if payload.street is None and payload.barangay is None:
+            address_fields = {
+                "address": payload.address or None,
+                "street": existing_user["street"],
+                "barangay": existing_user["barangay"],
+                "city": existing_user["city"],
+                "region": existing_user["region"],
+            }
+        else:
+            address_fields = build_address_fields(payload.street, payload.barangay)
+            # Both left blank on an older account: its typed address has no
+            # street or barangay yet, so keep it until the user enters them.
+            had_split_address = existing_user["street"] or existing_user["barangay"]
+            if not address_fields["address"] and not had_split_address:
+                address_fields["address"] = payload.address or None
 
         duplicate_email = await conn.fetchrow(
             f"""
@@ -148,24 +197,37 @@ async def update_user_profile(pool, user_id: int, payload):
                 age = $6,
                 birthday = $7,
                 primary_business = $8,
-                preferred_setup = $9
-            WHERE {user_pk_column} = $10
+                preferred_setup = $9,
+                first_name = $10,
+                last_name = $11,
+                street = $12,
+                barangay = $13,
+                city = $14,
+                region = $15
+            WHERE {user_pk_column} = $16
             RETURNING
                 {user_pk_column} AS user_id,
                 full_name, email, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                preferred_setup
+                preferred_setup,
+                first_name, last_name, street, barangay, city, region
             """,
-            payload.full_name,
+            name_fields["full_name"],
             payload.email,
-            payload.address or None,
+            address_fields["address"],
             payload.cellphone_number or None,
             payload.avatar_url or None,
-            payload.age,
+            resolve_age(payload.birthday, payload.age),
             payload.birthday,
             payload.primary_business or None,
             payload.preferred_setup or None,
+            name_fields["first_name"],
+            name_fields["last_name"],
+            address_fields["street"],
+            address_fields["barangay"],
+            address_fields["city"],
+            address_fields["region"],
             user_id,
         )
 
