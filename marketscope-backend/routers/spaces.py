@@ -1,10 +1,12 @@
 """Commercial space submissions (user and admin) and map markers."""
 import psycopg2
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header
 from psycopg2.extras import Json, RealDictCursor
 
+from core.auth import require_user
 from core.config import ADMIN_EMAIL
 from core.database import DB_CONFIG
+from core.rate_limit import check_rate_limit
 from core.security import verify_admin_token
 from db.schema import (
     ensure_admin_space_submissions_table,
@@ -18,9 +20,33 @@ from models.requests import (
     UserSpaceSubmissionRequest,
 )
 from services.spaces import fetch_active_space_markers_for_analysis
+from services.user_fields import is_valid_image_data_url
 
 
 router = APIRouter()
+
+MAX_SUBMISSION_PHOTOS = 4
+SUBMISSION_TEXT_LIMITS = {
+    "title": ("Title", 200),
+    "address_text": ("Address", 500),
+    "contact_info": ("Contact info", 200),
+    "notes": ("Notes", 2000),
+    "property_type": ("Property type", 120),
+    "business_type": ("Business type", 120),
+}
+
+
+def validate_user_submission(payload: UserSpaceSubmissionRequest):
+    for field, (label, limit) in SUBMISSION_TEXT_LIMITS.items():
+        value = getattr(payload, field)
+        if isinstance(value, str) and len(value) > limit:
+            raise HTTPException(status_code=400, detail=f"{label} can be at most {limit} characters.")
+
+    photos = payload.photo_urls or []
+    if len(photos) > MAX_SUBMISSION_PHOTOS:
+        raise HTTPException(status_code=400, detail=f"Add at most {MAX_SUBMISSION_PHOTOS} photos.")
+    if not all(is_valid_image_data_url(photo) for photo in photos):
+        raise HTTPException(status_code=400, detail="Photos must be JPG, PNG, WebP or GIF images of 2MB or smaller.")
 
 
 def normalize_listing_mode(value: str) -> str:
@@ -45,9 +71,11 @@ def normalize_space_submission_status(value: str) -> str:
 
 
 @router.post("/spaces/user-submissions")
-def create_user_space_submission(payload: UserSpaceSubmissionRequest):
+def create_user_space_submission(payload: UserSpaceSubmissionRequest, current_user_id: int = Depends(require_user)):
+    check_rate_limit(f"space-submission:user:{current_user_id}", 10, 24 * 60 * 60, "Too many listings submitted today. Try again tomorrow.")
     try:
         listing_mode = normalize_listing_mode(payload.listing_mode)
+        validate_user_submission(payload)
 
         conn = psycopg2.connect(**DB_CONFIG)
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -56,7 +84,7 @@ def create_user_space_submission(payload: UserSpaceSubmissionRequest):
 
         cursor.execute(
             f"SELECT {user_pk_column} AS user_id FROM users WHERE {user_pk_column} = %s",
-            (payload.user_id,)
+            (current_user_id,)
         )
         existing_user = cursor.fetchone()
         if not existing_user:
@@ -87,7 +115,7 @@ def create_user_space_submission(payload: UserSpaceSubmissionRequest):
             RETURNING *
             """,
             (
-                payload.user_id,
+                current_user_id,
                 payload.title,
                 listing_mode,
                 (payload.property_type or None),

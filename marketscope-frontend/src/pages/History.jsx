@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { apiUrl } from '../lib/api';
+import { authFetch } from '../lib/api';
 import { getBusinessTypeKey, getBusinessTypeLabel } from '../utils/businessTypes';
 import useIsDesktop from '../utils/useIsDesktop';
 import AnalysisLoader from '../components/common/AnalysisLoader';
@@ -110,7 +110,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     let active = true;
     setLoading(true);
 
-    fetch(apiUrl(`/users/${userId}/history`), { cache: 'no-store' })
+    authFetch(`/users/${userId}/history`, { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
         if (!active) return;
@@ -229,7 +229,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
 
     startOpeningModal(item.history_id, false);
     try {
-      const response = await fetch(apiUrl(`/users/${userId}/history/${item.history_id}`), { cache: 'no-store' });
+      const response = await authFetch(`/users/${userId}/history/${item.history_id}`, { cache: 'no-store' });
       const data = await response.json();
 
       if (response.ok && data?.history) {
@@ -255,7 +255,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     setRescanError(null);
     startOpeningModal(item.history_id, true);
     try {
-      const response = await fetch(apiUrl('/analyze'), {
+      const response = await authFetch('/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -359,7 +359,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     setDeletingHistoryId(item.history_id);
     setDeleteError('');
     try {
-      const response = await fetch(apiUrl(`/users/${userId}/history/${item.history_id}`), {
+      const response = await authFetch(`/users/${userId}/history/${item.history_id}`, {
         method: 'DELETE'
       });
       const data = await response.json();
@@ -415,7 +415,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
 
     try {
       const results = await Promise.all(selectedVisibleHistoryIds.map(async (historyId) => {
-        const response = await fetch(apiUrl(`/users/${userId}/history/${historyId}`), {
+        const response = await authFetch(`/users/${userId}/history/${historyId}`, {
           method: 'DELETE'
         });
         const data = await response.json();

@@ -116,7 +116,8 @@ class AdminUpdateUser(BaseModel):
 
 
 class UserSpaceSubmissionRequest(BaseModel):
-    user_id: int
+    # Ignored: the submitter is whoever is logged in.
+    user_id: int | None = None
     title: str
     listing_mode: str
     property_type: str | None = None

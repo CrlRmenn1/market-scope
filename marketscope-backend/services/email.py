@@ -1,5 +1,5 @@
 """Password-reset codes and the SMTP email that delivers them."""
-import random
+import secrets
 import smtplib
 from email.message import EmailMessage
 
@@ -17,7 +17,7 @@ from core.config import (
 
 
 def generate_reset_code():
-    return ''.join(random.choice('0123456789') for _ in range(6))
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def is_smtp_configured():

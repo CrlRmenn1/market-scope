@@ -1,4 +1,5 @@
-"""Rules for the name, address, age and consent fields saved on a user."""
+"""Rules for the name, address, age, photo and consent fields saved on a user."""
+import re
 from datetime import date
 
 from fastapi import HTTPException
@@ -7,6 +8,25 @@ from fastapi import HTTPException
 PANABO_CITY = "Panabo City"
 PANABO_REGION = "Davao del Norte"
 NAME_MAX_LENGTH = 120
+MIN_PASSWORD_LENGTH = 6
+
+# A 2MB image is about 2.8 million characters once base64-encoded. SVG is left out
+# on purpose: it can carry scripts. Remote links are out so nothing loads from
+# someone else's server when the admin list opens.
+MAX_IMAGE_DATA_URL_LENGTH = 2_800_000
+_IMAGE_DATA_URL = re.compile(r"data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}")
+_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+# Column limits, checked here so an oversized value gets a clear message.
+_TEXT_LIMITS = {
+    "email": ("Email", 254),
+    "street": ("Street", 200),
+    "barangay": ("Barangay", 120),
+    "address": ("Address", 500),
+    "cellphone_number": ("Cellphone number", 32),
+    "primary_business": ("Primary business", 120),
+    "preferred_setup": ("Preferred setup", 50),
+}
 
 # Bump together with PRIVACY_POLICY_VERSION in
 # marketscope-frontend/src/content/privacyPolicy.jsx when the policy text changes.
@@ -61,6 +81,36 @@ def compute_age(birthday, today=None):
 def resolve_age(birthday, age):
     """The birthday decides the age; an age alone only survives on older accounts."""
     return compute_age(birthday) if birthday else age
+
+
+def is_valid_image_data_url(value):
+    return (
+        isinstance(value, str)
+        and len(value) <= MAX_IMAGE_DATA_URL_LENGTH
+        and _IMAGE_DATA_URL.fullmatch(value) is not None
+    )
+
+
+def validate_avatar(avatar_url):
+    if avatar_url and not is_valid_image_data_url(avatar_url):
+        raise HTTPException(status_code=400, detail="Profile picture must be a JPG, PNG, WebP or GIF image of 2MB or smaller.")
+
+
+def validate_email(email):
+    if not isinstance(email, str) or _EMAIL.fullmatch(email.strip()) is None:
+        raise HTTPException(status_code=400, detail="Enter a valid email address.")
+
+
+def validate_text_lengths(payload):
+    for field, (label, limit) in _TEXT_LIMITS.items():
+        value = getattr(payload, field, None)
+        if isinstance(value, str) and len(value) > limit:
+            raise HTTPException(status_code=400, detail=f"{label} can be at most {limit} characters.")
+
+
+def validate_new_password(password):
+    if len(password.strip()) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
 
 
 def require_privacy_consent(privacy_consent, privacy_policy_version):

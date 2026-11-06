@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { motion } from 'framer-motion';
 import { getTileUrl, getMapInk, TILE_ATTRIBUTION } from '../utils/mapTheme';
-import { apiUrl } from '../lib/api';
+import { authFetch } from '../lib/api';
 import { getBusinessTypeColor, getBusinessTypeLabel } from '../utils/businessTypes';
 import Modal from '../components/common/Modal';
 import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
@@ -518,7 +518,7 @@ export default function Report({ data, targetCoords, onClose }) {
       export_pdf: exportPdf
     };
 
-    const response = await fetch(apiUrl('/reports/generate'), {
+    const response = await authFetch('/reports/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

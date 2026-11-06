@@ -1,7 +1,9 @@
 """Feasibility report generation route."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from constants.msme import DEFAULT_MSME_ANALYSIS_PROFILE, MSME_CATEGORY_PROFILES
+from core.auth import require_user
+from core.rate_limit import check_rate_limit
 from models.requests import ReportRequest
 from services.reporting import (
     DEFAULT_GEMINI_MODEL,
@@ -17,7 +19,9 @@ router = APIRouter()
 
 
 @router.post("/reports/generate")
-def generate_report(payload: ReportRequest):
+def generate_report(payload: ReportRequest, current_user_id: int = Depends(require_user)):
+    # Each one can spend Gemini quota.
+    check_rate_limit(f"report:user:{current_user_id}", 30, 60 * 60, "Too many AI reports. Try again in a little while.")
     try:
         gemini_model = payload.gemini_model or DEFAULT_GEMINI_MODEL
         business_type = payload.business_type or payload.category or ''

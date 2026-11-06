@@ -52,10 +52,41 @@ def get_allowed_origins():
     ]
 
 
-# Admin account and token
-ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "admin@marketscope.local")
-ADMIN_PASSWORD = os.environ.get("MARKETSCOPE_ADMIN_PASSWORD", "admin123")
-ADMIN_TOKEN = os.environ.get("MARKETSCOPE_ADMIN_TOKEN", "marketscope-admin-local-token")
+# Render sets RENDER on its services.
+IS_PRODUCTION = bool(os.environ.get("RENDER")) or os.environ.get("MARKETSCOPE_ENV", "").strip().lower() == "production"
+
+# Public on GitHub, so they're only ever accepted on a developer's own machine.
+DEFAULT_ADMIN_EMAIL = "admin@marketscope.local"
+LOCAL_ADMIN_PASSWORD = "admin123"
+LOCAL_ADMIN_TOKEN = "marketscope-admin-local-token"
+MIN_ADMIN_PASSWORD_LENGTH = 12
+MIN_ADMIN_TOKEN_LENGTH = 32
+
+
+def resolve_admin_secret(value, local_default, min_length, is_production):
+    """The secret to use, or None if production hasn't been given a strong one."""
+    value = (value or "").strip()
+    if not is_production:
+        return value or local_default
+    if len(value) < min_length or value == local_default:
+        return None
+    return value
+
+
+# Admin account and token. None means admin access is locked (see core/security.py).
+ADMIN_EMAIL = os.environ.get("MARKETSCOPE_ADMIN_EMAIL", "").strip() or DEFAULT_ADMIN_EMAIL
+ADMIN_PASSWORD = resolve_admin_secret(
+    os.environ.get("MARKETSCOPE_ADMIN_PASSWORD"), LOCAL_ADMIN_PASSWORD, MIN_ADMIN_PASSWORD_LENGTH, IS_PRODUCTION
+)
+ADMIN_TOKEN = resolve_admin_secret(
+    os.environ.get("MARKETSCOPE_ADMIN_TOKEN"), LOCAL_ADMIN_TOKEN, MIN_ADMIN_TOKEN_LENGTH, IS_PRODUCTION
+)
+
+
+def registration_is_open():
+    """Turns sign-ups off without a code change: MARKETSCOPE_REGISTRATION_OPEN=false."""
+    return os.environ.get("MARKETSCOPE_REGISTRATION_OPEN", "true").strip().lower() != "false"
+
 
 # Password reset codes
 RESET_CODE_TTL_MINUTES = int(os.environ.get("MARKETSCOPE_RESET_CODE_TTL_MINUTES", "10"))

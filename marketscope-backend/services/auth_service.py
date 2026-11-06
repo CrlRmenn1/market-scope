@@ -1,18 +1,22 @@
 import bcrypt
 
 from fastapi import HTTPException
-from datetime import datetime, timezone
 
 from db.schema import (
     get_analysis_history_pk_column_async,
     get_users_primary_key_column_async,
 )
 from services.email import generate_reset_code, send_password_reset_email
+from services.sessions import create_session, delete_user_sessions
 from services.user_fields import (
     build_address_fields,
     build_name_fields,
     compute_age,
     require_privacy_consent,
+    validate_avatar,
+    validate_email,
+    validate_new_password,
+    validate_text_lengths,
 )
 
 
@@ -20,6 +24,8 @@ REQUIRED_TREND_PREFERENCE_FIELDS = (
     "primary_business",
     "preferred_setup",
 )
+
+MAX_RESET_CODE_ATTEMPTS = 5
 
 
 def _normalize_preference_value(value):
@@ -44,6 +50,10 @@ async def register_user(pool, payload):
     require_privacy_consent(payload.privacy_consent, payload.privacy_policy_version)
     name_fields = build_name_fields(payload.first_name, payload.last_name)
     address_fields = build_address_fields(payload.street, payload.barangay)
+    validate_email(payload.email)
+    validate_new_password(payload.password)
+    validate_avatar(payload.avatar_url)
+    validate_text_lengths(payload)
 
     async with pool.acquire() as conn:
         user_pk_column = await get_users_primary_key_column_async(conn)
@@ -91,6 +101,7 @@ async def register_user(pool, payload):
             address_fields["region"],
             payload.privacy_policy_version,
         )
+        token = await create_session(conn, new_user[0])
 
     user_payload = {
         "id": new_user[0],
@@ -119,6 +130,7 @@ async def register_user(pool, payload):
     return {
         "status": "success",
         "user": user_payload,
+        "token": token,
         "trend_preferences_completed": len(missing_preferences) == 0,
         "missing_trend_preferences": missing_preferences,
     }
@@ -142,9 +154,11 @@ async def login_user(pool, payload):
             payload.email,
         )
 
-    db_user = dict(row) if row else None
-    if not db_user or not bcrypt.checkpw(payload.password.encode("utf-8"), db_user["password_hash"].encode("utf-8")):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        db_user = dict(row) if row else None
+        if not db_user or not bcrypt.checkpw(payload.password.encode("utf-8"), db_user["password_hash"].encode("utf-8")):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        token = await create_session(conn, db_user["user_id"])
 
     user_payload = {
         "id": db_user["user_id"],
@@ -173,6 +187,7 @@ async def login_user(pool, payload):
     return {
         "status": "success",
         "user": user_payload,
+        "token": token,
         "trend_preferences_completed": len(missing_preferences) == 0,
         "missing_trend_preferences": missing_preferences,
     }
@@ -208,7 +223,7 @@ async def forgot_password(pool, payload, ttl_minutes):
             await conn.execute(
                 """
                 INSERT INTO password_reset_codes (user_id, code_hash, expires_at)
-                VALUES ($1, $2, CURRENT_TIMESTAMP + ($3 || ' minutes')::interval)
+                VALUES ($1, $2, CURRENT_TIMESTAMP + make_interval(mins => $3))
                 """,
                 user_id,
                 reset_code_hash,
@@ -225,8 +240,7 @@ async def forgot_password(pool, payload, ttl_minutes):
 
 
 async def reset_password(pool, payload):
-    if len(payload.new_password.strip()) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    validate_new_password(payload.new_password)
 
     async with pool.acquire() as conn:
         user_pk_column = await get_users_primary_key_column_async(conn)
@@ -239,7 +253,7 @@ async def reset_password(pool, payload):
 
         reset_row = await conn.fetchrow(
             """
-            SELECT id, code_hash, expires_at
+            SELECT id, code_hash, attempts, expires_at < CURRENT_TIMESTAMP AS is_expired
             FROM password_reset_codes
             WHERE user_id = $1 AND used_at IS NULL
             ORDER BY created_at DESC
@@ -248,14 +262,27 @@ async def reset_password(pool, payload):
             db_user["user_id"],
         )
         if not reset_row:
-            raise HTTPException(status_code=400, detail="No active reset code found")
+            raise HTTPException(status_code=400, detail="No active reset code found. Request a new one.")
 
-        expires_at = reset_row["expires_at"]
-        if isinstance(expires_at, datetime) and expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+        if reset_row["is_expired"]:
             raise HTTPException(status_code=400, detail="Reset code expired. Request a new one.")
 
         is_valid_code = bcrypt.checkpw(payload.code.encode("utf-8"), reset_row["code_hash"].encode("utf-8"))
         if not is_valid_code:
+            # Six digits can be guessed given enough tries, so a code gets only a few.
+            used_up = reset_row["attempts"] + 1 >= MAX_RESET_CODE_ATTEMPTS
+            await conn.execute(
+                """
+                UPDATE password_reset_codes
+                SET attempts = attempts + 1,
+                    used_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE used_at END
+                WHERE id = $1
+                """,
+                reset_row["id"],
+                used_up,
+            )
+            if used_up:
+                raise HTTPException(status_code=400, detail="Too many wrong codes. Request a new one.")
             raise HTTPException(status_code=400, detail="Invalid reset code")
 
         new_hash = bcrypt.hashpw(payload.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -269,5 +296,7 @@ async def reset_password(pool, payload):
                 "UPDATE password_reset_codes SET used_at = CURRENT_TIMESTAMP WHERE id = $1",
                 reset_row["id"],
             )
+            # Anyone logged in with the old password gets logged out.
+            await delete_user_sessions(conn, db_user["user_id"])
 
     return {"status": "success", "detail": "Password reset successful. You can now log in."}

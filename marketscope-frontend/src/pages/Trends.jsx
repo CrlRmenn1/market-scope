@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../lib/api';
+import { authFetch } from '../lib/api';
 import TrendPreferencesGate from '../components/onboarding/TrendPreferencesGate';
 import TrendSpotCard from '../components/trends/TrendSpotCard';
 import { getMissingTrendPreferenceFields } from '../utils/trendPreferences';
@@ -105,7 +105,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     if (!silent) setLoading(true);
 
     try {
-      const response = await fetch(apiUrl(`/users/${userId}/trends`), { cache: 'no-store' });
+      const response = await authFetch(`/users/${userId}/trends`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to load trend analysis.'));
       setTrends(data);
@@ -122,7 +122,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     if (!userId) return;
     setRescanning(true);
     try {
-      const response = await fetch(apiUrl(`/users/${userId}/trends/rescan`), { method: 'POST' });
+      const response = await authFetch(`/users/${userId}/trends/rescan`, { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to start a rescan.'));
       setTrends(data);
@@ -139,7 +139,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     if (!onOpenReport) return;
     setOpeningResultId(spot.result_id);
     try {
-      const response = await fetch(apiUrl(`/trends/results/${spot.result_id}`), { cache: 'no-store' });
+      const response = await authFetch(`/trends/results/${spot.result_id}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to open this report.'));
       onOpenReport(data.report);

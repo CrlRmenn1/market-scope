@@ -6,7 +6,14 @@ from db.schema import (
     get_analysis_history_pk_column_async,
     get_users_primary_key_column_async,
 )
-from services.user_fields import build_address_fields, build_name_fields, resolve_age
+from services.user_fields import (
+    build_address_fields,
+    build_name_fields,
+    resolve_age,
+    validate_avatar,
+    validate_email,
+    validate_text_lengths,
+)
 
 
 def saturation_score_from_competitors(competitor_count):
@@ -138,6 +145,7 @@ async def update_user_profile(pool, user_id: int, payload):
             f"""
             SELECT
                 {user_pk_column} AS user_id,
+                email, avatar_url,
                 first_name, last_name, street, barangay, city, region
             FROM users
             WHERE {user_pk_column} = $1
@@ -146,6 +154,16 @@ async def update_user_profile(pool, user_id: int, payload):
         )
         if not existing_user:
             raise HTTPException(status_code=404, detail="User not found")
+
+        # Only new values are checked, so an older photo or email saved before
+        # these rules can't stop someone editing the rest of their profile.
+        if payload.avatar_url != existing_user["avatar_url"]:
+            validate_avatar(payload.avatar_url)
+        if payload.email != existing_user["email"]:
+            validate_email(payload.email)
+        validate_text_lengths(payload)
+        if len(payload.full_name or "") > 255:
+            raise HTTPException(status_code=400, detail="Name can be at most 255 characters.")
 
         # A form that leaves these fields out keeps what's saved.
         if payload.first_name is not None or payload.last_name is not None:

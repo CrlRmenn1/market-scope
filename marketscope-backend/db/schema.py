@@ -4,7 +4,16 @@ import psycopg2
 from fastapi import HTTPException
 from psycopg2.extras import Json
 
-from core.config import ADMIN_EMAIL, ADMIN_PASSWORD, get_startup_database_config
+from core.config import (
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+    ADMIN_TOKEN,
+    DEFAULT_ADMIN_EMAIL,
+    IS_PRODUCTION,
+    MIN_ADMIN_PASSWORD_LENGTH,
+    MIN_ADMIN_TOKEN_LENGTH,
+    get_startup_database_config,
+)
 from services.ahp import build_consistent_matrix_from_weights, solve_ahp
 
 
@@ -47,6 +56,7 @@ def create_app_tables(db_config):
             ensure_user_space_submissions_table(cursor, user_pk_column)
             ensure_admin_space_submissions_table(cursor)
             ensure_password_reset_codes_table(cursor, user_pk_column)
+            ensure_user_sessions_table(cursor, user_pk_column)
             ensure_trend_scan_tables(cursor)
             ensure_map_layers_tables(cursor)
             ensure_ahp_weight_configs_table(cursor)
@@ -262,6 +272,21 @@ def ensure_password_reset_codes_table(cursor, user_pk_column):
         )
         """ % user_pk_column
     )
+    cursor.execute("ALTER TABLE password_reset_codes ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0")
+
+
+def ensure_user_sessions_table(cursor, user_pk_column):
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token_hash TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(%s) ON DELETE CASCADE,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL
+        )
+        """ % user_pk_column
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions (user_id)")
 
 
 def ensure_trend_scan_tables(cursor):
@@ -502,13 +527,43 @@ def ensure_ahp_seed_data(cursor):
         )
 
 
+def _password_matches_hash(password, stored_hash):
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), str(stored_hash or "").encode("utf-8"))
+    except ValueError:
+        return False  # Not a bcrypt hash.
+
+
 def ensure_default_admin_user(cursor):
-    cursor.execute("SELECT id FROM admin_users WHERE email = %s", (ADMIN_EMAIL,))
+    """Keep the admin account in step with the server's secrets on every startup.
+
+    Changing MARKETSCOPE_ADMIN_PASSWORD must retire the old password, which would
+    otherwise keep working from its saved hash.
+    """
+    if IS_PRODUCTION and (not ADMIN_PASSWORD or not ADMIN_TOKEN):
+        print(
+            "[Security] ADMIN ACCESS IS LOCKED: set MARKETSCOPE_ADMIN_PASSWORD "
+            f"(at least {MIN_ADMIN_PASSWORD_LENGTH} characters) and MARKETSCOPE_ADMIN_TOKEN "
+            f"(at least {MIN_ADMIN_TOKEN_LENGTH} characters) to strong, non-default values.",
+            flush=True,
+        )
+    if not ADMIN_PASSWORD:
+        return
+
+    # The published default address can't stay as a second way in once it's replaced.
+    if IS_PRODUCTION and ADMIN_EMAIL != DEFAULT_ADMIN_EMAIL:
+        cursor.execute("DELETE FROM admin_users WHERE email = %s", (DEFAULT_ADMIN_EMAIL,))
+
+    cursor.execute("SELECT id, password_hash FROM admin_users WHERE email = %s", (ADMIN_EMAIL,))
     existing = cursor.fetchone()
-    if existing:
+    if existing and _password_matches_hash(ADMIN_PASSWORD, existing[1]):
         return
 
     hashed_password = bcrypt.hashpw(ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    if existing:
+        cursor.execute("UPDATE admin_users SET password_hash = %s WHERE id = %s", (hashed_password, existing[0]))
+        return
+
     cursor.execute(
         """
         INSERT INTO admin_users (email, password_hash)

@@ -143,7 +143,7 @@ One layer per type is active, and scans use only the active ones. With no active
 These were found during the reorganization and left as they are, so behavior stays unchanged:
 
 - **Pending user spaces count as available.** `fetch_active_space_markers_for_analysis` (`services/spaces.py`) includes `pending` user submissions, so they appear on the map and in trend scans before an admin approves them.
-- **Default admin credentials.** If the `MARKETSCOPE_ADMIN_*` variables aren't set, the admin login is `admin@marketscope.local` / `admin123` with a fixed token. Set them on Render.
+- **Admin secrets are required in production.** On Render, admin access stays locked until `MARKETSCOPE_ADMIN_PASSWORD` and `MARKETSCOPE_ADMIN_TOKEN` are set to strong values (see `marketscope-backend/.env.example`).
 - **`MARKETSCOPE_RESET_CODE_DEV_MODE` does nothing.** `routers/auth.py` reads it but only runs `pass`.
 - **Windows console encoding.** The DB startup logs print ✓/✗. If stdout isn't UTF-8 (for example when output is piped to a file), that print fails and the DB connection is reported as failed. Set `PYTHONIOENCODING=utf-8` when redirecting output.
 - **Unused user columns.** `users.startup_capital` and `users.target_payback_months` are no longer read or written (those preferences were removed). Existing databases still have them; drop them with `ALTER TABLE users DROP COLUMN startup_capital, DROP COLUMN target_payback_months;` if wanted.

@@ -1,15 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { apiUrl } from '../lib/api';
+import { authFetch } from '../lib/api';
 import { getBusinessTypeLabel, BUSINESS_TYPE_OPTIONS as PRIMARY_BUSINESS_OPTIONS } from '../utils/businessTypes';
 import { getScoreTone } from '../utils/scoreTone';
 import { computeAgeFromBirthday, todayYmd } from '../utils/age';
 import { PANABO_BARANGAYS, PANABO_CITY, PANABO_REGION } from '../constants/panaboBarangays';
 
+// Set by scripts/clean_vandalized_accounts.py on accounts whose name was overwritten.
+// Keep in sync with PLACEHOLDER_NAME there.
+const PLACEHOLDER_NAME = 'MarketScope User';
+const hasPlaceholderName = (value) => (value?.full_name || value?.name) === PLACEHOLDER_NAME;
+
 // Accounts created before names were split only have full_name, which can't be
 // divided reliably ("Juan Dela Cruz"), so it starts under First Name to correct.
 const mapProfileToFormValues = (value) => ({
   full_name: value?.full_name || value?.name || '',
-  first_name: value?.first_name || value?.full_name || value?.name || '',
+  first_name: value?.first_name || (hasPlaceholderName(value) ? '' : (value?.full_name || value?.name || '')),
   last_name: value?.last_name || '',
   email: value?.email || '',
   cellphone_number: value?.cellphone_number || '',
@@ -54,7 +59,7 @@ export default function Profile({ user, onProfileUpdate }) {
     let active = true;
     setLoading(true);
 
-    fetch(apiUrl(`/users/${userId}`), { cache: 'no-store' })
+    authFetch(`/users/${userId}`, { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
         if (!active) return;
@@ -77,7 +82,7 @@ export default function Profile({ user, onProfileUpdate }) {
     if (!userId) return;
 
     let active = true;
-    fetch(apiUrl(`/users/${userId}/history`), { cache: 'no-store' })
+    authFetch(`/users/${userId}/history`, { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
         if (!active) return;
@@ -146,7 +151,7 @@ export default function Profile({ user, onProfileUpdate }) {
 
     setSaving(true);
     try {
-      const response = await fetch(apiUrl(`/users/${userId}`), {
+      const response = await authFetch(`/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -238,7 +243,7 @@ export default function Profile({ user, onProfileUpdate }) {
                   <input
                     ref={profileAvatarInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
                     className="upload-input-hidden"
                     tabIndex={-1}
                     onChange={async (event) => {
@@ -338,6 +343,11 @@ export default function Profile({ user, onProfileUpdate }) {
               <p className="eyebrow-label">Personal Information</p>
               {sectionControls('personal')}
             </div>
+            {hasPlaceholderName(profile) && (
+              <p className="mb-4 rounded-lg border border-[var(--border-color)] bg-[var(--trend-neutral-bg)] px-3 py-2 text-sm text-[var(--text-main)]">
+                Your name needs updating. Choose Edit and enter your first and last name.
+              </p>
+            )}
             <div className="flex flex-col divide-y divide-[var(--border-color)]">
               {editingSection === 'personal' ? (
                 <>
