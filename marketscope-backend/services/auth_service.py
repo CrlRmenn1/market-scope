@@ -8,6 +8,12 @@ from db.schema import (
     get_users_primary_key_column_async,
 )
 from services.email import generate_reset_code, send_password_reset_email
+from services.user_fields import (
+    build_address_fields,
+    build_name_fields,
+    compute_age,
+    require_privacy_consent,
+)
 
 
 REQUIRED_TREND_PREFERENCE_FIELDS = (
@@ -35,6 +41,10 @@ def get_missing_trend_preferences(user_payload):
 
 
 async def register_user(pool, payload):
+    require_privacy_consent(payload.privacy_consent, payload.privacy_policy_version)
+    name_fields = build_name_fields(payload.first_name, payload.last_name)
+    address_fields = build_address_fields(payload.street, payload.barangay)
+
     async with pool.acquire() as conn:
         user_pk_column = await get_users_primary_key_column_async(conn)
         existing_user = await conn.fetchrow(
@@ -51,25 +61,35 @@ async def register_user(pool, payload):
                 full_name, email, password_hash,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                preferred_setup
+                preferred_setup,
+                first_name, last_name, street, barangay, city, region,
+                privacy_consent_at, privacy_policy_version
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, $17)
             RETURNING
                 {user_pk_column}, full_name, email, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                preferred_setup, onboarding_seen
+                preferred_setup, onboarding_seen,
+                first_name, last_name, street, barangay, city, region
             """,
-            payload.full_name,
+            name_fields["full_name"],
             payload.email,
             hashed_password,
-            payload.address or None,
+            address_fields["address"],
             payload.cellphone_number or None,
             payload.avatar_url or None,
-            payload.age,
+            compute_age(payload.birthday) if payload.birthday else None,
             payload.birthday,
             payload.primary_business or None,
             payload.preferred_setup or None,
+            name_fields["first_name"],
+            name_fields["last_name"],
+            address_fields["street"],
+            address_fields["barangay"],
+            address_fields["city"],
+            address_fields["region"],
+            payload.privacy_policy_version,
         )
 
     user_payload = {
@@ -86,6 +106,13 @@ async def register_user(pool, payload):
         "primary_business": new_user[9],
         "preferred_setup": new_user[10],
         "onboarding_seen": bool(new_user[11]),
+        "full_name": new_user[1],
+        "first_name": new_user[12],
+        "last_name": new_user[13],
+        "street": new_user[14],
+        "barangay": new_user[15],
+        "city": new_user[16],
+        "region": new_user[17],
     }
     missing_preferences = get_missing_trend_preferences(user_payload)
 
@@ -107,7 +134,8 @@ async def login_user(pool, payload):
                 full_name, email, password_hash, created_at,
                 address, cellphone_number, avatar_url,
                 age, birthday, primary_business,
-                preferred_setup, onboarding_seen
+                preferred_setup, onboarding_seen,
+                first_name, last_name, street, barangay, city, region
             FROM users
             WHERE email = $1
             """,
@@ -132,6 +160,13 @@ async def login_user(pool, payload):
         "primary_business": db_user.get("primary_business"),
         "preferred_setup": db_user.get("preferred_setup"),
         "onboarding_seen": bool(db_user.get("onboarding_seen")),
+        "full_name": db_user["full_name"],
+        "first_name": db_user.get("first_name"),
+        "last_name": db_user.get("last_name"),
+        "street": db_user.get("street"),
+        "barangay": db_user.get("barangay"),
+        "city": db_user.get("city"),
+        "region": db_user.get("region"),
     }
     missing_preferences = get_missing_trend_preferences(user_payload)
 
@@ -234,28 +269,5 @@ async def reset_password(pool, payload):
                 "UPDATE password_reset_codes SET used_at = CURRENT_TIMESTAMP WHERE id = $1",
                 reset_row["id"],
             )
-
-    return {"status": "success", "detail": "Password reset successful. You can now log in."}
-
-
-async def reset_password_direct(pool, payload):
-    if len(payload.new_password.strip()) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
-
-    async with pool.acquire() as conn:
-        user_pk_column = await get_users_primary_key_column_async(conn)
-        db_user = await conn.fetchrow(
-            f"SELECT {user_pk_column} AS user_id FROM users WHERE email = $1",
-            payload.email,
-        )
-        if not db_user:
-            raise HTTPException(status_code=404, detail="Email not found")
-
-        new_hash = bcrypt.hashpw(payload.new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-        await conn.execute(
-            f"UPDATE users SET password_hash = $1 WHERE {user_pk_column} = $2",
-            new_hash,
-            db_user["user_id"],
-        )
 
     return {"status": "success", "detail": "Password reset successful. You can now log in."}

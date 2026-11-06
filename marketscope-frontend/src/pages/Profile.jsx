@@ -2,16 +2,23 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { apiUrl } from '../lib/api';
 import { getBusinessTypeLabel, BUSINESS_TYPE_OPTIONS as PRIMARY_BUSINESS_OPTIONS } from '../utils/businessTypes';
 import { getScoreTone } from '../utils/scoreTone';
+import { computeAgeFromBirthday, todayYmd } from '../utils/age';
+import { PANABO_BARANGAYS, PANABO_CITY, PANABO_REGION } from '../constants/panaboBarangays';
 
+// Accounts created before names were split only have full_name, which can't be
+// divided reliably ("Juan Dela Cruz"), so it starts under First Name to correct.
 const mapProfileToFormValues = (value) => ({
   full_name: value?.full_name || value?.name || '',
+  first_name: value?.first_name || value?.full_name || value?.name || '',
+  last_name: value?.last_name || '',
   email: value?.email || '',
   cellphone_number: value?.cellphone_number || '',
   address: value?.address || '',
+  street: value?.street || '',
+  barangay: value?.barangay || '',
   primary_business: value?.primary_business || '',
   preferred_setup: value?.preferred_setup || '',
   birthday: value?.birthday ? String(value.birthday).slice(0, 10) : '',
-  age: value?.age ?? '',
   avatar_url: value?.avatar_url || ''
 });
 
@@ -115,16 +122,38 @@ export default function Profile({ user, onProfileUpdate }) {
     ? new Date(profile.created_at).toLocaleDateString()
     : (loading ? 'Loading...' : 'Unavailable');
 
+  // Calculated from the birthday. Older accounts may only have a typed age.
+  const ageFromBirthday = computeAgeFromBirthday(profile?.birthday);
+  const ageLabel = ageFromBirthday ?? profile?.age ?? '-';
+  const editingAgeLabel = formValues.birthday ? computeAgeFromBirthday(formValues.birthday) : (profile?.birthday ? '-' : ageLabel);
+
+  // An older account's whole name sits under First Name until it's corrected.
+  // Leave its split name unsaved unless the person actually changed it.
+  const saved = mapProfileToFormValues(profile);
+  const nameChanged = formValues.first_name !== saved.first_name || formValues.last_name !== saved.last_name;
+  const hasSplitName = Boolean(profile?.first_name);
+  const hasSplitAddress = Boolean(profile?.street || profile?.barangay);
+
   const handleSave = async () => {
     if (!userId) return;
+
+    const { first_name, last_name, ...otherValues } = formValues;
+    const shouldSaveName = hasSplitName || nameChanged;
+    if (shouldSaveName && (!first_name.trim() || !last_name.trim())) {
+      alert('Enter both your first name and last name.');
+      return;
+    }
+
     setSaving(true);
     try {
       const response = await fetch(apiUrl(`/users/${userId}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formValues,
-          age: formValues.age === '' ? null : Number(formValues.age),
+          ...otherValues,
+          ...(shouldSaveName ? { first_name, last_name } : {}),
+          // Clearing the birthday also clears the age that came from it.
+          age: formValues.birthday || profile?.birthday ? null : (profile?.age ?? null),
           birthday: formValues.birthday || null
         })
       });
@@ -310,13 +339,20 @@ export default function Profile({ user, onProfileUpdate }) {
               {sectionControls('personal')}
             </div>
             <div className="flex flex-col divide-y divide-[var(--border-color)]">
-              <Row label="Full Name">
-                {editingSection === 'personal' ? (
-                  <input type="text" className={inlineInputClass} value={formValues.full_name} onChange={updateField('full_name')} />
-                ) : (
+              {editingSection === 'personal' ? (
+                <>
+                  <Row label="First Name">
+                    <input type="text" className={inlineInputClass} autoComplete="given-name" maxLength={120} value={formValues.first_name} onChange={updateField('first_name')} />
+                  </Row>
+                  <Row label="Last Name">
+                    <input type="text" className={inlineInputClass} autoComplete="family-name" maxLength={120} value={formValues.last_name} onChange={updateField('last_name')} />
+                  </Row>
+                </>
+              ) : (
+                <Row label="Full Name">
                   <span className="settings-value">{profile?.full_name || profile?.name || '-'}</span>
-                )}
-              </Row>
+                </Row>
+              )}
               <Row label="Account Email">
                 {editingSection === 'personal' ? (
                   <input type="email" className={inlineInputClass} value={formValues.email} onChange={updateField('email')} />
@@ -331,26 +367,49 @@ export default function Profile({ user, onProfileUpdate }) {
                   <span className="settings-value">{profile?.cellphone_number || '-'}</span>
                 )}
               </Row>
-              <Row label="Address">
-                {editingSection === 'personal' ? (
-                  <input type="text" className={inlineInputClass} value={formValues.address} onChange={updateField('address')} />
-                ) : (
+              {editingSection === 'personal' ? (
+                <>
+                  {profile?.address && !hasSplitAddress && (
+                    <Row label="Current Address">
+                      <span className="settings-value">{profile.address}</span>
+                    </Row>
+                  )}
+                  <Row label="Street">
+                    <input type="text" className={inlineInputClass} autoComplete="address-line1" placeholder="House no. and street" value={formValues.street} onChange={updateField('street')} />
+                  </Row>
+                  <Row label="Barangay">
+                    <select className={inlineInputClass} value={formValues.barangay} onChange={updateField('barangay')}>
+                      <option value="">Not set</option>
+                      {/* Keeps a saved value selectable even if it isn't in the current list. */}
+                      {formValues.barangay && !PANABO_BARANGAYS.includes(formValues.barangay) && (
+                        <option value={formValues.barangay}>{formValues.barangay}</option>
+                      )}
+                      {PANABO_BARANGAYS.map((barangay) => (
+                        <option key={barangay} value={barangay}>{barangay}</option>
+                      ))}
+                    </select>
+                  </Row>
+                  <Row label="City">
+                    <span className="settings-value">{PANABO_CITY}</span>
+                  </Row>
+                  <Row label="Region">
+                    <span className="settings-value">{PANABO_REGION}</span>
+                  </Row>
+                </>
+              ) : (
+                <Row label="Address">
                   <span className="settings-value">{profile?.address || '-'}</span>
-                )}
-              </Row>
+                </Row>
+              )}
               <Row label="Birthday">
                 {editingSection === 'personal' ? (
-                  <input type="date" className={inlineInputClass} value={formValues.birthday} onChange={updateField('birthday')} />
+                  <input type="date" className={inlineInputClass} autoComplete="bday" min="1900-01-01" max={todayYmd()} value={formValues.birthday} onChange={updateField('birthday')} />
                 ) : (
                   <span className="settings-value">{profile?.birthday ? new Date(profile.birthday).toLocaleDateString() : '-'}</span>
                 )}
               </Row>
               <Row label="Age">
-                {editingSection === 'personal' ? (
-                  <input type="number" min="0" max="120" className={inlineInputClass} value={formValues.age} onChange={updateField('age')} />
-                ) : (
-                  <span className="settings-value">{profile?.age ?? '-'}</span>
-                )}
+                <span className="settings-value">{editingSection === 'personal' ? editingAgeLabel : ageLabel}</span>
               </Row>
             </div>
           </div>

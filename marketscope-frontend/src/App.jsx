@@ -13,6 +13,7 @@ import SpaceSubmissionModal from './components/spaces/SpaceSubmissionModal';
 import { apiUrl } from './lib/api';
 import './styles/app/index.css';
 import { getMissingTrendPreferenceFields } from './utils/trendPreferences';
+import { removeStoredPassword } from './utils/rememberedLogin';
 
 export default function App() {
   const validTabs = ['home', 'trends', 'profile', 'history'];
@@ -63,6 +64,8 @@ export default function App() {
   };
 
   useEffect(() => {
+    removeStoredPassword();
+
     const savedUser = localStorage.getItem('marketscope_session');
     if (savedUser) {
       setSession(JSON.parse(savedUser));
