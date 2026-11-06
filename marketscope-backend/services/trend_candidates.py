@@ -3,13 +3,13 @@
 Three kinds of candidates, in priority order (when two land on the same spot,
 the first one wins):
   1. "space"    - every active For Rent / For Sale listing (an actual available space)
-  2. "landmark" - the Panabo anchor landmarks (market, terminal, schools...)
+  2. "landmark" - curated anchors and the major OSM ones (market, terminal, schools...)
   3. "area"     - a grid of points (~330 m apart) inside the active zoning layer's
                   polygons of every LGU zone the business type is allowed in
                   (the admin's allowed-uses table, services/zoning.py).
 """
-from constants.geo import PANABO_ANCHORS
 from constants.map_layers import ZONING_CLASSES
+from services.anchors import get_trend_landmarks
 from services.zoning import allowed_zone_classes, get_zoning_features
 from utils.geo_libs import Point
 from utils.values import to_finite_number
@@ -43,9 +43,10 @@ def build_area_grid_points(zone_feature, step: float = GRID_STEP_DEGREES):
     return points
 
 
-def build_scan_candidates(business_key: str, space_markers=None, zoning_features=None, allowed_zones=None):
-    """zoning_features defaults to the active zoning layer and allowed_zones to the
-    zones this business type is allowed in (both from services/zoning.py)."""
+def build_scan_candidates(business_key: str, space_markers=None, zoning_features=None, allowed_zones=None, landmarks=None):
+    """zoning_features defaults to the active zoning layer, allowed_zones to the zones
+    this business type is allowed in (both from services/zoning.py), and landmarks to
+    the current anchors (services/anchors.py)."""
     candidates = []
 
     for marker in space_markers or []:
@@ -61,7 +62,7 @@ def build_scan_candidates(business_key: str, space_markers=None, zoning_features
             "space_id": str(marker.get("id")) if marker.get("id") is not None else None,
         })
 
-    for anchor in PANABO_ANCHORS:
+    for anchor in get_trend_landmarks() if landmarks is None else landmarks:
         candidates.append({
             "lat": anchor["lat"],
             "lon": anchor["lon"],

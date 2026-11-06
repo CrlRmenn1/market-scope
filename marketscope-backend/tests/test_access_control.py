@@ -39,7 +39,7 @@ PUBLIC_ROUTES = {
 }
 
 ROUTE_MODULES = (
-    "admin_auth", "admin_users", "analysis", "auth", "data_backup", "health", "map_layers",
+    "admin_auth", "admin_users", "analysis", "anchors", "auth", "data_backup", "health", "map_layers",
     "msmes", "reports", "spaces", "trends", "users", "verified_features",
 )
 

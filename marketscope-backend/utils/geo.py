@@ -1,6 +1,18 @@
 """Distance, bounds, and area math."""
 import math
 
+# Metres per degree around Panabo (latitude 7.3). Over a city this size the error
+# against calculate_distance is well under 0.1%.
+_LOCAL_LAT_ORIGIN = 7.30
+_LOCAL_LON_ORIGIN = 125.68
+_LOCAL_M_PER_DEG_LAT = 6371000 * math.pi / 180
+_LOCAL_M_PER_DEG_LON = _LOCAL_M_PER_DEG_LAT * math.cos(math.radians(_LOCAL_LAT_ORIGIN))
+
+
+def local_xy(lat, lon):
+    """Panabo-local metres (x, y). Works on single numbers or numpy arrays."""
+    return (lon - _LOCAL_LON_ORIGIN) * _LOCAL_M_PER_DEG_LON, (lat - _LOCAL_LAT_ORIGIN) * _LOCAL_M_PER_DEG_LAT
+
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371000 

@@ -1,0 +1,22 @@
+{
+  "_about": "Sites the engine must rank correctly (tests/test_engine_benchmark.py). Add a site you know is good or bad and the test checks it. 'saved_scans' are the 5 scans in analysis_history when the engine was replaced, kept as a before/after record; mark any that looked wrong by moving them into good_sites or bad_sites.",
+  "businesses": ["coffee", "pharmacy", "hardware", "kiosk", "carwash"],
+  "good_sites": [
+    {"name": "Gaisano Grand Panabo", "lat": 7.30632, "lon": 125.68651, "why": "The main mall, in the commercial center."},
+    {"name": "Panabo Public Market", "lat": 7.30624, "lon": 125.68382, "why": "A major market."},
+    {"name": "Panabo City Market", "lat": 7.30085, "lon": 125.6821, "why": "A major market on the highway."},
+    {"name": "Integrated Bus and Jeepney Terminal", "lat": 7.29842, "lon": 125.68021, "why": "The city's transport hub."}
+  ],
+  "bad_sites": [
+    {"name": "Empty land east", "lat": 7.3, "lon": 125.73, "empty": true, "why": "No road, anchor or building within reach."},
+    {"name": "Empty land southeast", "lat": 7.275, "lon": 125.71, "empty": true, "why": "No road, anchor or building within reach."},
+    {"name": "Rural northeast", "lat": 7.325, "lon": 125.72, "why": "A road and some houses, but nothing that draws customers."}
+  ],
+  "saved_scans": [
+    {"business": "pharmacy", "lat": 7.30496, "lon": 125.68261, "radius": 1100, "old_score": 88},
+    {"business": "pharmacy", "lat": 7.3125, "lon": 125.68605, "radius": 1100, "old_score": 88},
+    {"business": "pharmacy", "lat": 7.30701, "lon": 125.68364, "radius": 950, "old_score": 86},
+    {"business": "pharmacy", "lat": 7.30973, "lon": 125.6848, "radius": 1500, "old_score": 80},
+    {"business": "pharmacy", "lat": 7.30539, "lon": 125.68244, "radius": 750, "old_score": 58}
+  ]
+}

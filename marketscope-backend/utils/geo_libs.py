@@ -9,10 +9,19 @@ except Exception:
     gpd = None
 
 try:
+    import numpy as np
+except Exception:
+    np = None
+
+try:
+    import shapely as shapely_lib
+    from shapely import STRtree
     from shapely.geometry import Point, box, mapping, shape
     from shapely.ops import nearest_points, unary_union
     from shapely.validation import make_valid
 except Exception:
+    shapely_lib = None
+    STRtree = None
     Point = None
     box = None
     mapping = None

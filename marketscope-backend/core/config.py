@@ -5,6 +5,8 @@ See .env.example in the backend folder for the full list with defaults.
 import os
 from urllib.parse import urlparse
 
+from constants.engine import VERDICT_HIGH_MIN
+
 
 def get_database_config():
     database_url = os.environ.get("DATABASE_URL")
@@ -108,4 +110,4 @@ TREND_SCAN_RADIUS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_RADIUS", "340"))
 # A finished scan younger than this is reused instead of scanning again.
 TREND_SCAN_FRESH_HOURS = int(os.environ.get("MARKETSCOPE_TREND_SCAN_FRESH_HOURS", "24"))
 # Spots scoring at least this are "high chance" (same cut-off as the "Favorable Location" insight).
-TREND_HIGH_CHANCE_MIN_SCORE = int(os.environ.get("MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE", "70"))
+TREND_HIGH_CHANCE_MIN_SCORE = int(os.environ.get("MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE", str(VERDICT_HIGH_MIN)))

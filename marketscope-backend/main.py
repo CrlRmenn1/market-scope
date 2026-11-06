@@ -22,6 +22,7 @@ from routers import (
     admin_auth,
     admin_users,
     analysis,
+    anchors,
     auth,
     data_backup,
     health,
@@ -36,6 +37,7 @@ from routers import (
 from services.ahp_weights import _load_ahp_weights_cache
 from services.hazard import preload_hazard_layer_cache
 from services.map_layers import (
+    mark_stale_if_engine_changed,
     migrate_layers_to_stack_order,
     migrate_zoning_to_lgu_classes,
     seed_builtin_map_layers,
@@ -66,6 +68,8 @@ async def lifespan(app: FastAPI):
     # One time: old zoning classes become LGU zones; default allowed-uses table.
     migrate_zoning_to_lgu_classes()
     seed_zoning_allowed_uses()
+    # One time per engine version: trend results from an older engine get redone.
+    mark_stale_if_engine_changed()
     
     # Create asyncpg pool with retry logic
     app.state.db_pool = await connect_with_retry()
@@ -75,10 +79,8 @@ async def lifespan(app: FastAPI):
     # low-CPU host). Running them synchronously here blocks the port from
     # opening at all, which reads as a hung/failed deploy on hosts like
     # Render. Run them in the background instead so the server starts
-    # accepting connections immediately; each cache already has its own
-    # lazy-load-on-first-use fallback (hazard, PBF competitors) or a
-    # clearly-labeled neutral score for callers that land before it's ready
-    # (road/building spatial context), so this is safe.
+    # accepting connections immediately. A scan that lands before they finish
+    # waits for them (each loader holds a lock) rather than scoring without them.
     def _preload_geo_caches():
         preload_hazard_layer_cache()
         preload_zoning_layer_cache()
@@ -126,6 +128,7 @@ app.include_router(reports.router)
 app.include_router(admin_users.router)
 app.include_router(msmes.router)
 app.include_router(verified_features.router)
+app.include_router(anchors.router)
 app.include_router(analysis.router)
 app.include_router(trends.router)
 app.include_router(map_layers.router)

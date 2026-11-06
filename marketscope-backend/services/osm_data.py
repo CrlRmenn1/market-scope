@@ -1,47 +1,97 @@
-"""OpenStreetMap (panabo.pbf) caches: competitors, roads, buildings, and the reference road map."""
+"""OpenStreetMap (panabo.pbf) caches: competitors, anchors, roads, buildings, and the reference road map.
+
+GDAL only gives some OSM tags their own column; the rest stay in "other_tags". On
+the points layer that includes amenity and shop, so reading only the columns would
+miss almost every shop mapped as a point. _feature_tags() reads both.
+"""
 import json
+import re
+import time
+import warnings
 from threading import Lock
 
+from constants.engine import (
+    OSM_ANCHOR_TAGS,
+    OSM_BARANGAY_HALL_POWER,
+    ROAD_CLASS_VALUES,
+    ROAD_IGNORED_CLASSES,
+    TREND_AREA_PLACE_TYPES,
+)
 from constants.geo import PANABO_BOUNDS
 from constants.msme import (
     COMMERCIAL_AMENITY_VALUES,
     PBF_NAME_KEYWORD_FALLBACK,
-    ROAD_CLASS_BASE_SCORES,
 )
 from core.paths import PBF_PATH
-from utils.geo import calculate_distance
-from utils.geo_libs import box, gpd, mapping
-from utils.values import normalize_osm_value, to_finite_number
+from utils.geo import calculate_distance, check_inside_bounds, local_xy
+from utils.geo_libs import STRtree, box, gpd, mapping, np, shapely_lib
+from utils.values import normalize_osm_value
 
 
+# (tag_key, tag_value) -> [features]
 PBF_COMPETITOR_CACHE = {}
 
 
 PBF_ALL_COMPETITORS = []
 
 
+# [{"osm_ref", "name", "category", "power", "lat", "lon", "tag"}]
+PBF_ANCHOR_FEATURES = []
+
+
+# Named places that give trend areas their names: [{"name", "place", "lat", "lon"}]
+PBF_PLACE_FEATURES = []
+
+
 PBF_CACHE_LOADED = False
+
+
+# False when the file is missing or couldn't be read: the scan reports it instead
+# of treating "no data" as "no competitors".
+PBF_FEATURES_AVAILABLE = False
 
 
 PBF_CACHE_LOCK = Lock()
 
 
-PBF_LAYERS = ["points", "multipolygons", "lines", "multilinestrings"]
+PBF_FEATURE_LAYERS = ["points", "multipolygons"]
 
 
-PBF_SEARCH_COLUMNS = ["amenity", "shop", "healthcare"]
+PBF_COLUMN_TAGS = ["amenity", "shop", "healthcare", "leisure", "office", "public_transport", "place"]
 
 
-PBF_ROAD_CONTEXT_GDF = None
+PBF_COMPETITOR_KEYS = ["amenity", "shop", "healthcare"]
 
 
-PBF_BUILDING_CONTEXT_GDF = None
+OTHER_TAGS_PATTERN = re.compile(r'"((?:[^"\\]|\\.)*)"=>"((?:[^"\\]|\\.)*)"')
+
+
+ROAD_INDEX = None
+
+
+BUILDING_INDEX = None
 
 
 PBF_SPATIAL_CONTEXT_LOADED = False
 
 
 PBF_SPATIAL_CONTEXT_LOCK = Lock()
+
+
+# A failed read is retried, but not on every scan.
+LOAD_RETRY_SECONDS = 60
+_LAST_FEATURE_FAILURE = None
+_LAST_SPATIAL_FAILURE = None
+
+
+def _retry_too_soon(failed_at):
+    return failed_at is not None and time.monotonic() - failed_at < LOAD_RETRY_SECONDS
+
+
+def _clean_name(value):
+    if isinstance(value, str):
+        return value.strip() or None
+    return None
 
 
 def _normalize_road_class(value):
@@ -56,7 +106,7 @@ def _normalize_road_class(value):
     if normalized.endswith("_link"):
         normalized = normalized[:-5]
 
-    if normalized in ROAD_CLASS_BASE_SCORES:
+    if normalized in ROAD_CLASS_VALUES or normalized in ROAD_IGNORED_CLASSES:
         return normalized
 
     if normalized in {"road", "street", "lane"}:
@@ -99,200 +149,326 @@ def _feature_weight_from_building_row(row):
     return weight
 
 
+def _to_local_geometries(geometries):
+    """Geometries from lon/lat degrees to Panabo-local metres, so distances are real metres."""
+    def transform(coords):
+        x, y = local_xy(coords[:, 1], coords[:, 0])
+        return np.column_stack([x, y])
+
+    return shapely_lib.transform(np.asarray(geometries), transform)
+
+
+class RoadIndex:
+    """Road lines in local metres, searchable by distance."""
+
+    def __init__(self, lon_lat_geometries, road_classes, names):
+        self.geometries = _to_local_geometries(lon_lat_geometries)
+        self.road_classes = list(road_classes)
+        self.names = [_clean_name(name) for name in names]
+        self.tree = STRtree(self.geometries)
+
+    def __len__(self):
+        return len(self.road_classes)
+
+    def nearest_by_class(self, lat, lon, max_distance_m):
+        """{road class: (distance_m, name)} for the closest road of each class in range."""
+        x, y = local_xy(lat, lon)
+        origin = shapely_lib.points(float(x), float(y))
+        found = np.sort(self.tree.query(origin, predicate="dwithin", distance=max_distance_m))
+        if len(found) == 0:
+            return {}
+
+        distances = shapely_lib.distance(self.geometries[found], origin)
+        nearest = {}
+        for index, distance_m in zip(found, distances):
+            road_class = self.road_classes[index]
+            if road_class not in nearest or distance_m < nearest[road_class][0]:
+                nearest[road_class] = (float(distance_m), self.names[index])
+        return nearest
+
+
+class BuildingIndex:
+    """Built features as arrays of local-metre points, summed by distance."""
+
+    def __init__(self, xs, ys, feature_weights, area_bonuses):
+        self.xs = np.asarray(xs, dtype=float)
+        self.ys = np.asarray(ys, dtype=float)
+        self.values = np.asarray(feature_weights, dtype=float) * np.asarray(area_bonuses, dtype=float)
+
+    def __len__(self):
+        return len(self.xs)
+
+    def intensity(self, lat, lon, reach_m):
+        """(sum of value * linear fade to reach_m, features in reach)."""
+        x, y = local_xy(lat, lon)
+        distances = np.hypot(self.xs - float(x), self.ys - float(y))
+        in_reach = distances < reach_m
+        fade = 1.0 - distances[in_reach] / reach_m
+        return float(np.sum(self.values[in_reach] * fade)), int(np.count_nonzero(in_reach))
+
+
+def _building_area_bonus(area_m2):
+    return 1.0 + np.minimum(2.0, area_m2 / 2500.0) * 0.18
+
+
+def _build_road_index(road_gdf):
+    if road_gdf is None or road_gdf.empty or "highway" not in road_gdf.columns:
+        return None
+
+    road_gdf = road_gdf[road_gdf["geometry"].notna() & road_gdf["highway"].notna()].copy()
+    road_gdf["road_class"] = road_gdf["highway"].apply(_normalize_road_class)
+    road_gdf = road_gdf[road_gdf["road_class"].isin(ROAD_CLASS_VALUES.keys())]
+    if road_gdf.empty:
+        return None
+
+    names = road_gdf["name"] if "name" in road_gdf.columns else [None] * len(road_gdf)
+    return RoadIndex(road_gdf.geometry.values, road_gdf["road_class"], names)
+
+
+def _build_building_index(building_gdf):
+    if building_gdf is None or building_gdf.empty:
+        return None
+
+    columns = [col for col in ["building", "landuse", "amenity", "shop", "office"] if col in building_gdf.columns]
+    if not columns:
+        return None
+
+    mask = building_gdf[columns].notna().any(axis=1) & building_gdf["geometry"].notna()
+    building_gdf = building_gdf.loc[mask, columns + ["geometry"]]
+    if building_gdf.empty:
+        return None
+
+    weights = building_gdf.apply(_feature_weight_from_building_row, axis=1).to_numpy()
+    local_geometries = _to_local_geometries(building_gdf.geometry.values)
+    centroids = shapely_lib.centroid(local_geometries)
+    return BuildingIndex(
+        shapely_lib.get_x(centroids),
+        shapely_lib.get_y(centroids),
+        weights,
+        _building_area_bonus(shapely_lib.area(local_geometries)),
+    )
+
+
 def preload_pbf_spatial_context_cache():
-    global PBF_ROAD_CONTEXT_GDF, PBF_BUILDING_CONTEXT_GDF, PBF_SPATIAL_CONTEXT_LOADED
+    global ROAD_INDEX, BUILDING_INDEX, PBF_SPATIAL_CONTEXT_LOADED, _LAST_SPATIAL_FAILURE
 
-    if PBF_SPATIAL_CONTEXT_LOADED:
-        return
-
-    if gpd is None:
-        PBF_ROAD_CONTEXT_GDF = None
-        PBF_BUILDING_CONTEXT_GDF = None
-        PBF_SPATIAL_CONTEXT_LOADED = True
-        print("PBF spatial context cache skipped: geopandas is unavailable")
+    if PBF_SPATIAL_CONTEXT_LOADED or _retry_too_soon(_LAST_SPATIAL_FAILURE):
         return
 
     with PBF_SPATIAL_CONTEXT_LOCK:
-        if PBF_SPATIAL_CONTEXT_LOADED:
+        if PBF_SPATIAL_CONTEXT_LOADED or _retry_too_soon(_LAST_SPATIAL_FAILURE):
+            return
+
+        if gpd is None or STRtree is None:
+            PBF_SPATIAL_CONTEXT_LOADED = True
+            print("PBF spatial context cache skipped: geopandas/shapely unavailable")
             return
 
         if not PBF_PATH.exists():
-            PBF_ROAD_CONTEXT_GDF = None
-            PBF_BUILDING_CONTEXT_GDF = None
             PBF_SPATIAL_CONTEXT_LOADED = True
             print(f"PBF spatial context cache skipped: file not found at {PBF_PATH}")
             return
 
-        road_gdf = None
-        building_gdf = None
-
         try:
-            road_gdf = gpd.read_file(str(PBF_PATH), layer="lines", engine="pyogrio")
+            road_index = _build_road_index(gpd.read_file(str(PBF_PATH), layer="lines", engine="pyogrio"))
+            building_index = _build_building_index(gpd.read_file(str(PBF_PATH), layer="multipolygons", engine="pyogrio"))
         except Exception as exc:
-            print(f"PBF road context read skipped: {exc}")
+            _LAST_SPATIAL_FAILURE = time.monotonic()
+            print(f"PBF spatial context read failed; will retry: {exc}")
+            return
 
-        if road_gdf is not None and not road_gdf.empty and "geometry" in road_gdf.columns and "highway" in road_gdf.columns:
-            road_gdf = road_gdf[road_gdf["geometry"].notna() & road_gdf["highway"].notna()].copy()
-            road_gdf["road_class"] = road_gdf["highway"].apply(_normalize_road_class)
-            road_gdf = road_gdf[road_gdf["road_class"].notna()].copy()
-            road_gdf["road_base_score"] = road_gdf["road_class"].map(ROAD_CLASS_BASE_SCORES).fillna(10)
-            PBF_ROAD_CONTEXT_GDF = road_gdf[["name", "highway", "road_class", "road_base_score", "geometry"]].copy()
-        else:
-            PBF_ROAD_CONTEXT_GDF = None
-
-        try:
-            building_gdf = gpd.read_file(str(PBF_PATH), layer="multipolygons", engine="pyogrio")
-        except Exception as exc:
-            print(f"PBF building context read skipped: {exc}")
-
-        if building_gdf is not None and not building_gdf.empty and "geometry" in building_gdf.columns:
-            context_columns = [col for col in ["name", "building", "landuse", "amenity", "shop", "office", "geometry"] if col in building_gdf.columns]
-            building_gdf = building_gdf[context_columns].copy()
-            context_mask = False
-            for col in ["building", "landuse", "amenity", "shop", "office"]:
-                if col in building_gdf.columns:
-                    context_mask = context_mask | building_gdf[col].notna()
-            building_gdf = building_gdf[context_mask & building_gdf["geometry"].notna()].copy()
-            if not building_gdf.empty:
-                building_gdf["feature_weight"] = building_gdf.apply(_feature_weight_from_building_row, axis=1)
-                PBF_BUILDING_CONTEXT_GDF = building_gdf[["name", "building", "landuse", "amenity", "shop", "office", "feature_weight", "geometry"]].copy()
-            else:
-                PBF_BUILDING_CONTEXT_GDF = None
-        else:
-            PBF_BUILDING_CONTEXT_GDF = None
-
+        ROAD_INDEX = road_index
+        BUILDING_INDEX = building_index
+        _LAST_SPATIAL_FAILURE = None
         PBF_SPATIAL_CONTEXT_LOADED = True
         print(
             "PBF spatial context loaded: "
-            f"roads={0 if PBF_ROAD_CONTEXT_GDF is None else len(PBF_ROAD_CONTEXT_GDF)}, "
-            f"buildings={0 if PBF_BUILDING_CONTEXT_GDF is None else len(PBF_BUILDING_CONTEXT_GDF)}"
+            f"roads={0 if ROAD_INDEX is None else len(ROAD_INDEX)}, "
+            f"buildings={0 if BUILDING_INDEX is None else len(BUILDING_INDEX)}"
         )
 
 
+def _feature_tags(row):
+    """All the OSM tags of a layer row: its own columns plus the other_tags text."""
+    tags = {}
+    other_tags = row.get("other_tags")
+    if isinstance(other_tags, str):
+        tags.update(OTHER_TAGS_PATTERN.findall(other_tags))
+    for column in PBF_COLUMN_TAGS:
+        value = row.get(column)
+        if isinstance(value, str) and value:
+            tags[column] = value
+    return tags
+
+
+def _osm_ref(row):
+    way_id = row.get("osm_way_id")
+    if isinstance(way_id, str) and way_id:
+        return f"way/{way_id}"
+    osm_id = row.get("osm_id")
+    if isinstance(osm_id, str) and osm_id:
+        # multipolygons with no way id are OSM relations; everything else here is a node.
+        return f"relation/{osm_id}" if row.get("__layer") == "multipolygons" else f"node/{osm_id}"
+    return None
+
+
+def anchor_tag_for(tags, name):
+    """(category, power, "key=value") when these tags make a place an anchor, else None."""
+    for (key, value), (category, power) in OSM_ANCHOR_TAGS.items():
+        if normalize_osm_value(tags.get(key)) != value:
+            continue
+        if value == "townhall" and "barangay" in (name or "").lower():
+            power = OSM_BARANGAY_HALL_POWER
+        return category, power, f"{key}={value}"
+    return None
+
+
+def _dedupe_anchor_features(features, within_m=150.0):
+    """The same named place is often mapped twice, as a point and as a building."""
+    kept = []
+    for feature in features:
+        duplicate = any(
+            other["name"].lower() == feature["name"].lower()
+            and calculate_distance(other["lat"], other["lon"], feature["lat"], feature["lon"]) <= within_m
+            for other in kept
+        )
+        if not duplicate:
+            kept.append(feature)
+    return kept
+
+
+def _read_tagged_features():
+    """Yield (row, tags, lat, lon) for every point/polygon carrying a useful tag."""
+    useful_keys = set(PBF_COLUMN_TAGS)
+    for layer in PBF_FEATURE_LAYERS:
+        gdf = gpd.read_file(str(PBF_PATH), layer=layer, engine="pyogrio")
+        for row in gdf.to_dict("records"):
+            row["__layer"] = layer
+            tags = _feature_tags(row)
+            if not useful_keys.intersection(tags):
+                continue
+            geometry = row.get("geometry")
+            if geometry is None or geometry.is_empty:
+                continue
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                centroid = geometry.centroid
+            yield row, tags, centroid.y, centroid.x
+
+
 def preload_pbf_competitor_cache():
-    global PBF_COMPETITOR_CACHE, PBF_ALL_COMPETITORS, PBF_CACHE_LOADED
+    """Loads competitors, anchors and named places, which come from the same two layers."""
+    global PBF_COMPETITOR_CACHE, PBF_ALL_COMPETITORS, PBF_ANCHOR_FEATURES, PBF_PLACE_FEATURES
+    global PBF_CACHE_LOADED, PBF_FEATURES_AVAILABLE, _LAST_FEATURE_FAILURE
 
-    if PBF_CACHE_LOADED:
-        return
-
-    if gpd is None:
-        PBF_COMPETITOR_CACHE = {}
-        PBF_ALL_COMPETITORS = []
-        PBF_CACHE_LOADED = True
-        print("PBF cache skipped: geopandas is unavailable")
+    if PBF_CACHE_LOADED or _retry_too_soon(_LAST_FEATURE_FAILURE):
         return
 
     with PBF_CACHE_LOCK:
-        if PBF_CACHE_LOADED:
+        if PBF_CACHE_LOADED or _retry_too_soon(_LAST_FEATURE_FAILURE):
             return
 
-        cache = {}
-        all_competitors = []
+        if gpd is None:
+            PBF_CACHE_LOADED = True
+            print("PBF cache skipped: geopandas is unavailable")
+            return
 
         if not PBF_PATH.exists():
-            PBF_COMPETITOR_CACHE = cache
-            PBF_ALL_COMPETITORS = all_competitors
             PBF_CACHE_LOADED = True
             print(f"PBF cache skipped: file not found at {PBF_PATH}")
             return
 
-        for layer in PBF_LAYERS:
-            try:
-                gdf = gpd.read_file(str(PBF_PATH), layer=layer, engine="pyogrio")
-            except Exception:
-                continue
+        cache = {}
+        all_competitors = []
+        anchors = []
+        places = []
 
-            available_columns = [col for col in PBF_SEARCH_COLUMNS if col in gdf.columns]
-            if not available_columns or "geometry" not in gdf.columns:
-                continue
+        try:
+            for row, tags, lat, lon in _read_tagged_features():
+                name = _clean_name(row.get("name"))
+                osm_ref = _osm_ref(row)
 
-            for col in available_columns:
-                matches = gdf[gdf[col].notna()]
-                for _, row in matches.iterrows():
-                    geometry = row.geometry
-                    if geometry is None:
+                for key in PBF_COMPETITOR_KEYS:
+                    value = normalize_osm_value(tags.get(key))
+                    if not value:
                         continue
+                    entry = {"lat": lat, "lon": lon, "name": name, "tag_key": key, "tag_value": value, "osm_ref": osm_ref}
+                    cache.setdefault((key, value), []).append(entry)
+                    all_competitors.append(entry)
 
-                    search_key = normalize_osm_value(row[col])
-                    if not search_key:
-                        continue
+                anchor_tag = anchor_tag_for(tags, name)
+                if anchor_tag and name and osm_ref:
+                    category, power, tag = anchor_tag
+                    anchors.append({
+                        "osm_ref": osm_ref,
+                        "name": name,
+                        "category": category,
+                        "power": power,
+                        "lat": lat,
+                        "lon": lon,
+                        "tag": tag,
+                    })
 
-                    centroid = geometry.centroid
-                    competitor_entry = {
-                        "lat": centroid.y,
-                        "lon": centroid.x,
-                        "name": row.get("name"),
-                        "tag_key": col,
-                        "tag_value": search_key,
-                    }
-
-                    cache.setdefault(search_key, []).append(competitor_entry)
-                    all_competitors.append(competitor_entry)
+                place_type = normalize_osm_value(tags.get("place"))
+                if name and place_type in TREND_AREA_PLACE_TYPES and check_inside_bounds(lat, lon, PANABO_BOUNDS):
+                    places.append({"name": name, "place": place_type, "lat": lat, "lon": lon})
+        except Exception as exc:
+            _LAST_FEATURE_FAILURE = time.monotonic()
+            print(f"PBF feature read failed; will retry: {exc}")
+            return
 
         PBF_COMPETITOR_CACHE = cache
         PBF_ALL_COMPETITORS = all_competitors
+        PBF_ANCHOR_FEATURES = _dedupe_anchor_features(anchors)
+        PBF_PLACE_FEATURES = _dedupe_anchor_features(places)
+        PBF_FEATURES_AVAILABLE = True
+        _LAST_FEATURE_FAILURE = None
         PBF_CACHE_LOADED = True
-        print(f"PBF cache loaded for {len(cache)} business values and {len(all_competitors)} features")
+        print(
+            f"PBF cache loaded: {len(all_competitors)} tagged features for {len(cache)} tags, "
+            f"{len(PBF_ANCHOR_FEATURES)} anchors, {len(PBF_PLACE_FEATURES)} named places"
+        )
 
 
-def get_cached_pbf_competitors(search_value):
-    if not PBF_CACHE_LOADED:
-        preload_pbf_competitor_cache()
-    return PBF_COMPETITOR_CACHE.get(normalize_osm_value(search_value), [])
+def get_cached_pbf_competitors(tag_key, tag_value):
+    preload_pbf_competitor_cache()
+    return PBF_COMPETITOR_CACHE.get((normalize_osm_value(tag_key), normalize_osm_value(tag_value)), [])
+
+
+def get_osm_anchor_features():
+    preload_pbf_competitor_cache()
+    return PBF_ANCHOR_FEATURES
+
+
+def get_osm_place_features():
+    preload_pbf_competitor_cache()
+    return PBF_PLACE_FEATURES
+
+
+def _keyword_pattern(keywords):
+    # Whole words only: "wash" must not make a car wash a laundry competitor.
+    return re.compile(r"\b(?:" + "|".join(re.escape(keyword) for keyword in keywords) + r")\b", re.IGNORECASE)
+
+
+_KEYWORD_PATTERNS = {key: _keyword_pattern(words) for key, words in PBF_NAME_KEYWORD_FALLBACK.items() if words}
 
 
 def get_name_keyword_pbf_competitors(business_type):
-    if not PBF_CACHE_LOADED:
-        preload_pbf_competitor_cache()
+    """Businesses whose name says what they are, even when OSM has no matching tag."""
+    preload_pbf_competitor_cache()
 
-    business_key = normalize_osm_value(business_type) or ""
-    keywords = PBF_NAME_KEYWORD_FALLBACK.get(business_key, [])
-    if not keywords:
+    pattern = _KEYWORD_PATTERNS.get(normalize_osm_value(business_type) or "")
+    if pattern is None:
         return []
 
     matches = []
     for item in PBF_ALL_COMPETITORS:
-        name = str(item.get("name") or "").strip().lower()
-        if not name:
+        # Schools, churches and the like can have any word in their name.
+        if item["tag_key"] == "amenity" and item["tag_value"] not in COMMERCIAL_AMENITY_VALUES:
             continue
-        if any(keyword in name for keyword in keywords):
+        if item["name"] and pattern.search(item["name"]):
             matches.append(item)
-
     return matches
-
-
-def get_generic_nearby_pbf_competitors(lat, lon, radius_meters, limit=80):
-    if not PBF_CACHE_LOADED:
-        preload_pbf_competitor_cache()
-
-    nearby = []
-    for item in PBF_ALL_COMPETITORS:
-        name = str(item.get("name") or "").strip()
-        if not name:
-            continue
-
-        tag_key = normalize_osm_value(item.get("tag_key"))
-        tag_value = normalize_osm_value(item.get("tag_value"))
-        if tag_key == "shop":
-            pass
-        elif tag_key == "healthcare":
-            pass
-        elif tag_key == "amenity" and tag_value in COMMERCIAL_AMENITY_VALUES:
-            pass
-        else:
-            continue
-
-        item_lat = to_finite_number(item.get("lat"))
-        item_lon = to_finite_number(item.get("lon"))
-        if item_lat is None or item_lon is None:
-            continue
-
-        if calculate_distance(lat, lon, item_lat, item_lon) <= radius_meters:
-            nearby.append(item)
-            if len(nearby) >= limit:
-                break
-
-    return nearby
 
 
 # ---- reference road map (admin Map Layer Studio "Roads only" view) ----------------

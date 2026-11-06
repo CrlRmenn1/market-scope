@@ -20,6 +20,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Lock
 
+from constants.engine import ENGINE_VERSION
 from constants.geo import PANABO_BOUNDS
 from constants.map_layers import (
     DEFAULT_IMPORT_CLASS,
@@ -70,6 +71,7 @@ IMPORT_CONTENT_TYPES = {
 
 SEED_FLAG = "map_layers_seeded"
 CHANGED_FLAG = "map_layers_changed_at"
+ENGINE_VERSION_FLAG = "scoring_engine_version"
 # Set once existing layers were reordered for the "top shape wins" stacking rule.
 STACK_ORDER_FLAG = "map_layers_stack_order_v1"
 # Set once old zoning classes were converted to the LGU zones.
@@ -294,6 +296,37 @@ def _apply_active_layer_change(change):
     else:
         zoning_service.reload_zoning_layer_cache()
     _log(f"active {category} layer changed; caches reloaded and saved trend scans marked stale")
+
+
+def mark_scoring_data_changed():
+    """Anything else that changes scores (anchors, competitors, a new engine) calls this,
+    so saved trend scans get redone. A save has already succeeded by then, so a failure
+    here is only logged: it leaves trend results stale until they next expire."""
+    global _CHANGED_AT, _CHANGED_AT_LOADED
+    try:
+        with open_map_layer_cursor() as cursor:
+            changed_at = set_flag(cursor, CHANGED_FLAG)
+    except Exception as exc:
+        _log(f"could not mark saved trend scans stale: {exc}")
+        return
+    with _CHANGED_AT_LOCK:
+        _CHANGED_AT = changed_at
+        _CHANGED_AT_LOADED = True
+
+
+def mark_stale_if_engine_changed():
+    """One time per engine version: trend results saved by an older engine aren't comparable."""
+    try:
+        with open_map_layer_cursor() as cursor:
+            flag = get_flag(cursor, ENGINE_VERSION_FLAG)
+            if flag and flag.get("value") == ENGINE_VERSION:
+                return
+            set_flag(cursor, ENGINE_VERSION_FLAG, ENGINE_VERSION)
+    except Exception as exc:
+        _log(f"could not check the engine version: {exc}")
+        return
+    _log(f"scoring engine is now {ENGINE_VERSION}; saved trend scans marked stale")
+    mark_scoring_data_changed()
 
 
 def map_layers_replaced():

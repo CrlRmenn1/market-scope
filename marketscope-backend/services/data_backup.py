@@ -23,7 +23,7 @@ from psycopg2 import errors, sql
 from psycopg2.extras import Json, RealDictCursor, execute_values
 
 from core.database import DB_CONFIG
-from services.map_layers import map_layers_replaced
+from services.map_layers import map_layers_replaced, mark_scoring_data_changed
 
 
 BACKUP_FORMAT = "marketscope-backup"
@@ -33,6 +33,7 @@ MAX_BACKUP_BYTES = 50 * 1024 * 1024
 # Tables per admin page, parents before children.
 BACKUP_DATASETS = {
     "msmes": ["custom_msme"],
+    "anchors": ["verified_local_features"],
     "users": ["users"],
     "spaces": ["user_space_submissions", "admin_space_submissions"],
     "map-layers": ["map_layers", "map_layer_files", "zoning_allowed_uses", "app_flags"],
@@ -271,4 +272,6 @@ def import_dataset(dataset: str, payload) -> dict:
 
     if dataset == "map-layers":
         map_layers_replaced()
+    elif dataset in ("anchors", "msmes"):
+        mark_scoring_data_changed()
     return summary

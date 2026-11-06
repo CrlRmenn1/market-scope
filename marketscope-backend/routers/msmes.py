@@ -7,6 +7,7 @@ from core.database import DB_CONFIG
 from core.security import verify_admin_token
 from db.schema import ensure_custom_msme_table
 from models.requests import AdminCreateMsme, AdminUpdateMsme
+from services.map_layers import mark_scoring_data_changed
 
 
 router = APIRouter()
@@ -55,6 +56,7 @@ def admin_create_custom_msme(payload: AdminCreateMsme, x_admin_token: str | None
         conn.commit()
         cursor.close()
         conn.close()
+        mark_scoring_data_changed()
         return {"status": "success", "custom_msme": created}
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -86,6 +88,7 @@ def admin_update_custom_msme(msme_id: int, payload: AdminUpdateMsme, x_admin_tok
         if not updated:
             raise HTTPException(status_code=404, detail="Custom MSME not found")
 
+        mark_scoring_data_changed()
         return {"status": "success", "custom_msme": updated}
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -109,6 +112,7 @@ def admin_delete_custom_msme(msme_id: int, x_admin_token: str | None = Header(de
         if not deleted:
             raise HTTPException(status_code=404, detail="Custom MSME not found")
 
+        mark_scoring_data_changed()
         return {"status": "success", "deleted_custom_msme_id": deleted[0]}
     except Exception as e:
         if isinstance(e, HTTPException):

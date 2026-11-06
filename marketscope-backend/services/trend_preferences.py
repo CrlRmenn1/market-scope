@@ -1,11 +1,12 @@
-"""Which business types to scan and show, based on the user's two trend preferences.
+"""How the user's two trend preferences shape the Trends page.
 
-  - Primary business: always scanned and shown first.
-  - Preferred setup:  every other business type usually run in that setup
-                      (TYPICAL_SETUP in constants/msme.py) is scanned too; the
-                      Trends page shows the ones whose best spot scored highest.
+  - Primary business: scanned first and given its own "best areas" section.
+  - Preferred setup:  businesses usually run in that setup (TYPICAL_SETUP in
+                      constants/msme.py) are scanned next and tagged on the page,
+                      which can also filter to them.
 
-Preferences only decide WHICH business types are scanned. They never change a
+Every business type is scanned in the end, because suggestions compare them within
+an area. Preferences only decide the order and what is tagged. They never change a
 spot's viability score.
 """
 from constants.msme import SME_DATABASE, SME_PROFILE_BY_NAME, TYPICAL_SETUP
@@ -37,11 +38,23 @@ def get_same_setup_business_keys(user_profile, exclude=None):
 
 
 def get_trend_scan_business_keys(user_profile):
-    """Everything the background scan should cover for this user: primary first."""
+    """The user's own business types: primary first, then the same-setup ones."""
     primary_key = resolve_primary_business_key(user_profile)
     keys = [primary_key] if primary_key else []
     keys.extend(get_same_setup_business_keys(user_profile, exclude=primary_key))
     return keys
+
+
+def get_all_scan_business_keys(user_profile):
+    """Every business type, because suggestions compare them all within an area.
+    The user's own come first, so their results are ready soonest."""
+    own_keys = get_trend_scan_business_keys(user_profile)
+    return own_keys + [business_key for business_key in SME_DATABASE if business_key not in own_keys]
+
+
+def fits_preferred_setup(business_key: str, user_profile) -> bool:
+    preferred = _preferred_setup(user_profile)
+    return bool(preferred) and TYPICAL_SETUP.get(business_key) == preferred
 
 
 def describe_setup_match(business_key: str, user_profile):

@@ -4,6 +4,7 @@ import { DEFAULT_ADMIN_TAB, isAdminTab } from '../components/admin/adminNav';
 import { Notice } from '../components/admin/ui/AdminUi';
 import useAdminApi from '../components/admin/ui/useAdminApi';
 import useIsDesktop from '../utils/useIsDesktop';
+import AnchorsPage from './admin/AnchorsPage';
 import MapLayersPage from './admin/MapLayersPage';
 import MsmesPage from './admin/MsmesPage';
 import SpacesPage from './admin/SpacesPage';
@@ -75,6 +76,7 @@ export default function AdminPanel({ adminSession, activeTab, onActiveTabChange,
         </Notice>
       )}
       {tab === 'msmes' && <MsmesPage {...pageProps} />}
+      {tab === 'anchors' && <AnchorsPage {...pageProps} />}
       {tab === 'users' && <UsersPage {...pageProps} />}
       {tab === 'spaces' && <SpacesPage {...pageProps} pendingCount={pendingCount} onPendingChanged={refreshPendingCount} />}
       {tab === 'flood' && <MapLayersPage {...pageProps} />}

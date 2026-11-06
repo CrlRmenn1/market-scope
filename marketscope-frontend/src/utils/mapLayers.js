@@ -1,3 +1,4 @@
+import L from 'leaflet';
 import { apiUrl } from '../lib/api';
 
 // Panabo main area. Scans only run inside it, and map layers are clipped to it.
@@ -7,6 +8,11 @@ export const PANABO_BOUNDS = {
   west: 125.636,
   east: 125.742
 };
+
+export const panaboLatLngBounds = () => L.latLngBounds(
+  [PANABO_BOUNDS.south, PANABO_BOUNDS.west],
+  [PANABO_BOUNDS.north, PANABO_BOUNDS.east]
+);
 
 // The active hazard or zoning layer as a GeoJSON FeatureCollection, or null when none is active.
 export const fetchActiveMapLayer = async (category) => {

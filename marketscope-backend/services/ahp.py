@@ -183,17 +183,21 @@ def build_reciprocal_matrix(upper_triangle_values: dict, n: int) -> list:
     return matrix
 
 
-def build_consistent_matrix_from_weights(weights: list) -> list:
-    """Builds a perfectly consistent (CR=0) reciprocal matrix from target weights.
+def nearest_saaty_judgment(ratio: float) -> float:
+    """The closest value on the 1-9 Saaty scale: 1, 2 ... 9, or 1/2 ... 1/9."""
+    if ratio >= 1.0:
+        return float(min(9, int(ratio + 0.5)))
+    return 1.0 / min(9, int(1.0 / ratio + 0.5))
 
-    matrix[i][j] = weights[i] / weights[j]. This is the standard technique for
-    reconstructing a pairwise comparison matrix whose eigenvector exactly
-    reproduces a known set of target weights -- used to seed AHP config rows
-    from this application's pre-existing static weights so that behavior is
-    unchanged until an admin enters real judgments.
-    """
+
+def build_saaty_matrix_from_weights(weights: list) -> list:
+    """A reciprocal matrix of real 1-9 judgments, each rounded from the ratio of two
+    weights. Rounding means it isn't perfectly consistent, so its CR is a measured
+    value worth checking. These are still the proponents' judgments, not experts'."""
     n = len(weights)
-    return [
-        [weights[i] / weights[j] for j in range(n)]
+    upper_triangle = {
+        (i, j): nearest_saaty_judgment(weights[i] / weights[j])
         for i in range(n)
-    ]
+        for j in range(i + 1, n)
+    }
+    return build_reciprocal_matrix(upper_triangle, n)

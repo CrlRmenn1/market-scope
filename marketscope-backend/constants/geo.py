@@ -16,13 +16,16 @@ INDUSTRIAL_ZONE_BUSINESSES = {"carwash", "laundry", "hardware", "moto"}
 PANABO_BOUNDS = (7.269, 7.333, 125.636, 125.742)
 
 
+# The original anchors. Copied once into verified_local_features (db/schema.py), where
+# the admin Anchors page can edit them; scans also fall back to this list if that table
+# can't be read (services/anchors.py).
 PANABO_ANCHORS = [
-    {"name": "Integrated Bus and Jeepney Terminal", "lat": 7.298318, "lon": 125.680099, "power": 25},
-    {"name": "Panabo District Hospital", "lat": 7.298534, "lon": 125.681971, "power": 5},
-    {"name": "LandBank", "lat": 7.302614, "lon": 125.681888, "power": 15},
-    {"name": "Panabo Public Market", "lat": 7.306480, "lon": 125.683457, "power": 15},
-    {"name": "Davao del Norte State College", "lat": 7.313671, "lon": 125.670372, "power": 20},
-    {"name": "Central Market", "lat": 7.300987, "lon": 125.682584, "power": 25},
-    {"name": "Panabo Park", "lat": 7.299585, "lon": 125.681187, "power": 15},
-    {"name": "University of Mindanao Panabo", "lat": 7.304490, "lon": 125.679607, "power": 25}
+    {"name": "Integrated Bus and Jeepney Terminal", "lat": 7.298318, "lon": 125.680099, "power": 25, "category": "transit"},
+    {"name": "Panabo District Hospital", "lat": 7.298534, "lon": 125.681971, "power": 5, "category": "healthcare"},
+    {"name": "LandBank", "lat": 7.302614, "lon": 125.681888, "power": 15, "category": "financial"},
+    {"name": "Panabo Public Market", "lat": 7.306480, "lon": 125.683457, "power": 15, "category": "market"},
+    {"name": "Davao del Norte State College", "lat": 7.313671, "lon": 125.670372, "power": 20, "category": "education"},
+    {"name": "Central Market", "lat": 7.300987, "lon": 125.682584, "power": 25, "category": "market"},
+    {"name": "Panabo Park", "lat": 7.299585, "lon": 125.681187, "power": 15, "category": "recreation"},
+    {"name": "University of Mindanao Panabo", "lat": 7.304490, "lon": 125.679607, "power": 25, "category": "education"}
 ]

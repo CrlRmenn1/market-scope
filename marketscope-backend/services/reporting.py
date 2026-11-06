@@ -7,6 +7,8 @@ from urllib.error import URLError, HTTPError
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from services.verdict import score_band
+
 
 # A "-latest" alias keeps working when Google retires a pinned version
 # (gemini-1.5-pro was retired, which silently forced the template fallback).
@@ -39,7 +41,7 @@ SCAN_FACTORS = [
     ('road_access', 'Road access'),
     ('anchor_proximity', 'Nearby traffic generators (anchors)'),
     ('building_density', 'Building density'),
-    ('saturation', 'Market saturation (combined market score)'),
+    ('saturation', 'Market potential (combined market score)'),
 ]
 SCAN_FACTOR_MAX = 25
 
@@ -220,9 +222,10 @@ def build_structured_report(analysis: Dict[str, Any], category_profile: Dict[str
 
     # simple rule-based recommendations
     recs = []
-    if final_score > 70 and not zoning_flags.get('restricted', False) and not hazards.get('flood_prone', False):
+    final_band = score_band(final_score)
+    if final_band == 'high' and not zoning_flags.get('restricted', False) and not hazards.get('flood_prone', False):
         recs.append('Viable site: proceed with small pilot and market test.')
-    if final_score <= 70:
+    if final_band != 'high':
         recs.append('Consider mitigation: reduce footprint, niche offering, or search nearby lower-competition sites.')
     if competitor_count > category_profile.get('competitor_high_threshold', 8):
         recs.append('High local competition — recommend differentiated offering or increased marketing budget.')
@@ -241,7 +244,7 @@ def render_report_html(structured: Dict[str, Any]) -> str:
     rec = s.get('recommendation', {})
 
     def badge_html(label: str, score: float) -> str:
-        color = '#16a34a' if score >= 70 else ('#f59e0b' if score >= 40 else '#ef4444')
+        color = {'high': '#16a34a', 'moderate': '#f59e0b'}.get(score_band(score), '#ef4444')
         return f'<span style="background:{color};color:#fff;padding:6px 10px;border-radius:6px;margin-right:8px;font-weight:600">{label}: {round(score)}</span>'
 
     html = [
@@ -360,6 +363,9 @@ def build_scan_payload(scan: Dict[str, Any], business_type: str = '') -> Dict[st
         'scan_radius_m': scan.get('radius_meters'),
         'viability_score': scan.get('viability_score'),
         'viability_score_max': 100,
+        'verdict': (scan.get('verdict') or {}).get('label'),
+        'market_potential_score': scan.get('market_potential_score'),
+        'data_notes': (scan.get('data_quality') or {}).get('notes') or [],
         'competitors_found': scan.get('competitors_found'),
         'system_insight': scan.get('insight'),
         'factors': factors,
@@ -385,7 +391,9 @@ def build_scan_simplification_prompt(scan: Dict[str, Any], business_type: str = 
         "- Saturation Assessment: competition density, building density, and market saturation.\n"
         "- Demand and Anchor Commentary: nearby traffic generators (anchors) and road access.\n\n"
         "How to read the data: the viability score is out of 100; every factor score is out of 25; "
-        "a higher score is always better for the business (for competition density, a higher score means less competition).\n\n"
+        "a higher score is always better for the business (for competition density, a higher score means less competition). "
+        "Zoning is a yes-or-no check: when it fails, the viability score is 0 and market_potential_score shows what the site would otherwise score. "
+        "A factor with a null score had no data, so say it wasn't checked and never guess it. Use the verdict as the overall conclusion.\n\n"
         "Use only the data below (JSON):\n"
         f"{json.dumps(payload, ensure_ascii=True)}\n\n"
         "Constraints:\n"
@@ -411,6 +419,8 @@ def generate_deterministic_scan_narrative(scan: Dict[str, Any], business_type: s
 
     def factor_line(key: str) -> str:
         f = factors[key]
+        if f['score'] is None:
+            return f"{f['label']}: not checked ({f['status'] or 'no data'})."
         return f"{f['label']}: {f['score']}/{SCAN_FACTOR_MAX} ({f['status'] or 'N/A'})."
 
     lines: List[str] = [
@@ -440,9 +450,13 @@ def generate_deterministic_scan_narrative(scan: Dict[str, Any], business_type: s
         'Recommendation',
     ]
     score = payload['viability_score'] or 0
-    if score >= 70:
+    zoning_blocked = (scan.get('verdict') or {}).get('key') == 'not_permitted'
+    band = score_band(score)
+    if zoning_blocked:
+        lines.append('City zoning does not allow this business here, so this site is not an option. Try scanning a spot in a zone where it is allowed.')
+    elif band == 'high':
         lines.append('This looks promising. Try a small test (pilot) first to see real customer interest.')
-    elif score >= 45:
+    elif band == 'moderate':
         lines.append('This could work with care. Run a low-cost test and offer something different from nearby shops.')
     else:
         lines.append('This site looks challenging right now. Consider scanning nearby spots or a different business idea.')
@@ -508,10 +522,11 @@ def generate_deterministic_narrative(structured: Dict[str, Any], business_type: 
     lines.append("")
 
     lines.append('Interpretation & Insights')
-    if final >= 70:
+    final_band = score_band(final)
+    if final_band == 'high':
         lines.append('This looks promising. You can try a small test (pilot) for a few weeks to see real customer interest.')
         lines.append('Start small: short lease or pop-up, simple tracking of visitors and sales.')
-    elif final >= 50:
+    elif final_band == 'moderate':
         lines.append('This could work with care. Run a low-cost test and focus on something different from nearby shops.')
         lines.append('Try special offers or a small menu to learn what customers prefer.')
     else:
@@ -553,13 +568,13 @@ def generate_deterministic_narrative(structured: Dict[str, Any], business_type: 
     if not coords.get('latitude') or not coords.get('longitude'):
         next_steps.append('Perform a short field survey to validate coordinates and capture photos.')
 
-    if final >= 70:
+    if final_band == 'high':
         next_steps += [
             'Negotiate short pilot lease or pop-up space (3 months).',
             'Set up simple footfall and sales tracking.',
             'Engage local suppliers and test pricing strategies.'
         ]
-    elif final >= 50:
+    elif final_band == 'moderate':
         next_steps += [
             'Run a low-cost pilot (market stall or pop-up).',
             'Conduct a 2-week price/promotions experiment.',
@@ -599,9 +614,9 @@ def generate_deterministic_narrative(structured: Dict[str, Any], business_type: 
     # TL;DR and KPIs
     try:
         tldr = None
-        if final >= 70:
+        if final_band == 'high':
             tldr = 'Strong candidate for pilot; low immediate risk.'
-        elif final >= 50:
+        elif final_band == 'moderate':
             tldr = 'Possibly viable with validation; run a targeted pilot.'
         else:
             tldr = 'Low viability; prioritize scanning nearby alternatives or niche pivots.'

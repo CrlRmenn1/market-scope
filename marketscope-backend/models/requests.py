@@ -103,6 +103,17 @@ class AdminVerifiedLocalFeatureRequest(BaseModel):
     is_active: bool = True
 
 
+class AdminAnchorRequest(BaseModel):
+    name: str
+    category: str
+    latitude: float
+    longitude: float
+    power: int
+    note: str | None = None
+    is_active: bool = True
+    osm_ref: str | None = None
+
+
 class AdminUpdateUser(BaseModel):
     full_name: str
     email: str

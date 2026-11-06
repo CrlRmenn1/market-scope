@@ -150,40 +150,23 @@ def get_latest_done_run(cursor, business_type: str, radius: int):
     return cursor.fetchone()
 
 
-def fetch_run_results(cursor, run_id: int, limit: int):
-    """Best-scoring spots of a run, without the heavy competitor list."""
+def fetch_run_area_rows(cursor, run_id: int):
+    """A run's permitted spots with just what suggestions need, not the whole report.
+    A spot where the business isn't allowed scores 0, so it is left out here."""
     cursor.execute(
         """
         SELECT
-            id, candidate_source, candidate_label, space_id, lat, lon,
-            viability_score, insight,
-            report->'breakdown' AS breakdown,
-            report->'space_context' AS space_context,
-            (report->>'competitors_found')::int AS competitors_found,
-            (report->>'radius_meters')::int AS radius_meters
+            id, candidate_source, candidate_label, lat, lon, viability_score,
+            report->'verdict' AS verdict,
+            report->'score_explanation' AS score_explanation,
+            (report->'breakdown'->'competition_density'->>'competitor_count')::int AS competitor_count,
+            (report->'breakdown'->'competition_density'->>'demand_share')::float AS demand_share
         FROM trend_scan_results
-        WHERE run_id = %s
-        ORDER BY viability_score DESC, id ASC
-        LIMIT %s
+        WHERE run_id = %s AND viability_score > 0
         """,
-        (run_id, limit),
+        (run_id,),
     )
     return cursor.fetchall() or []
-
-
-def count_run_results(cursor, run_id: int, min_score: int):
-    cursor.execute(
-        """
-        SELECT
-            COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE viability_score >= %s) AS high_chance
-        FROM trend_scan_results
-        WHERE run_id = %s
-        """,
-        (min_score, run_id),
-    )
-    row = cursor.fetchone() or {}
-    return int(row.get("total") or 0), int(row.get("high_chance") or 0)
 
 
 def fetch_result_report(cursor, result_id: int):

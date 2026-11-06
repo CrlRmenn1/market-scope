@@ -8,6 +8,7 @@ from core.database import DB_CONFIG
 from core.security import verify_admin_token
 from db.schema import ensure_verified_local_features_table
 from models.requests import AdminVerifiedLocalFeatureRequest
+from services.map_layers import mark_scoring_data_changed
 from utils.values import normalize_osm_value
 
 
@@ -104,6 +105,7 @@ def admin_create_verified_local_feature(payload: AdminVerifiedLocalFeatureReques
         conn.commit()
         cursor.close()
         conn.close()
+        mark_scoring_data_changed()
         return {"status": "success", "verified_local_feature": created}
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -171,6 +173,7 @@ def admin_update_verified_local_feature(feature_id: int, payload: AdminVerifiedL
         if not updated:
             raise HTTPException(status_code=404, detail="Verified local feature not found")
 
+        mark_scoring_data_changed()
         return {"status": "success", "verified_local_feature": updated}
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -194,6 +197,7 @@ def admin_delete_verified_local_feature(feature_id: int, x_admin_token: str | No
         if not deleted:
             raise HTTPException(status_code=404, detail="Verified local feature not found")
 
+        mark_scoring_data_changed()
         return {"status": "success", "deleted_verified_local_feature_id": deleted[0]}
     except Exception as e:
         if isinstance(e, HTTPException):

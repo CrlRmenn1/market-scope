@@ -8,9 +8,10 @@ import unittest
 from services.ahp import (
     AHPValidationError,
     CONSISTENCY_RATIO_THRESHOLD,
-    build_consistent_matrix_from_weights,
     build_reciprocal_matrix,
+    build_saaty_matrix_from_weights,
     compute_priority_vector,
+    nearest_saaty_judgment,
     solve_ahp,
     validate_pairwise_matrix,
 )
@@ -118,27 +119,26 @@ class BuildReciprocalMatrixTests(unittest.TestCase):
             build_reciprocal_matrix(judgments, 3)
 
 
-class BuildConsistentMatrixFromWeightsTests(unittest.TestCase):
-    def test_reconstructs_exact_weights(self):
-        # This is the seed-migration technique: rebuild a perfectly consistent
-        # matrix from today's static weights (e.g. zoning/hazard/saturation).
-        weights = [0.30, 0.20, 0.50]
-        matrix = build_consistent_matrix_from_weights(weights)
+class BuildSaatyMatrixFromWeightsTests(unittest.TestCase):
+    def test_judgments_stay_on_the_saaty_scale(self):
+        allowed = {float(n) for n in range(1, 10)} | {1.0 / n for n in range(2, 10)}
+        matrix = build_saaty_matrix_from_weights([0.47, 0.20, 0.19, 0.14])
         validate_pairwise_matrix(matrix)
-        result = solve_ahp(matrix)
-        self.assertAlmostEqual(result["cr"], 0.0, places=6)
-        for original, recovered in zip(weights, result["priority_vector"]):
-            self.assertAlmostEqual(original, recovered, places=6)
+        for row in matrix:
+            for value in row:
+                self.assertTrue(any(math.isclose(value, option) for option in allowed), value)
 
-    def test_reconstructs_four_way_category_weights(self):
-        # e.g. coffee: competition=0.47, road=0.20, anchor=0.19, building=0.14
-        weights = [0.47, 0.20, 0.19, 0.14]
-        matrix = build_consistent_matrix_from_weights(weights)
-        validate_pairwise_matrix(matrix)
-        result = solve_ahp(matrix)
-        self.assertAlmostEqual(result["cr"], 0.0, places=6)
-        for original, recovered in zip(weights, result["priority_vector"]):
-            self.assertAlmostEqual(original, recovered, places=6)
+    def test_rounds_to_the_nearest_judgment(self):
+        self.assertEqual(nearest_saaty_judgment(2.47), 2.0)
+        self.assertEqual(nearest_saaty_judgment(2.5), 3.0)
+        self.assertEqual(nearest_saaty_judgment(40.0), 9.0)
+        self.assertAlmostEqual(nearest_saaty_judgment(1 / 3.2), 1 / 3)
+
+    def test_keeps_the_order_of_the_weights(self):
+        result = solve_ahp(build_saaty_matrix_from_weights([0.47, 0.20, 0.19, 0.14]))
+        vector = result["priority_vector"]
+        self.assertGreater(vector[0], vector[1])
+        self.assertGreaterEqual(vector[1], vector[3])
 
 
 class ComputePriorityVectorTests(unittest.TestCase):
