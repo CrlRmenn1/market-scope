@@ -8,13 +8,15 @@ from db.schema import ensure_verified_local_features_table
 from utils.values import normalize_osm_value
 
 
-def fetch_verified_local_features(feature_kind=None, business_type=None, active_only=True, cursor=None):
+def fetch_verified_local_features(feature_kind=None, business_type=None, active_only=True, cursor=None, strict=False):
     # When a cursor is supplied, the caller owns the connection (and is
     # responsible for having already ensured the table exists) - this lets
     # callers that need several of these in a row (e.g.
     # evaluate_layered_market_context) share one connection instead of each
-    # call opening/closing its own. Callers that don't pass one get today's
-    # exact behavior, unchanged.
+    # call opening/closing its own.
+    #
+    # strict=True raises on a database error. Scoring uses it, because treating
+    # "couldn't read the table" as "no records" silently changes a site's score.
     owns_connection = cursor is None
     conn = None
     try:
@@ -24,7 +26,7 @@ def fetch_verified_local_features(feature_kind=None, business_type=None, active_
             ensure_verified_local_features_table(cursor)
 
         query = [
-            "SELECT id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at",
+            "SELECT id, feature_kind, name, business_type, feature_subtype, latitude, longitude, road_class, power, building_type, landuse, area_m2, confidence_score, source_note, is_active, verified_at, created_by_admin_email, created_at, updated_at, osm_ref",
             "FROM verified_local_features",
             "WHERE 1 = 1",
         ]
@@ -52,10 +54,12 @@ def fetch_verified_local_features(feature_kind=None, business_type=None, active_
         return rows
     except Exception as e:
         print(f"Verified local feature fetch error: {e}")
+        if strict:
+            raise
         return []
 
 
-def fetch_custom_msmes(business_key, cursor=None):
+def fetch_custom_msmes(business_key, cursor=None, strict=False):
     conn = None
     try:
         if cursor is None:
@@ -69,6 +73,8 @@ def fetch_custom_msmes(business_key, cursor=None):
         return results
     except Exception as e:
         print(f"Database Error: {e}")
+        if strict:
+            raise
         return []
 
 

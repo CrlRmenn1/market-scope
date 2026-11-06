@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { authFetch } from '../lib/api';
+import AreaMap from '../components/trends/AreaMap';
+import SuggestionCard from '../components/trends/SuggestionCard';
 import TrendPreferencesGate from '../components/onboarding/TrendPreferencesGate';
-import TrendSpotCard from '../components/trends/TrendSpotCard';
 import { getMissingTrendPreferenceFields } from '../utils/trendPreferences';
 
 // While any business type is queued or scanning, re-read the saved results this often.
 const POLL_INTERVAL_MS = 5000;
-const ACTIVE_SCAN_STATES = ['scanning', 'queued'];
+const MAX_SUGGESTIONS = 5;
+const CLOSEST_MATCHES = 3;
 
 const formatAge = (seconds) => {
   if (seconds === null || seconds === undefined) return null;
@@ -25,41 +27,50 @@ const readErrorMessage = (data, fallback) => {
   return fallback;
 };
 
-function ScanStatus({ scan, minScore }) {
-  const { state, progress } = scan;
+// The opening area: the strongest suggestion backed by enough competitor data, then
+// the strongest suggestion of any kind, then the best score.
+const pickDefaultArea = (areas) => {
+  const rank = ({ headline }) => [
+    headline?.is_suggestion && headline.competitor_data !== 'thin' ? 1 : 0,
+    headline?.is_suggestion ? 1 : 0,
+    headline?.score ?? -1
+  ];
+  return [...areas].sort((first, second) => {
+    const [a, b] = [rank(first), rank(second)];
+    return b[0] - a[0] || b[1] - a[1] || b[2] - a[2] || first.name.localeCompare(second.name);
+  })[0];
+};
 
-  if (state === 'scanning') {
-    const total = progress?.total || 0;
-    const done = progress?.done || 0;
-    return (
-      <div className="mt-3">
-        <p className="text-sm text-[var(--text-muted)]">
-          {total > 0 ? `Scanning spots in the background... ${done} / ${total}` : 'Preparing the background scan...'}
-        </p>
-        <div className="trends-progress mt-2" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
-          <span style={{ width: `${total > 0 ? Math.round((done / total) * 100) : 4}%` }} />
-        </div>
-      </div>
-    );
-  }
-
-  if (state === 'queued') {
-    return <p className="mt-3 text-sm text-[var(--text-muted)]">Waiting in the scan queue...</p>;
-  }
-
-  if (state === 'failed') {
-    return <p className="mt-3 text-sm text-[var(--trend-down)]">The last scan failed{scan.error ? `: ${scan.error}` : '.'} Try Rescan now.</p>;
-  }
-
-  if (state === 'missing') {
-    return <p className="mt-3 text-sm text-[var(--text-muted)]">Not scanned yet.</p>;
-  }
+function ScanStatus({ scan }) {
+  if (!scan) return null;
+  const { is_active: isActive, total_types: total, finished_types: finished, current, failed } = scan;
 
   return (
-    <p className="mt-3 text-sm tabular-nums text-[var(--text-muted)]">
-      {scan.scanned_spots} spots scanned · {scan.high_chance_spots} scored {minScore}+ · updated {formatAge(scan.scanned_seconds_ago)}
-      {state === 'stale' && ' (older than the refresh window, a rescan will run soon)'}
-    </p>
+    <div className="mt-3 text-sm text-[var(--text-muted)]">
+      {isActive ? (
+        <>
+          <p className="tabular-nums">
+            {finished} of {total} business types ready.
+            {current && current.total > 0 && ` Scanning ${current.business_name}: ${current.done} / ${current.total} spots.`}
+          </p>
+          <div className="trends-progress mt-2" role="progressbar" aria-label="Business types scanned" aria-valuemin={0} aria-valuemax={total} aria-valuenow={finished}>
+            <span style={{ width: `${total > 0 ? Math.max(Math.round((finished / total) * 100), 4) : 4}%` }} />
+          </div>
+        </>
+      ) : (
+        <p className="tabular-nums">
+          {finished} of {total} business types scanned
+          {scan.oldest_seconds_ago !== null && ` · oldest result ${formatAge(scan.oldest_seconds_ago)}`}
+        </p>
+      )}
+      {failed?.length > 0 && (
+        <p className="mt-2 text-[var(--trend-down)]">
+          The last scan failed for {failed.map((item) => item.business_name).join(', ')}
+          {failed.some((item) => item.has_older_results) ? ', so older results are shown where they exist.' : '.'}
+          {' '}It will try again later, or use Rescan now.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -82,6 +93,9 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
   const [openingResultId, setOpeningResultId] = useState(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showPreferenceGate, setShowPreferenceGate] = useState(false);
+  const [pickedAreaName, setPickedAreaName] = useState(null);
+  const [onlyMySetup, setOnlyMySetup] = useState(false);
+  const [failedPolls, setFailedPolls] = useState(0);
 
   const activeMissingPreferences = useMemo(() => {
     if (Array.isArray(missingTrendPreferences)) {
@@ -92,12 +106,25 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
 
   const hasMissingPreferences = activeMissingPreferences.length > 0;
   const settings = trends?.settings || {};
-  const minScore = settings.high_chance_min_score ?? 70;
-  const primarySection = trends?.primary || null;
-  const setupMatches = trends?.setup_matches || null;
-  const setupSections = Array.isArray(setupMatches?.sections) ? setupMatches.sections : [];
-  const setupName = String(setupMatches?.setup || '').replace('-', ' ');
-  const isScanActive = ACTIVE_SCAN_STATES.includes(primarySection?.scan?.state) || Boolean(setupMatches?.is_scanning);
+  const scan = trends?.scan || null;
+  const primary = trends?.primary || null;
+  const isScanActive = Boolean(scan?.is_active);
+  const setupName = String(trends?.profile?.preferred_setup || '').replace('-', ' ');
+  const reachMeters = settings.competition_reach_meters ?? 800;
+
+  // The setup filter only hides businesses. The order stays the backend's.
+  const areas = useMemo(() => (trends?.areas || []).map((area) => {
+    const businesses = onlyMySetup ? area.businesses.filter((entry) => entry.fits_setup) : area.businesses;
+    return { ...area, shown: businesses, headline: businesses[0] || null };
+  }), [trends, onlyMySetup]);
+
+  const selectedArea = useMemo(
+    () => areas.find((area) => area.name === pickedAreaName) || (areas.length > 0 ? pickDefaultArea(areas) : null),
+    [areas, pickedAreaName]
+  );
+
+  const suggestions = (selectedArea?.shown || []).filter((entry) => entry.is_suggestion).slice(0, MAX_SUGGESTIONS);
+  const closestMatches = suggestions.length === 0 ? (selectedArea?.shown || []).slice(0, CLOSEST_MATCHES) : [];
 
   // GET only reads saved scan results (it queues a scan when they are missing or old).
   const loadTrends = useCallback(async ({ silent = false } = {}) => {
@@ -107,12 +134,14 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     try {
       const response = await authFetch(`/users/${userId}/trends`, { cache: 'no-store' });
       const data = await response.json();
-      if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to load trend analysis.'));
+      if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to load business suggestions.'));
       setTrends(data);
       setError('');
     } catch (fetchError) {
       if (!silent) setTrends(null);
-      setError(fetchError.message || 'Unable to load trend analysis.');
+      setError(fetchError.message || 'Unable to load business suggestions.');
+      // Nothing else changes after a failed poll, so this is what schedules the next one.
+      if (silent) setFailedPolls((count) => count + 1);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -134,12 +163,13 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     }
   };
 
-  // The card list only carries a summary; the full saved report is fetched on demand.
-  const viewSpotReport = async (spot) => {
+  // Cards only carry a summary; the full saved report is fetched on demand.
+  const viewSpotReport = async (entry) => {
     if (!onOpenReport) return;
-    setOpeningResultId(spot.result_id);
+    const resultId = entry.best_spot.result_id;
+    setOpeningResultId(resultId);
     try {
-      const response = await authFetch(`/trends/results/${spot.result_id}`, { cache: 'no-store' });
+      const response = await authFetch(`/trends/results/${resultId}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(readErrorMessage(data, 'Unable to open this report.'));
       onOpenReport(data.report);
@@ -150,8 +180,8 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     }
   };
 
-  const showSpotOnMap = (spot, businessKey) => {
-    onRunAnalysis?.({ lat: Number(spot.lat), lng: Number(spot.lng) }, businessKey);
+  const showSpotOnMap = (entry) => {
+    onRunAnalysis?.({ lat: Number(entry.best_spot.lat), lng: Number(entry.best_spot.lng) }, entry.business_key);
   };
 
   useEffect(() => {
@@ -173,34 +203,24 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
     if (!isScanActive) return undefined;
     const timer = setTimeout(() => loadTrends({ silent: true }), POLL_INTERVAL_MS);
     return () => clearTimeout(timer);
-  }, [isScanActive, trends, loadTrends]);
+  }, [isScanActive, trends, failedPolls, loadTrends]);
 
-  const renderSpots = (section) => {
-    const spots = Array.isArray(section.spots) ? section.spots : [];
-    if (spots.length === 0) return null;
-
-    const hasHighChance = spots.some((spot) => spot.is_high_chance);
-    return (
-      <>
-        {!hasHighChance && (
-          <p className="mt-3 rounded-xl bg-[var(--trend-neutral-bg)] px-3 py-2.5 text-sm text-[var(--text-main)]">
-            No spot reached the high-chance score of {minScore}. These are the closest matches.
-          </p>
-        )}
-        <div className="mt-3 grid items-start gap-4 lg:grid-cols-2">
-          {spots.map((spot) => (
-            <TrendSpotCard
-              key={spot.result_id}
-              spot={spot}
-              isOpening={openingResultId === spot.result_id}
-              onViewReport={viewSpotReport}
-              onShowOnMap={(item) => showSpotOnMap(item, section.business_key)}
-            />
-          ))}
-        </div>
-      </>
-    );
-  };
+  const renderCards = (entries, titleOf, keyOf) => (
+    <div className="mt-3 grid items-start gap-4 md:grid-cols-2">
+      {entries.map((entry, index) => (
+        <SuggestionCard
+          key={keyOf(entry)}
+          entry={entry}
+          title={titleOf(entry)}
+          rank={index + 1}
+          reachMeters={reachMeters}
+          isOpening={openingResultId === entry.best_spot.result_id}
+          onViewReport={viewSpotReport}
+          onShowOnMap={showSpotOnMap}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="profile-page page-enter min-h-full">
@@ -209,9 +229,9 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="eyebrow-label mb-2">Market Radar</p>
-              <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-[var(--text-main)] sm:text-3xl">Business Trends</h2>
+              <h2 className="profile-name mb-2 text-2xl font-semibold tracking-tight text-[var(--text-main)] sm:text-3xl">Business Trend Suggestions</h2>
               <p className="profile-email text-sm text-[var(--text-muted)]">
-                High-chance spots found by background scans for your business preferences.
+                Pick an area of Panabo to see which businesses fit it best.
               </p>
             </div>
             <button
@@ -227,6 +247,10 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
             </button>
           </div>
 
+          <p className="mt-3 text-sm text-[var(--text-muted)]">
+            Based on current map, zoning and competitor records. This is a snapshot, not growth over time, and doesn&apos;t guarantee success.
+          </p>
+
           <button
             type="button"
             className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--accent)]"
@@ -240,12 +264,16 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           </button>
           {showHowItWorks && (
             <ol className="trends-reasons mt-2 list-decimal">
-              <li>Your primary business is scanned, plus every other business usually run in your preferred setup.</li>
-              <li>For each one, the system scans listed spaces for rent or sale, landmark areas and points across the commercial zone in the background, using the same engine as a manual scan ({settings.radius_meters ?? 340} m radius).</li>
-              <li>Every result is saved in the database and reused for {settings.fresh_hours ?? 24} hours, so logging in again does not rescan.</li>
-              <li>Spots scoring {minScore} or higher count as high chance and are ranked by their viability score. Of the other businesses, the two with the best-scoring spot are shown.</li>
+              <li>Every business type is scanned in the background across listed spaces, landmarks and points in the zones where it is allowed, using the same engine as a manual scan.</li>
+              <li>Each spot is grouped under its nearest named place, so an area is &quot;around Gredu&quot;, not an official barangay boundary.</li>
+              <li>A business&apos;s area score is the average of its best {settings.area_top_spots ?? 3} spots there. It is a suggestion when that lands in the Highly Suitable class ({settings.high_chance_min_score ?? 68} or higher).</li>
+              <li>A business with fewer than {settings.min_known_competitors ?? 6} competitors on record citywide ranks lower and carries a warning, because low competition may only mean missing data.</li>
+              <li>&quot;Possible market gap&quot; means few recorded competitors where nearby demand looks strong. Confirm it in person.</li>
+              <li>Results are saved and reused for {settings.fresh_hours ?? 24} hours. Your preferences only tag and filter businesses. They never change a score.</li>
             </ol>
           )}
+
+          {!loading && <ScanStatus scan={scan} />}
         </div>
 
         {loading && <div className="data-card p-4 text-sm text-[var(--text-muted)]">Loading saved scan results...</div>}
@@ -259,7 +287,7 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
         {!loading && hasMissingPreferences && (
           <div className="data-card border border-[var(--border-color)] bg-[var(--trend-neutral-bg)] p-4 text-sm text-[var(--text-main)]">
             <p className="font-semibold">Trend preferences are not complete yet.</p>
-            <p className="mt-1 text-[var(--text-muted)]">Complete your preferences so the system knows which businesses to scan for.</p>
+            <p className="mt-1 text-[var(--text-muted)]">Complete your preferences so suggestions can be matched to you.</p>
             <button
               type="button"
               className="mt-3 inline-flex items-center justify-center rounded-xl bg-[var(--btn-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
@@ -270,47 +298,83 @@ export default function Trends({ user, onOpenReport, onRunAnalysis, missingTrend
           </div>
         )}
 
-        {!loading && trends && !primarySection && !setupMatches?.total && (
+        {!loading && trends && areas.length === 0 && (
           <div className="history-empty-state">
             <div>
-              <p className="history-empty-title">No business type to scan yet</p>
-              <p className="history-empty-subtitle">Pick a primary business in your profile to start the background scan.</p>
+              <p className="history-empty-title">{isScanActive ? 'The first scan is running' : 'No suggestions yet'}</p>
+              <p className="history-empty-subtitle">
+                {isScanActive
+                  ? 'Suggestions appear here as each business type finishes.'
+                  : 'No scan results or area names could be loaded. Try Rescan now.'}
+              </p>
             </div>
           </div>
         )}
 
-        {!loading && primarySection && (
+        {!loading && selectedArea && (
           <section className="text-left">
-            <p className="eyebrow-label mb-1">Your business</p>
-            <h3 className="text-xl font-semibold text-[var(--text-main)]">Best spots for {primarySection.business_name}</h3>
-            <SetupNote setupMatch={primarySection.setup_match} />
-            <ScanStatus scan={primarySection.scan} minScore={minScore} />
-            {renderSpots(primarySection)}
+            <div className="grid items-start gap-4 lg:grid-cols-5">
+              <div className="data-card p-3 lg:sticky lg:top-4 lg:col-span-2">
+                <AreaMap areas={areas} selectedName={selectedArea.name} onSelect={setPickedAreaName} />
+                <p className="mt-2 text-xs leading-4 text-[var(--text-muted)]">
+                  Each number is the area&apos;s top business score. Green is a suggestion, a dashed ring means thin competitor data, and gray means no suggestion.
+                </p>
+              </div>
+
+              <div className="lg:col-span-3">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="min-w-[200px] flex-1 text-sm text-[var(--text-main)]">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">Area</span>
+                    <select
+                      className="min-h-[44px] w-full rounded-xl border border-[var(--border-color)] bg-[var(--bg-sheet)] px-3 py-2.5 text-sm text-[var(--text-main)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]"
+                      value={selectedArea.name}
+                      onChange={(event) => setPickedAreaName(event.target.value)}
+                    >
+                      {areas.map((area) => (
+                        <option key={area.name} value={area.name}>Around {area.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {setupName && (
+                    <label className="inline-flex min-h-[44px] items-center gap-2 text-sm text-[var(--text-main)]">
+                      <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={onlyMySetup} onChange={(event) => setOnlyMySetup(event.target.checked)} />
+                      Only {setupName} businesses
+                    </label>
+                  )}
+                </div>
+
+                <h3 className="mt-4 text-xl font-semibold text-[var(--text-main)]">What could open around {selectedArea.name}</h3>
+                <p className="mt-1 text-sm tabular-nums text-[var(--text-muted)]">{selectedArea.spots} spots checked in this area</p>
+
+                {selectedArea.shown.length === 0 && (
+                  <p className="mt-3 rounded-xl bg-[var(--trend-neutral-bg)] px-3 py-2.5 text-sm text-[var(--text-main)]">
+                    {onlyMySetup
+                      ? `No ${setupName} business is allowed in the spots checked here. Clear the filter to see the others.`
+                      : 'No business type is allowed in the spots checked here.'}
+                  </p>
+                )}
+                {suggestions.length > 0 && renderCards(suggestions, (entry) => entry.business_name, (entry) => entry.business_key)}
+                {closestMatches.length > 0 && (
+                  <>
+                    <p className="mt-3 rounded-xl bg-[var(--trend-neutral-bg)] px-3 py-2.5 text-sm text-[var(--text-main)]">
+                      Nothing reaches Highly Suitable around {selectedArea.name}. These are the closest matches, not suggestions.
+                    </p>
+                    {renderCards(closestMatches, (entry) => entry.business_name, (entry) => entry.business_key)}
+                  </>
+                )}
+              </div>
+            </div>
           </section>
         )}
 
-        {!loading && setupMatches && (
-          <section className="mt-4 flex flex-col gap-6 text-left">
-            <div>
-              <p className="eyebrow-label mb-1">Also fits your setup</p>
-              <h3 className="text-lg font-semibold text-[var(--text-main)]">Other {setupName} businesses</h3>
-              {setupMatches.total === 0 ? (
-                <p className="mt-1 text-sm text-[var(--text-muted)]">No other business in our list is usually run as a {setupName}.</p>
-              ) : (
-                <p className="mt-1 text-sm tabular-nums text-[var(--text-muted)]">
-                  {setupMatches.is_scanning
-                    ? `Checked ${setupMatches.scanned} of ${setupMatches.total} ${setupName} businesses...`
-                    : `The ${setupSections.length} of ${setupMatches.total} ${setupName} businesses with the best-scoring spots.`}
-                </p>
-              )}
-            </div>
-            {setupSections.map((section) => (
-              <div key={section.business_key}>
-                <h4 className="text-base font-semibold text-[var(--text-main)]">{section.business_name}</h4>
-                <ScanStatus scan={section.scan} minScore={minScore} />
-                {renderSpots({ ...section, spots: (section.spots || []).slice(0, 2) })}
-              </div>
-            ))}
+        {!loading && primary && (
+          <section className="mt-4 text-left">
+            <p className="eyebrow-label mb-1">Your business</p>
+            <h3 className="text-xl font-semibold text-[var(--text-main)]">Best areas for {primary.business_name}</h3>
+            <SetupNote setupMatch={primary.setup_match} />
+            {primary.best_areas?.length > 0
+              ? renderCards(primary.best_areas, (entry) => `Around ${entry.area_name}`, (entry) => entry.area_name)
+              : <p className="mt-2 text-sm text-[var(--text-muted)]">{isScanActive ? 'Waiting for this business type to finish scanning.' : 'No permitted spots have been scanned for this business yet.'}</p>}
           </section>
         )}
       </div>

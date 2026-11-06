@@ -14,7 +14,14 @@ from core.config import (
     MIN_ADMIN_TOKEN_LENGTH,
     get_startup_database_config,
 )
-from services.ahp import build_consistent_matrix_from_weights, solve_ahp
+from constants.engine import (
+    AHP_CRITERIA_LABELS,
+    AHP_MARKET_LABELS,
+    AHP_PROVISIONAL_LABEL,
+    ANCHOR_SEED_LABEL,
+)
+from constants.geo import PANABO_ANCHORS
+from services.ahp import build_saaty_matrix_from_weights, solve_ahp
 
 
 def create_app_tables(db_config):
@@ -59,6 +66,7 @@ def create_app_tables(db_config):
             ensure_user_sessions_table(cursor, user_pk_column)
             ensure_trend_scan_tables(cursor)
             ensure_map_layers_tables(cursor)
+            ensure_anchor_seed_data(cursor)
             ensure_ahp_weight_configs_table(cursor)
             ensure_ahp_seed_data(cursor)
             ensure_default_admin_user(cursor)
@@ -101,6 +109,8 @@ def ensure_history_table_columns(cursor):
     cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS competitor_locations JSONB")
     cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS breakdown JSONB")
     cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS ahp_methodology JSONB")
+    # Verdict, explanation, data quality and engine version of the scan.
+    cursor.execute("ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS result_meta JSONB")
 
 
 def ensure_users_profile_columns(cursor):
@@ -178,9 +188,43 @@ def ensure_verified_local_features_table(cursor):
     cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS verified_at DATE")
     cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS created_by_admin_email TEXT")
     cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    # Set on a row that corrects or hides one OSM anchor (services/anchors.py).
+    cursor.execute("ALTER TABLE verified_local_features ADD COLUMN IF NOT EXISTS osm_ref VARCHAR(64)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_verified_local_features_osm_ref ON verified_local_features(osm_ref) WHERE osm_ref IS NOT NULL")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_verified_local_features_kind_active ON verified_local_features(feature_kind, is_active)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_verified_local_features_business_type ON verified_local_features(business_type)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_verified_local_features_coords ON verified_local_features(latitude, longitude)")
+
+
+ANCHOR_SEED_FLAG = "anchors_seeded"
+
+
+def ensure_anchor_seed_data(cursor):
+    """One time: copy the original anchors into the table so the admin can edit them.
+    The flag keeps a deleted anchor from coming back on the next restart."""
+    cursor.execute("SELECT 1 FROM app_flags WHERE key = %s", (ANCHOR_SEED_FLAG,))
+    if cursor.fetchone():
+        return
+
+    for anchor in PANABO_ANCHORS:
+        cursor.execute(
+            """
+            INSERT INTO verified_local_features (
+                feature_kind, name, feature_subtype, latitude, longitude, power,
+                source_note, created_by_admin_email
+            ) VALUES ('anchor', %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                anchor["name"],
+                anchor["category"],
+                anchor["lat"],
+                anchor["lon"],
+                anchor["power"],
+                "From the original built-in anchor list.",
+                ANCHOR_SEED_LABEL,
+            ),
+        )
+    cursor.execute("INSERT INTO app_flags (key) VALUES (%s)", (ANCHOR_SEED_FLAG,))
 
 
 def ensure_user_space_submissions_table(cursor, user_pk_column):
@@ -419,17 +463,18 @@ def ensure_map_layers_tables(cursor):
 # ==========================================
 
 AHP_GLOBAL_CATEGORY_SENTINEL = "__global__"
-AHP_SEED_ADMIN_LABEL = "system-seed-migration"
+# PROVISIONAL weights, written by the proponents: these are not expert answers.
+# Real answers replace them with scripts/import_ahp_judgments.py, and the seed below
+# never overwrites those. Scan reports show which set is active.
+#
+# hazard : market is 1:3 on the Saaty scale. Zoning isn't here: it is a hard
+# constraint (services/analysis.py), not a weighted criterion.
+AHP_SEED_ADMIN_LABEL = "system-seed-migration"  # the earlier seed; replaced on startup
+AHP_SEED_CRITERIA_MATRIX = [[1.0, 1.0 / 3.0], [3.0, 1.0]]
 
-# Seed weights mirror the static defaults this application used before AHP was
-# introduced (main.py: top-level composite at perform_analysis, and per-category
-# saturation weights in MSME_CATEGORY_PROFILES). Reconstructing these as perfectly
-# consistent (CR=0) pairwise matrices means /analyze scores are unchanged on first
-# deploy, until an admin enters real Saaty judgments via the AHP admin UI.
-AHP_SEED_CRITERIA_LABELS = ["zoning", "hazard", "saturation"]
-AHP_SEED_CRITERIA_WEIGHTS = [0.30, 0.20, 0.50]
-
-AHP_SEED_SATURATION_LABELS = ["competition", "road", "anchor", "building"]
+# The per-business market weights the app already used. Each pair's ratio is rounded
+# to the nearest 1-9 Saaty judgment to build the real matrix, so CR is a measured
+# value and not 0 by construction.
 AHP_SEED_SATURATION_WEIGHTS_BY_CATEGORY = {
     "coffee": [0.47, 0.20, 0.19, 0.14],
     "print": [0.42, 0.23, 0.18, 0.17],
@@ -475,55 +520,73 @@ def ensure_ahp_weight_configs_table(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_ahp_weight_configs_level ON ahp_weight_configs(level)")
 
 
-def _upsert_ahp_weight_config(cursor, level, category, criteria_labels, weights, updated_by_admin_email):
-    matrix = build_consistent_matrix_from_weights(weights)
+def write_ahp_weight_config(cursor, level, category, criteria_labels, matrix, updated_by, replaceable_labels=None):
+    """Save one solved matrix. With replaceable_labels, an existing row is only
+    replaced if it carries one of those labels, so a seed can't overwrite real answers."""
     solved = solve_ahp(matrix)
+    guard = ""
+    params = [
+        level,
+        category,
+        Json(criteria_labels),
+        Json(matrix),
+        Json(solved["priority_vector"]),
+        solved["lambda_max"],
+        solved["ci"],
+        solved["ri"],
+        solved["cr"],
+        solved["is_consistent"],
+        updated_by,
+    ]
+    if replaceable_labels is not None:
+        guard = "WHERE ahp_weight_configs.updated_by_admin_email = ANY(%s)"
+        params.append(list(replaceable_labels))
     cursor.execute(
-        """
+        f"""
         INSERT INTO ahp_weight_configs (
             level, category, criteria_labels, pairwise_matrix, priority_vector,
             lambda_max, consistency_index, random_index, consistency_ratio,
             is_consistent, updated_by_admin_email
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (level, category) DO NOTHING
+        ON CONFLICT (level, category) DO UPDATE SET
+            criteria_labels = EXCLUDED.criteria_labels,
+            pairwise_matrix = EXCLUDED.pairwise_matrix,
+            priority_vector = EXCLUDED.priority_vector,
+            lambda_max = EXCLUDED.lambda_max,
+            consistency_index = EXCLUDED.consistency_index,
+            random_index = EXCLUDED.random_index,
+            consistency_ratio = EXCLUDED.consistency_ratio,
+            is_consistent = EXCLUDED.is_consistent,
+            updated_by_admin_email = EXCLUDED.updated_by_admin_email,
+            updated_at = CURRENT_TIMESTAMP
+        {guard}
         """,
-        (
-            level,
-            category,
-            Json(criteria_labels),
-            Json(matrix),
-            Json(solved["priority_vector"]),
-            solved["lambda_max"],
-            solved["ci"],
-            solved["ri"],
-            solved["cr"],
-            solved["is_consistent"],
-            updated_by_admin_email,
-        ),
+        params,
     )
 
 
 def ensure_ahp_seed_data(cursor):
-    """Idempotently seeds ahp_weight_configs with matrices reconstructed from this
-    app's pre-existing static weights, so /analyze scores are unchanged on first
-    deploy. Uses ON CONFLICT DO NOTHING so it never overwrites an admin's real
-    judgments on subsequent restarts."""
-    _upsert_ahp_weight_config(
+    """Writes the provisional matrices, and replaces the earlier generated ones.
+    Weights imported from real respondents carry another label and are left alone."""
+    replaceable = (AHP_SEED_ADMIN_LABEL, AHP_PROVISIONAL_LABEL)
+    write_ahp_weight_config(
         cursor,
         "criteria",
         AHP_GLOBAL_CATEGORY_SENTINEL,
-        AHP_SEED_CRITERIA_LABELS,
-        AHP_SEED_CRITERIA_WEIGHTS,
-        AHP_SEED_ADMIN_LABEL,
+        AHP_CRITERIA_LABELS,
+        AHP_SEED_CRITERIA_MATRIX,
+        AHP_PROVISIONAL_LABEL,
+        replaceable,
     )
     for category, weights in AHP_SEED_SATURATION_WEIGHTS_BY_CATEGORY.items():
-        _upsert_ahp_weight_config(
+        write_ahp_weight_config(
             cursor,
             "saturation",
             category,
-            AHP_SEED_SATURATION_LABELS,
-            weights,
-            AHP_SEED_ADMIN_LABEL,
+            AHP_MARKET_LABELS,
+            build_saaty_matrix_from_weights(weights),
+            AHP_PROVISIONAL_LABEL,
+            replaceable,
         )
 
 

@@ -894,7 +894,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
       ? { title: 'Drop your first pin', body: 'Tap anywhere inside the city boundary to pick a spot worth checking.' }
       : tourStep === 2
         ? { title: 'Pick a business type', body: 'What do you want to open here? Choose from the list in the scan panel.' }
-        : { title: 'Run your first scan', body: 'Adjust the radius if you like, then press Run Full Analysis.' };
+        : { title: 'Run your first scan', body: 'Press Run Full Analysis. The radius only changes what the map shows, not the score.' };
 
   const clearSelection = () => {
     if (analyzing) return;
@@ -1180,7 +1180,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
 
                   <div className="input-group" ref={radiusFieldRef}>
                     <div className="map-radius-row">
-                      <label className="input-label">Scan Radius</label>
+                      <label className="input-label">Map View Radius</label>
                       <span className="map-radius-chip">{previewRadius}m</span>
                     </div>
                     <input
@@ -1196,6 +1196,7 @@ export default function Home({ onViewReport, theme, userId, previewSelection, on
                       <span>100m</span>
                       <span>1500m</span>
                     </div>
+                    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">Sets which competitors the map lists. It doesn't change the score.</p>
                   </div>
 
                   <div className="map-quick-panel__summary">

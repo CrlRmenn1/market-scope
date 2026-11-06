@@ -1,7 +1,6 @@
 """
 Unit tests for the trend analysis pure functions: which business types get
-scanned, candidate spot building, spot highlights and setup-match ranking.
-No database needed.
+scanned and candidate spot building. No database needed.
 """
 
 import unittest
@@ -13,11 +12,12 @@ from services.trend_candidates import build_area_grid_points, build_scan_candida
 from services.zoning import features_to_zoning_cache
 from services.trend_preferences import (
     describe_setup_match,
+    fits_preferred_setup,
+    get_all_scan_business_keys,
     get_same_setup_business_keys,
     get_trend_scan_business_keys,
     resolve_primary_business_key,
 )
-from services.trend_recommendations import rank_setup_matches, summarize_spot
 from utils.geo import check_inside_bounds
 from utils.geo_libs import Point
 
@@ -29,7 +29,7 @@ BUILTIN_ZONING = features_to_zoning_cache(builtin_zoning_feature_collection()["f
 
 
 def candidates_for(business_key, markers=()):
-    return build_scan_candidates(business_key, list(markers), zoning_features=BUILTIN_ZONING)
+    return build_scan_candidates(business_key, list(markers), zoning_features=BUILTIN_ZONING, landmarks=PANABO_ANCHORS)
 
 
 class TypicalSetupTests(unittest.TestCase):
@@ -80,26 +80,16 @@ class DescribeSetupMatchTests(unittest.TestCase):
         self.assertIn("kiosk", result["detail"])
 
 
-class RankSetupMatchesTests(unittest.TestCase):
-    def _section(self, name, best_score=None):
-        spots = [] if best_score is None else [{"viability_score": best_score}]
-        return {"business_name": name, "spots": spots}
+class AllScanBusinessKeysTests(unittest.TestCase):
+    def test_covers_every_business_once_with_the_users_first(self):
+        keys = get_all_scan_business_keys({"primary_business": "meat", "preferred_setup": "roadside"})
+        self.assertEqual(keys[:3], ["meat", "carwash", "moto"])
+        self.assertEqual(sorted(keys), sorted(SME_DATABASE))
 
-    def test_best_spot_score_first_and_limited(self):
-        ranked = rank_setup_matches([
-            self._section("Bakeries", 80),
-            self._section("Coffee Shops", 92),
-            self._section("Laundry Shops", 88),
-        ])
-        self.assertEqual([s["business_name"] for s in ranked], ["Coffee Shops", "Laundry Shops"])
-
-    def test_ties_break_by_name_and_unscanned_are_skipped(self):
-        ranked = rank_setup_matches([
-            self._section("Water Refilling Stations", 90),
-            self._section("Bakeries", 90),
-            self._section("Internet Cafes"),
-        ])
-        self.assertEqual([s["business_name"] for s in ranked], ["Bakeries", "Water Refilling Stations"])
+    def test_fits_preferred_setup(self):
+        self.assertTrue(fits_preferred_setup("carwash", {"preferred_setup": " Roadside "}))
+        self.assertFalse(fits_preferred_setup("coffee", {"preferred_setup": "roadside"}))
+        self.assertFalse(fits_preferred_setup("coffee", {}))
 
 
 class BuildScanCandidatesTests(unittest.TestCase):
@@ -166,25 +156,6 @@ class BuildScanCandidatesTests(unittest.TestCase):
         self.assertTrue(points)
         self.assertTrue(all(triangle["geometry"].covers(Point(p["lon"], p["lat"])) for p in points))
         self.assertNotIn((7.315, 125.69), {(p["lat"], p["lon"]) for p in points})
-
-
-class SummarizeSpotTests(unittest.TestCase):
-    def test_reads_breakdown_statuses(self):
-        highlights = summarize_spot({
-            "breakdown": {
-                "zoning": {"status": "Compliant (Commercial Center)"},
-                "hazard": {"status": "Low Risk / Safe"},
-                "road_access": {"status": "Primary road frontage"},
-            },
-            "competitors_found": 1,
-            "radius_meters": 340,
-        })
-        self.assertEqual(highlights, [
-            "Zoning: Compliant (Commercial Center)",
-            "Flood hazard: Low Risk / Safe",
-            "1 competitor within 340 m",
-            "Road access: Primary road frontage",
-        ])
 
 
 if __name__ == "__main__":

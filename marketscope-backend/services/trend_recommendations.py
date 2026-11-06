@@ -1,141 +1,140 @@
 """What the Trends page shows, read from saved background scans.
 
-  primary        - the user's primary business: scan state + its best spots
-  setup_matches  - other business types usually run in the user's preferred
-                   setup; the TOP_SETUP_MATCHES whose best spot scored highest
+  areas    - each named area with its business types ranked (services/trend_suggestions.py)
+  primary  - the user's primary business and the areas where it does best
+  scan     - how far the scans of all the business types have got
 
-Spots are saved results with viability_score >= TREND_HIGH_CHANCE_MIN_SCORE,
-best first (max MAX_SPOTS_PER_SECTION). If none reach the cut-off, the best
-FALLBACK_SPOTS are returned marked is_high_chance=False.
-Sorting by viability score is the only ranking rule, for spots and for setup matches.
+Built areas are kept in memory until a business type gets a new finished run, so
+polling during a scan doesn't redo the work. Preferences only add tags on top.
 """
+from constants.engine import COMPETITION_REACH_M, TREND_AREA_TOP_SPOTS, TREND_MIN_KNOWN_COMPETITORS
 from constants.msme import SME_DATABASE
-from core.config import TREND_HIGH_CHANCE_MIN_SCORE, TREND_SCAN_FRESH_HOURS, TREND_SCAN_RADIUS
-from db.trend_queries import count_run_results, fetch_run_results, open_trend_cursor
+from core.config import TREND_HIGH_CHANCE_MIN_SCORE, TREND_SCAN_FRESH_HOURS
+from db.trend_queries import fetch_run_area_rows, open_trend_cursor
+from services.osm_data import get_osm_place_features
+from services.scoring import count_known_competitors
 from services.trend_preferences import (
     describe_setup_match,
-    get_same_setup_business_keys,
+    fits_preferred_setup,
+    get_all_scan_business_keys,
     resolve_primary_business_key,
 )
 from services.trend_scan import get_business_scan_state, request_trend_scans
+from services.trend_suggestions import best_areas_for_business, build_areas
 
 
-MAX_SPOTS_PER_SECTION = 5
-FALLBACK_SPOTS = 3
-TOP_SETUP_MATCHES = 2
+TOP_PRIMARY_AREAS = 3
 ACTIVE_SCAN_STATES = ("scanning", "queued")
 
-
-def summarize_spot(report):
-    """Short highlights taken straight from the /analyze breakdown of a spot."""
-    breakdown = report.get("breakdown") or {}
-    highlights = []
-
-    zoning_status = (breakdown.get("zoning") or {}).get("status")
-    if zoning_status:
-        highlights.append(f"Zoning: {zoning_status}")
-
-    hazard_status = (breakdown.get("hazard") or {}).get("status")
-    if hazard_status:
-        highlights.append(f"Flood hazard: {hazard_status}")
-
-    competitors_found = report.get("competitors_found")
-    radius = report.get("radius_meters")
-    if competitors_found is not None and radius:
-        highlights.append(f"{competitors_found} competitor{'s' if competitors_found != 1 else ''} within {radius} m")
-
-    road_status = (breakdown.get("road_access") or {}).get("status")
-    if road_status:
-        highlights.append(f"Road access: {road_status}")
-
-    return highlights
+# (key built from the finished runs, areas). Replaced as a whole, so a reader never
+# sees it half-written.
+_AREAS_CACHE = (None, [])
 
 
-def rank_setup_matches(sections, limit: int = TOP_SETUP_MATCHES):
-    """Sections with saved spots, best spot score first (ties: business name)."""
-    ranked = [section for section in sections if section.get("spots")]
-    ranked.sort(key=lambda section: (-section["spots"][0]["viability_score"], section["business_name"]))
-    return ranked[:limit]
+def _load_areas(cursor, done_runs):
+    """done_runs: {business_key: its newest finished run}."""
+    global _AREAS_CACHE
+    cache_key = tuple(sorted((business_key, run["id"]) for business_key, run in done_runs.items()))
+    if _AREAS_CACHE[0] == cache_key:
+        return _AREAS_CACHE[1]
+
+    rows_by_business = {
+        business_key: [{**row, "lat": float(row["lat"]), "lon": float(row["lon"])} for row in fetch_run_area_rows(cursor, run["id"])]
+        for business_key, run in done_runs.items()
+    }
+    areas = build_areas(
+        rows_by_business,
+        {key: SME_DATABASE[key]["name"] for key in done_runs},
+        {key: count_known_competitors(key, cursor=cursor) for key in done_runs},
+        get_osm_place_features(),
+        TREND_HIGH_CHANCE_MIN_SCORE,
+    )
+    _AREAS_CACHE = (cache_key, areas)
+    return areas
 
 
-def _build_spot(rank: int, row):
-    space = row.get("space_context")
-    score = int(row.get("viability_score") or 0)
+def _tag_for_user(areas, user_profile):
+    """A copy of the areas with this user's setup tags. The ranking isn't changed."""
+    return [
+        {
+            **area,
+            "businesses": [
+                {**entry, "fits_setup": fits_preferred_setup(entry["business_key"], user_profile)}
+                for entry in area["businesses"]
+            ],
+        }
+        for area in areas
+    ]
+
+
+def _summarize_scans(scan_states):
+    """scan_states: {business_key: get_business_scan_state(...)}."""
+    active = {key: state for key, state in scan_states.items() if state["state"] in ACTIVE_SCAN_STATES}
+    current = next(
+        (
+            {"business_name": SME_DATABASE[key]["name"], **state["progress"]}
+            for key, state in active.items()
+            if state["state"] == "scanning" and state["progress"]
+        ),
+        None,
+    )
+    failed = [
+        {
+            "business_key": key,
+            "business_name": SME_DATABASE[key]["name"],
+            "error": state["error"],
+            "has_older_results": state["done_run"] is not None,
+        }
+        for key, state in scan_states.items()
+        if state["error"]
+    ]
+    ages = [state["done_run"]["age_seconds"] for state in scan_states.values() if state["done_run"]]
+
     return {
-        "rank": rank,
-        "result_id": row["id"],
-        "lat": row["lat"],
-        "lng": row["lon"],
-        "source": row["candidate_source"],
-        "label": row.get("candidate_label"),
-        "is_listed_space": row["candidate_source"] == "space" or bool(space),
-        "space": space,
-        "viability_score": score,
-        "is_high_chance": score >= TREND_HIGH_CHANCE_MIN_SCORE,
-        "insight": row.get("insight"),
-        "highlights": summarize_spot(row),
+        "is_active": bool(active),
+        "total_types": len(scan_states),
+        "finished_types": sum(1 for state in scan_states.values() if state["done_run"]),
+        "current": current,
+        "failed": failed,
+        "oldest_seconds_ago": max(ages) if ages else None,
     }
 
 
-def _build_section(cursor, business_key: str):
-    scan_state = get_business_scan_state(cursor, business_key)
-    done_run = scan_state["done_run"]
-
-    spots = []
-    scanned_spots = 0
-    high_chance_spots = 0
-    if done_run:
-        scanned_spots, high_chance_spots = count_run_results(cursor, done_run["id"], TREND_HIGH_CHANCE_MIN_SCORE)
-        rows = fetch_run_results(cursor, done_run["id"], MAX_SPOTS_PER_SECTION)
-        high_rows = [row for row in rows if row["viability_score"] >= TREND_HIGH_CHANCE_MIN_SCORE]
-        chosen_rows = high_rows if high_rows else rows[:FALLBACK_SPOTS]
-        spots = [_build_spot(index + 1, row) for index, row in enumerate(chosen_rows)]
-
+def _build_primary(primary_key, areas, user_profile):
+    if not primary_key:
+        return None
     return {
-        "business_key": business_key,
-        "business_name": SME_DATABASE[business_key]["name"],
-        "scan": {
-            "state": scan_state["state"],
-            "progress": scan_state["progress"],
-            "error": scan_state["error"],
-            "run_id": done_run["id"] if done_run else None,
-            "scanned_seconds_ago": done_run["age_seconds"] if done_run else None,
-            "scanned_spots": scanned_spots,
-            "high_chance_spots": high_chance_spots,
-        },
-        "spots": spots,
+        "business_key": primary_key,
+        "business_name": SME_DATABASE[primary_key]["name"],
+        "setup_match": describe_setup_match(primary_key, user_profile),
+        "best_areas": best_areas_for_business(areas, primary_key, TOP_PRIMARY_AREAS),
     }
 
 
 def build_user_trends(user_profile, trigger_source: str = "page", force: bool = False):
     primary_key = resolve_primary_business_key(user_profile)
-    setup_keys = get_same_setup_business_keys(user_profile, exclude=primary_key)
-    request_trend_scans(([primary_key] if primary_key else []) + setup_keys, trigger_source, force=force)
+    business_keys = get_all_scan_business_keys(user_profile)
+    request_trend_scans(business_keys, trigger_source, force=force)
 
     with open_trend_cursor() as cursor:
-        primary = None
-        if primary_key:
-            primary = _build_section(cursor, primary_key)
-            primary["setup_match"] = describe_setup_match(primary_key, user_profile)
-        setup_sections = [_build_section(cursor, business_key) for business_key in setup_keys]
+        scan_states = {key: get_business_scan_state(cursor, key) for key in business_keys}
+        done_runs = {key: state["done_run"] for key, state in scan_states.items() if state["done_run"]}
+        areas = _tag_for_user(_load_areas(cursor, done_runs), user_profile)
 
     return {
         "status": "success",
         "settings": {
             "high_chance_min_score": TREND_HIGH_CHANCE_MIN_SCORE,
             "fresh_hours": TREND_SCAN_FRESH_HOURS,
-            "radius_meters": TREND_SCAN_RADIUS,
+            "min_known_competitors": TREND_MIN_KNOWN_COMPETITORS,
+            "competition_reach_meters": int(COMPETITION_REACH_M),
+            "area_top_spots": TREND_AREA_TOP_SPOTS,
         },
         "profile": {
             "primary_business": user_profile.get("primary_business"),
             "preferred_setup": user_profile.get("preferred_setup"),
         },
-        "primary": primary,
-        "setup_matches": {
-            "setup": user_profile.get("preferred_setup"),
-            "total": len(setup_sections),
-            "scanned": sum(1 for section in setup_sections if section["scan"]["run_id"] is not None),
-            "is_scanning": any(section["scan"]["state"] in ACTIVE_SCAN_STATES for section in setup_sections),
-            "sections": rank_setup_matches(setup_sections),
-        },
+        "scan": _summarize_scans(scan_states),
+        "areas": areas,
+        "primary": _build_primary(primary_key, areas, user_profile),
     }

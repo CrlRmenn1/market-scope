@@ -2,22 +2,44 @@
 In-memory cache of the AHP weight configs (ahp_weight_configs table), keyed by
 (level, category). Avoids a DB round-trip per perform_analysis() call, since
 background trend scans call perform_analysis() many times per scan. Loaded
-once at startup (lifespan). The weights are the seeded AHP matrices from
-db/schema.py; there is no admin editor, so change them in the table directly.
+once at startup (lifespan), so restart the backend after importing new weights
+with scripts/import_ahp_judgments.py.
+
+A matrix is only used if it has the expected criteria and passes the consistency
+check (CR < 0.10). Otherwise the scan falls back to the static defaults and says so.
 """
 from threading import Lock
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from constants.engine import AHP_CRITERIA_LABELS, AHP_MARKET_LABELS
 from core.database import DB_CONFIG
 from db.schema import AHP_GLOBAL_CATEGORY_SENTINEL
+from services.ahp import AHPValidationError, solve_ahp
 
 
 _AHP_WEIGHTS_CACHE = {}
 
 
 _AHP_WEIGHTS_CACHE_LOCK = Lock()
+
+
+EXPECTED_LABELS = {"criteria": AHP_CRITERIA_LABELS, "saturation": AHP_MARKET_LABELS}
+
+
+def reject_reason(row):
+    """Why this saved matrix can't be used, or None when it is fine."""
+    level = row.get("level")
+    if row.get("criteria_labels") != EXPECTED_LABELS.get(level):
+        return f"unexpected criteria {row.get('criteria_labels')}"
+    try:
+        solved = solve_ahp(row.get("pairwise_matrix"))
+    except (AHPValidationError, TypeError) as exc:
+        return f"invalid matrix: {exc}"
+    if not solved["is_consistent"]:
+        return f"inconsistent, CR={solved['cr']:.3f}"
+    return None
 
 
 def _load_ahp_weights_cache():
@@ -41,6 +63,10 @@ def _load_ahp_weights_cache():
 
     new_cache = {}
     for row in rows:
+        problem = reject_reason(row)
+        if problem:
+            print(f"[AHP] Not using {row['level']}/{row['category']}: {problem}", flush=True)
+            continue
         key = (row["level"], row["category"])
         new_cache[key] = {
             "criteria_labels": row["criteria_labels"],

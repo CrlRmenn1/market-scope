@@ -16,7 +16,7 @@ import { apiUrl } from '../../lib/api';
 import { getMapInk, getTileUrl, SATELLITE_ATTRIBUTION, SATELLITE_TILE_URL, TILE_ATTRIBUTION } from '../../utils/mapTheme';
 import { getHazardStyle, getHazardVar, HAZARD_CLASSES } from '../../utils/hazardStyle';
 import { getZoneStyle, getZoningClass, ZONING_CLASSES, ZONING_GROUPS, zoningClassesIn } from '../../utils/zoneStyle';
-import { PANABO_BOUNDS } from '../../utils/mapLayers';
+import { panaboLatLngBounds } from '../../utils/mapLayers';
 import { resolveStack } from '../../utils/layerStack';
 import { Card, CardHeader, EmptyState, Field, SegmentedTabs, SkeletonRows, StatusBadge } from './ui/AdminUi';
 import { buttonClass, inputClass } from './ui/adminStyles';
@@ -83,11 +83,6 @@ const readStoredMapView = () => {
 
 const IMPORT_ACCEPT = '.geojson,.json,.kml,.zip';
 const TRACE_ACCEPT = 'image/png,image/jpeg,application/pdf,.pdf';
-
-const panaboLatLngBounds = () => L.latLngBounds(
-  [PANABO_BOUNDS.south, PANABO_BOUNDS.west],
-  [PANABO_BOUNDS.north, PANABO_BOUNDS.east]
-);
 
 const featureStyle = (category, zoneClass) => (
   category === 'hazard'

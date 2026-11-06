@@ -9,6 +9,7 @@ import Modal from '../components/common/Modal';
 import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
 import { getHazardStyle, getHazardVar } from '../utils/hazardStyle';
 import { fetchActiveMapLayer } from '../utils/mapLayers';
+import { describeWeights, formatFactorScore, getFactorColor, getVerdict, pickResultMeta } from '../utils/verdict';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -53,6 +54,10 @@ export default function Report({ data, targetCoords, onClose }) {
   const strictCompetitorsFound = Math.max(0, Number(data?.competitors_found || 0));
   const competitorLocations = strictCompetitorsFound > 0 && Array.isArray(data?.competitor_locations)
     ? data.competitor_locations
+    : [];
+
+  const countedAnchors = Array.isArray(data?.breakdown?.anchor_proximity?.nearby_anchors)
+    ? data.breakdown.anchor_proximity.nearby_anchors
     : [];
 
   const fitMapToFeatures = () => {
@@ -123,6 +128,21 @@ export default function Report({ data, targetCoords, onClose }) {
         iconAnchor: [17, 17]
       });
       L.marker([resolvedTargetCoords.lat, resolvedTargetCoords.lng], { icon: targetIcon }).addTo(elementsGroup);
+
+      // Draw the anchors the score counted. Kept out of the fitted group: some count from
+      // well beyond the view radius, and shouldn't zoom the map out to reach them.
+      const anchorIcon = L.divIcon({
+        className: 'anchor-pin',
+        html: `<div style="width:12px; height:12px; background:${getMapInk()}; border:2px solid white; transform:rotate(45deg); box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
+        iconSize: [12, 12], iconAnchor: [6, 6]
+      });
+      countedAnchors.forEach((anchor) => {
+        const anchorCoords = normalizeCoords(anchor);
+        if (!anchorCoords) return;
+        L.marker([anchorCoords.lat, anchorCoords.lng], { icon: anchorIcon })
+          .addTo(mapInstance.current)
+          .bindTooltip(`${anchor.name} (${Math.round(anchor.distance_m)} m)`, { direction: 'top', offset: [0, -6], opacity: 0.92 });
+      });
 
       // Draw Competitor Pins
       if (competitorLocations.length > 0) {
@@ -228,16 +248,22 @@ export default function Report({ data, targetCoords, onClose }) {
   const { viability_score, breakdown, business_type, radius_meters, insight } = data;
   const businessLabel = data?.business_label || getBusinessTypeLabel(business_type) || business_type || 'Analysis';
   const spaceContext = data?.space_context || data?.selected_space || null;
+  const verdict = getVerdict(data);
+  const notPermitted = verdict.key === 'not_permitted';
+  const dataNotes = data?.data_quality?.notes || [];
+  const weightsNote = describeWeights(data?.data_quality?.weights_provenance);
 
   const toggleDetail = (key) => {
     setExpandedDetail((prev) => (prev === key ? null : key));
   };
 
-  const getScoreColor = (score) => {
-    if (score >= 20) return 'var(--trend-up)';
-    if (score >= 10) return 'var(--trend-neutral)';
-    return 'var(--trend-down)';
+  // Zoning is yes-or-no, so it shows as a state and not a score out of 25.
+  const getZoningColor = (factor) => {
+    if (factor?.state === 'permitted') return 'var(--trend-up)';
+    if (factor?.state === 'not_permitted') return 'var(--trend-down)';
+    return factor?.state ? 'var(--text-muted)' : getFactorColor(factor?.score);
   };
+  const getFactorTone = (key, factor) => (key === 'zoning' ? getZoningColor(factor) : getFactorColor(factor?.score));
 
   const formatListingMode = (value) => {
     const normalized = String(value || '').toLowerCase();
@@ -267,14 +293,14 @@ export default function Report({ data, targetCoords, onClose }) {
     if (key === 'hazard') return 'Hazard Exposure';
     if (key === 'competition_density') return 'Competition Density';
     if (key === 'road_access') return 'Road Access';
-    if (key === 'anchor_proximity') return 'Traffic Generators';
+    if (key === 'anchor_proximity') return 'Nearby Anchors';
     if (key === 'building_density') return 'Building Density';
-    if (key === 'saturation') return 'Market Saturation';
+    if (key === 'saturation') return 'Market Potential';
     if (key === 'demand') return 'Infrastructure Proxies';
     return String(key || '').replace(/_/g, ' ');
   };
 
-  const getFactorDetailText = (key, factor) => {
+  const getFactorDetailText = (factor) => {
     const details = factor.details;
     if (typeof details === 'string' && details.trim().length > 0) {
       return details;
@@ -287,63 +313,7 @@ export default function Report({ data, targetCoords, onClose }) {
       if (joined.trim().length > 0) return joined;
     }
 
-    if (key === 'zoning') {
-      return (
-        'Zoning is calculated by testing the target coordinates against Panabo commercial and industrial polygon boundaries. ' +
-        'A full score means the point is inside a compliant zone for the chosen business type; lower scores mean it falls outside permitted land use areas.'
-      );
-    }
-
-    if (key === 'hazard') {
-      return (
-        'Hazard is scored by comparing the location to the flood hazard zones in the active hazard map layer. ' +
-        'The lowest matched zone score becomes the factor result: Very High (score 5), High (score 12), or Moderate (score 18).'
-      );
-    }
-
-    if (key === 'competition_density') {
-      return (
-        'Competition density uses a weighted radial scan of nearby MSME competitors. ' +
-        'Closer competitors and repeated matches contribute more pressure than distant ones, so the score reacts to true local saturation instead of raw counts alone.'
-      );
-    }
-
-    if (key === 'road_access') {
-      return (
-        'Road access evaluates the nearest OSM road segment, classifies it by highway hierarchy, and blends road type with distance to the site. ' +
-        'Primary and secondary corridors score higher than service or residential edges.'
-      );
-    }
-
-    if (key === 'anchor_proximity') {
-      return (
-        'Traffic-generator proximity sums nearby anchor power with inverse-distance decay. ' +
-        'Sites near terminals, markets, schools, or similar generators receive stronger opportunity scores.'
-      );
-    }
-
-    if (key === 'building_density') {
-      return (
-        'Building density is used as a built-form proxy. ' +
-        'The engine counts and weights nearby footprints, then uses that intensity as an activity-scale multiplier rather than a standalone decision rule.'
-      );
-    }
-
-    if (key === 'saturation') {
-      return (
-        'Saturation is a composite of competitor density, road access, traffic-generator proximity, and built-form intensity. ' +
-        'The engine blends those sub-scores to estimate whether the local market is open, balanced, or crowded.'
-      );
-    }
-
-    if (key === 'demand') {
-      return (
-        'Demand is estimated by summing nearby anchor power within the radius and normalizing it against a business-specific benchmark. ' +
-        'The raw anchor power is converted into a 0-25 visibility score.'
-      );
-    }
-
-    return 'This factor explanation is based on the model scoring rules used by the analysis engine.';
+    return 'This scan was saved before factor explanations were stored. Re-scan the location to see one.';
   };
 
   
@@ -506,7 +476,8 @@ export default function Report({ data, targetCoords, onClose }) {
     target_coords: resolvedTargetCoords || data?.target_coords || null,
     radius_meters: Number(radius_meters || 340),
     insight,
-    breakdown: breakdown || {}
+    breakdown: breakdown || {},
+    ...pickResultMeta(data)
   });
 
   const requestAiReport = async (exportPdf = false) => {
@@ -699,27 +670,37 @@ export default function Report({ data, targetCoords, onClose }) {
               <span className="big-score leading-none">{viability_score}</span>
             </div>
             <p className="score-label mt-4 text-sm font-medium text-[var(--text-muted)]">Suitability Score</p>
-            <span className={`trends-score-badge mt-2 ${Number(viability_score || 0) >= 75 ? 'high' : Number(viability_score || 0) >= 55 ? 'medium' : 'low'}`}>
-              {Number(viability_score || 0) >= 75 ? 'Prime Location' : Number(viability_score || 0) >= 55 ? 'Viable Site' : 'Proceed with Caution'}
-            </span>
+            <span className={`trends-score-badge mt-2 ${verdict.tone}`}>{verdict.label}</span>
+            {verdict.reason && !notPermitted && (
+              <p className="mt-2 max-w-[16rem] text-center text-xs leading-5 text-[var(--text-muted)]">{verdict.reason}</p>
+            )}
           </div>
 
           <div className="quick-facts-card data-card flex flex-col justify-center gap-3 p-5">
             <h4 className="eyebrow-label">Quick Facts</h4>
-            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 pl-3" style={{ borderColor: getScoreColor(breakdown?.zoning?.score ?? 0) }}>
+            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 pl-3" style={{ borderColor: getFactorTone('zoning', breakdown?.zoning) }}>
               <span className="text-sm text-[var(--text-muted)]">Zoning Fit</span>
-              <span className="text-sm font-semibold" style={{ color: getScoreColor(breakdown?.zoning?.score ?? 0) }}>{breakdown?.zoning?.status || '-'}</span>
+              <span className="text-sm font-semibold" style={{ color: getFactorTone('zoning', breakdown?.zoning) }}>{breakdown?.zoning?.status || '-'}</span>
             </div>
-            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 pl-3" style={{ borderColor: getScoreColor(breakdown?.hazard?.score ?? 0) }}>
+            <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 pl-3" style={{ borderColor: getFactorTone('hazard', breakdown?.hazard) }}>
               <span className="text-sm text-[var(--text-muted)]">Hazard Exposure</span>
-              <span className="text-sm font-semibold" style={{ color: getScoreColor(breakdown?.hazard?.score ?? 0) }}>{breakdown?.hazard?.status || '-'}</span>
+              <span className="text-sm font-semibold" style={{ color: getFactorTone('hazard', breakdown?.hazard) }}>{breakdown?.hazard?.status || '-'}</span>
             </div>
             <div className="quick-fact-row flex items-center justify-between gap-3 rounded-lg border-l-4 border-[var(--border-strong)] pl-3">
-              <span className="text-sm text-[var(--text-muted)]">Search Radius</span>
+              <span className="text-sm text-[var(--text-muted)]">Map View Radius</span>
               <span className="text-sm font-semibold text-[var(--text-main)]">{radius_meters}m</span>
             </div>
           </div>
         </div>
+
+        {notPermitted && (
+          <div className="mt-5 rounded-xl border border-[var(--trend-down)] bg-[var(--trend-down-bg)] p-4" role="alert">
+            <p className="text-sm font-semibold text-[var(--trend-down)]">Not permitted at this location</p>
+            <p className="mt-1 text-sm leading-6 text-[var(--text-main)]">
+              {verdict.reason} This site is not an option unless the zoning changes.
+            </p>
+          </div>
+        )}
 
         {/* STRATEGIC INSIGHT BOX */}
         {/* Stacked full-width rather than a 2-column grid: Strategic Recommendation
@@ -734,6 +715,12 @@ export default function Report({ data, targetCoords, onClose }) {
           <p className="insight-text text-sm leading-6 text-[var(--text-main)]">
             {insight ? insight : "Processing strategic recommendation based on geospatial parameters..."}
           </p>
+          {(dataNotes.length > 0 || weightsNote) && (
+            <div className="mt-3 space-y-1 border-t border-[var(--border-color)] pt-3 text-xs leading-5 text-[var(--text-muted)]">
+              {dataNotes.map((note) => <p key={note}>{note}</p>)}
+              {weightsNote && <p>{weightsNote}</p>}
+            </div>
+          )}
         </div>
 
         <div className="insight-box data-card p-5">
@@ -768,20 +755,25 @@ export default function Report({ data, targetCoords, onClose }) {
         </div>
 
         {/* SPATIAL CONTEXT MAP */}
-        <h3 className="section-heading eyebrow-label mt-6">Spatial Context ({radius_meters}m)</h3>
+        <h3 className="section-heading eyebrow-label mt-6">Spatial Context ({radius_meters}m view)</h3>
         <div className="report-map-container mt-3 overflow-hidden">
           <div ref={mapRef} style={{ width: '100%', height: '220px' }}></div>
 
           <div className="report-map-legend flex flex-wrap items-center gap-4 border-t border-[var(--border-color)] bg-[var(--bg-app)] px-4 py-3 text-sm font-medium text-[var(--text-muted)]">
             <span className="inline-flex items-center gap-2"><span className="legend-dot target"></span> Proposed Site</span>
             <span className="inline-flex items-center gap-2"><span className="legend-dot competitor" style={{ background: getBusinessTypeColor(business_type) }}></span> Competitors ({strictCompetitorsFound})</span>
+            {countedAnchors.length > 0 && (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rotate-45 border border-white" style={{ background: getMapInk() }} aria-hidden="true"></span> Anchors counted ({countedAnchors.length})
+              </span>
+            )}
           </div>
         </div>
 
         {/* METRIC BREAKDOWN PROGRESS BARS */}
         <h3 className="section-heading eyebrow-label mt-6">Metric Breakdown</h3>
         <div className="data-card mt-3 p-5">
-          <p className="factor-desc mb-4 text-sm text-[var(--text-muted)]">Tap any factor header to expand an actionable explanation for that score.</p>
+          <p className="factor-desc mb-4 text-sm text-[var(--text-muted)]">Tap any factor to see how it is measured.</p>
           <div className="metric-breakdown-grid grid gap-x-6 gap-y-5 sm:grid-cols-2">
           {breakdown && Object.entries(breakdown).map(([key, factor], index) => (
             <div className="progress-group card-stagger-item" style={{ '--stagger-index': index }} key={key}>
@@ -793,10 +785,10 @@ export default function Report({ data, targetCoords, onClose }) {
               >
                 <span className="factor-name text-sm font-semibold text-[var(--text-main)]">{formatFactorLabel(key)}</span>
                 <div className="factor-metrics flex items-center gap-3">
-                  <span className="metric-score rounded border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold" style={{ color: getScoreColor(factor.score) }}>
-                    {factor.score}/25
+                  <span className="metric-score rounded border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-1 text-xs font-semibold" style={{ color: getFactorTone(key, factor) }}>
+                    {formatFactorScore(factor)}
                   </span>
-                  <span className="metric-status text-xs font-medium" style={{ color: getScoreColor(factor.score) }}>
+                  <span className="metric-status text-xs font-medium" style={{ color: getFactorTone(key, factor) }}>
                     {factor.status}
                   </span>
                   <span className={`detail-chevron ${expandedDetail === key ? 'open' : ''}`} aria-hidden="true">
@@ -805,11 +797,12 @@ export default function Report({ data, targetCoords, onClose }) {
                 </div>
               </button>
               <div className="progress-track mt-2 h-2 overflow-hidden rounded-full border border-[var(--border-color)] bg-[var(--bg-app)]">
-                <div className="progress-fill" style={{ width: `${(factor.score / 25) * 100}%`, backgroundColor: getScoreColor(factor.score) }}></div>
+                <div className="progress-fill" style={{ width: `${(Number(factor.score || 0) / 25) * 100}%`, backgroundColor: getFactorTone(key, factor) }}></div>
               </div>
               <p className="factor-desc mt-2 text-sm text-[var(--text-muted)]">{factor.description}</p>
+              {factor.evidence && <p className="mt-1 text-sm text-[var(--text-main)]">{factor.evidence}</p>}
               <div className={`factor-details mt-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-app)] p-4 text-sm leading-6 text-[var(--text-main)] ${expandedDetail === key ? '' : 'hidden'}`}>
-                {getFactorDetailText(key, factor).split('. ').map((line, index) => (
+                {getFactorDetailText(factor).split('. ').map((line, index) => (
                   <p key={index}>{line.trim()}{line.trim().endsWith('.') ? '' : '.'}</p>
                 ))}
               </div>

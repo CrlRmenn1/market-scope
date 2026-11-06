@@ -103,8 +103,8 @@ export default function TrendPreferencesGate({ isOpen, user, onSaved, onLater })
             <p className="eyebrow-label mb-2">Trend Page Guide</p>
             <h2 id="trend-pref-title" className="text-xl font-semibold text-[var(--text-main)] sm:text-2xl">How the Trends page works</h2>
             <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
-              <p>MarketScope scans spots around Panabo in the background for your primary business, using the same engine as a manual scan, and shows the ones with a high chance of success.</p>
-              <p>It also scans other businesses usually run in your preferred setup and shows the two with the best spots.</p>
+              <p>MarketScope scans spots around Panabo in the background for every business type, using the same engine as a manual scan, and suggests which businesses fit each area.</p>
+              <p>It also shows the best areas for your primary business and marks the businesses usually run in your preferred setup.</p>
               <p>Tell us your primary business and preferred setup to start.</p>
             </div>
 

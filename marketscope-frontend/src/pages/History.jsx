@@ -6,7 +6,7 @@ import useIsDesktop from '../utils/useIsDesktop';
 import AnalysisLoader from '../components/common/AnalysisLoader';
 import Modal from '../components/common/Modal';
 import { BULK_DELETE_CONFIRM_TRIGGER_ID } from '../constants/layoutIds';
-import { getScoreTone } from '../utils/scoreTone';
+import { formatFactorScore, getFactorColor, getVerdict, isOlderEngineResult, pickResultMeta } from '../utils/verdict';
 
 // Floor so a very fast (e.g. cache-adjacent) fetch doesn't flash the loading
 // modal open-and-closed; cache hits skip the modal entirely (see openSavedReport).
@@ -33,13 +33,6 @@ const formatDate = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Unknown date';
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-};
-
-const getScoreLabel = (score) => {
-  const value = Number(score || 0);
-  if (value >= 75) return 'High Opportunity';
-  if (value >= 55) return 'Promising';
-  return 'Watchlist';
 };
 
 const groupHistoryByDate = (items) => {
@@ -184,14 +177,9 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     },
     radius_meters: item.radius_meters || 340,
     insight: item.insight || 'No strategic insight saved for this record.',
-    breakdown: getBreakdownForItem(item)
+    breakdown: getBreakdownForItem(item),
+    ...pickResultMeta(item)
   });
-
-  // Saved before the saturation sub-factors existed, so its factor values are estimates.
-  const isLegacyRecord = (item) => {
-    const breakdown = getBreakdownForItem(item);
-    return !(breakdown.competition_density || breakdown.road_access || breakdown.anchor_proximity || breakdown.building_density);
-  };
 
   const startOpeningModal = (historyId, rescanning) => {
     setOpeningHistoryId(historyId);
@@ -280,7 +268,8 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
               insight: analyzeData.insight,
               competitors_found: analyzeData.competitors_found,
               competitor_locations: analyzeData.competitor_locations || [],
-              breakdown: analyzeData.breakdown
+              breakdown: analyzeData.breakdown,
+              ...pickResultMeta(analyzeData)
             }
           : entry
       )));
@@ -328,16 +317,10 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     if (key === 'zoning') return 'Zoning Fit';
     if (key === 'competition_density') return 'Competition Density';
     if (key === 'road_access') return 'Road Access';
-    if (key === 'anchor_proximity') return 'Traffic Generators';
+    if (key === 'anchor_proximity') return 'Nearby Anchors';
     if (key === 'building_density') return 'Building Density';
-    if (key === 'saturation') return 'Market Saturation';
+    if (key === 'saturation') return 'Market Potential';
     return key;
-  };
-
-  const getFactorTone = (score) => {
-    if (score >= 20) return 'var(--trend-up)';
-    if (score >= 10) return 'var(--trend-neutral)';
-    return 'var(--trend-down)';
   };
 
   const getFactorSummary = (factor) => {
@@ -458,7 +441,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
 
   const getFactorContext = (key, factor, item) => {
     if (key === 'saturation') {
-      return 'Composite score from competition, road access, traffic generators, and built-form density.';
+      return 'Combined score from competition, road access, nearby anchors, and building density.';
     }
 
     if (key === 'demand') {
@@ -466,15 +449,15 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
     }
 
     if (key === 'competition_density') {
-      return factor?.description || 'Weighted inverse-density competitor scan.';
+      return factor?.description || 'How many competitors are nearby.';
     }
 
     if (key === 'road_access') {
-      return factor?.description || 'Nearest road class accessibility fit.';
+      return factor?.description || 'How easily the site is reached by road.';
     }
 
     if (key === 'anchor_proximity') {
-      return factor?.description || 'Traffic-generator proximity score.';
+      return factor?.description || 'Places nearby that bring people to the area.';
     }
 
     if (key === 'building_density') {
@@ -598,7 +581,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
                         >
                           {item.viability_score}
                         </span>
-                        <span className={`trends-score-badge ${getScoreTone(item.viability_score)}`}>{getScoreLabel(item.viability_score)}</span>
+                        <span className={`trends-score-badge ${getVerdict(item).tone}`}>{getVerdict(item).label}</span>
                       </div>
                     </div>
 
@@ -607,7 +590,7 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                           <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" />
                         </svg>
-                        Radius {item.radius_meters ?? '—'}m
+                        Map view {item.radius_meters ?? '—'}m
                       </span>
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-color)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--text-muted)]">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -621,10 +604,10 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
                       {item.insight}
                     </p>
 
-                    {isLegacyRecord(item) && (
+                    {isOlderEngineResult(item) && (
                       <div className="history-legacy-note mt-3 flex flex-col gap-2 rounded-xl border border-[var(--border-color)] p-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm leading-6 text-[var(--text-muted)]">
-                          Saved with an older version of the scoring, so its factor values are estimates.
+                          Scored by an older version of the engine, so this score can't be compared with newer scans.
                         </p>
                         <button
                           type="button"
@@ -691,8 +674,8 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
                         <div className="history-breakdown-grid grid gap-3 sm:grid-cols-2">
                           {Object.entries(getBreakdownForItem(item)).map(([key, factor]) => {
                             const isOpen = expandedFactorKeyByHistoryId[item.history_id] === key;
-                            const score = factor?.score || 0;
-                            const fillWidth = `${Math.max(0, Math.min(100, (score / 25) * 100))}%`;
+                            const score = factor?.score ?? null;
+                            const fillWidth = `${Math.max(0, Math.min(100, (Number(score || 0) / 25) * 100))}%`;
                             const factorContext = getFactorContext(key, factor, item);
 
                             return (
@@ -705,12 +688,12 @@ export default function History({ user, onOpenReport, getCachedReport, onCacheRe
                               >
                                 <div className="history-mini-header flex items-center justify-between gap-3">
                                   <span className="settings-value capitalize text-sm font-semibold text-[var(--text-main)]">{getFactorLabel(key)}</span>
-                                  <span className="history-mini-score text-sm font-bold" style={{ color: getFactorTone(score) }}>
-                                    {score}/25
+                                  <span className="history-mini-score text-sm font-bold" style={{ color: getFactorColor(score) }}>
+                                    {formatFactorScore(factor)}
                                   </span>
                                 </div>
                                 <div className="history-mini-track h-2 rounded-full bg-[var(--accent-hover)]" aria-hidden="true">
-                                  <div className="history-mini-fill h-2 rounded-full" style={{ width: fillWidth, background: getFactorTone(score) }} />
+                                  <div className="history-mini-fill h-2 rounded-full" style={{ width: fillWidth, background: getFactorColor(score) }} />
                                 </div>
                                 <div className="history-mini-meta text-xs leading-5 text-[var(--text-muted)]">
                                   <strong className="block text-[0.72rem] uppercase tracking-[0.08em] text-[var(--text-muted)]">{factor?.status || 'Factor detail'}</strong>

@@ -1,6 +1,6 @@
 # MarketScope
 
-Site-suitability analysis for MSMEs in Panabo City. A user picks a spot on the map and a business type. The backend scores the spot on zoning, flood hazard, and market saturation (competition, road access, nearby anchors, building density). The scores are combined with AHP weights into a viability score and a report.
+Site-suitability analysis for MSMEs in Panabo City. A user picks a spot on the map and a business type. Zoning decides whether the business is allowed there at all. The backend then scores flood hazard and market potential (competition, road access, nearby anchors, building density) and combines them with AHP weights into a viability score, a verdict and a report that explains the score. [docs/ENGINE_METHODOLOGY.md](docs/ENGINE_METHODOLOGY.md) has every formula and where it comes from.
 
 - **Frontend:** React + Vite + Leaflet, in `marketscope-frontend/`. Deployed on Vercel.
 - **Backend:** FastAPI + PostgreSQL + geopandas, in `marketscope-backend/`. Deployed on Render.
@@ -77,7 +77,7 @@ components/
   admin/           AdminLayout (desktop sidebar / mobile tab bar), adminNav, ui/ (shared admin pieces,
                    useAdminApi), MapLayerStudio + imageTraceOverlay (Map Layers)
   onboarding/      OnboardingModal, TrendPreferencesGate
-  trends/          TrendSpotCard (one scanned spot on the Trends page)
+  trends/          AreaMap, SuggestionCard (the Trends page's map and business cards)
   spaces/          SpaceSubmissionModal
 lib/api.js         Backend URL: VITE_API_BASE_URL, else localhost:8000 locally, else the Render URL
 constants/         layoutIds.js, motion.js (shared animation easing)
@@ -93,15 +93,17 @@ public/            sw.js (map tile cache)
 
 | Symptom | Backend | Frontend |
 |---|---|---|
-| Viability score looks wrong | `services/analysis.py` (`perform_analysis` combines the factors) | `pages/Report.jsx` |
-| Competition / road / anchor / building sub-score | `services/scoring.py` (`_score_*` functions) | |
-| Competitors missing or wrong | `services/osm_data.py` (OSM data), `db/queries.py` (`fetch_custom_msmes`) | |
+| Viability score looks wrong | `services/analysis.py` (`perform_analysis` combines the factors). Measure the engine across the city with `scripts/calibrate_engine.py`. | `pages/Report.jsx` |
+| Competition / road / anchor / building sub-score | `services/scoring.py` (`_score_*` functions), `services/value_functions.py`, every number in `constants/engine.py` | |
+| Verdict wording or cut-offs | `services/verdict.py`, `constants/engine.py` | `utils/verdict.js` |
+| Anchors missing or wrong | `services/anchors.py` (merges admin, original and OSM anchors), `routers/anchors.py` | `pages/admin/AnchorsPage.jsx`, `components/admin/AnchorsMap.jsx` |
+| Competitors missing or wrong | `services/osm_data.py` (OSM data, including tags in `other_tags`), `db/queries.py` (`fetch_custom_msmes`) | |
 | Flood hazard score | `services/hazard.py`, the active hazard layer in `map_layers` | `utils/hazardStyle.js` |
-| Zoning score | `services/zoning.py`, the active zoning layer in `map_layers`, allowed uses in `zoning_allowed_uses` (zones in `constants/map_layers.py`) | `utils/zoneStyle.js`, `components/admin/ZoningAllowedUses.jsx` |
+| Zoning check | `services/zoning.py`, the active zoning layer in `map_layers`, allowed uses in `zoning_allowed_uses` (zones in `constants/map_layers.py`) | `utils/zoneStyle.js`, `components/admin/ZoningAllowedUses.jsx` |
 | Map layers (admin) | `routers/map_layers.py`, `services/map_layers.py`, `db/map_layer_queries.py` | `components/admin/MapLayerStudio.jsx` |
-| AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), seed matrices in `db/schema.py`. There is no admin editor; change weights in the `ahp_weight_configs` table. | |
+| AHP weights | `services/ahp.py` (math), `services/ahp_weights.py` (cache), provisional matrices in `db/schema.py`. Import real answers with `scripts/import_ahp_judgments.py`, then restart the backend. | |
 | Business categories / profiles | `constants/msme.py` | `utils/businessTypes.js` |
-| Trend analysis | `routers/trends.py`, `services/trend_*.py`, `db/trend_queries.py` (see below) | `pages/Trends.jsx`, `components/trends/TrendSpotCard.jsx` |
+| Trend analysis | `routers/trends.py`, `services/trend_*.py`, `db/trend_queries.py` (see below) | `pages/Trends.jsx`, `components/trends/AreaMap.jsx`, `components/trends/SuggestionCard.jsx` |
 | Login, register, password reset | `routers/auth.py`, `services/auth_service.py`, `services/email.py` | `pages/AuthPages.jsx` |
 | Admin panel | `routers/admin_*.py`, `routers/msmes.py`, `routers/spaces.py` | `pages/AdminPanel.jsx`, `pages/admin/`, `components/admin/` |
 | Commercial spaces on the map | `routers/spaces.py`, `services/spaces.py` | `components/spaces/SpaceSubmissionModal.jsx`, `pages/Home.jsx` |
@@ -112,13 +114,13 @@ public/            sw.js (map tile cache)
 
 ## How trend analysis works
 
-The Trends page shows high-chance spots for the user's business, found by scans that run in the background with the same engine as a manual scan (`perform_analysis`).
+The Trends page ("Business Trend Suggestions") answers "which businesses fit this area?", from scans that run in the background with the same engine as a manual scan (`perform_analysis`). It describes current conditions. Nothing measures change over time, because the project has no historical data, and older runs are deleted.
 
-1. **Which businesses.** `services/trend_preferences.py` uses the user's two trend preferences: the primary business, plus every other business type usually run in the preferred setup (`TYPICAL_SETUP` in `constants/msme.py`).
-2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the Panabo landmarks, and a grid of points about 330 m apart inside every zone of the active zoning layer where the business type is allowed (the admin's allowed-uses table).
-3. **Scanning.** `services/trend_scan.py` keeps a queue with one worker thread. For each business type it runs `perform_analysis` on every spot (radius 340 m, no history row saved). Each result goes into `trend_scan_results`, and status and progress go into `trend_scan_runs`.
-4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24), and started after the last change to an active map layer, is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now".
-5. **What the page shows.** `services/trend_recommendations.py` returns the primary business's saved spots scoring at least `MARKETSCOPE_TREND_HIGH_CHANCE_MIN_SCORE` (70), ranked by viability score. Under "Other {setup} businesses" it shows the 2 same-setup businesses whose best spot scored highest. "View full report" opens the saved report, so no rescan is needed.
+1. **Which businesses.** Every business type, because suggestions compare them within an area. `services/trend_preferences.py` queues the user's primary business first, then the ones usually run in their preferred setup (`TYPICAL_SETUP` in `constants/msme.py`), then the rest. Preferences never change a score.
+2. **Which spots.** `services/trend_candidates.py` lists every For Rent/For Sale listing, the curated anchors and major OSM anchors, and a grid of points about 330 m apart inside every zone of the active zoning layer where the business type is allowed (the admin's allowed-uses table).
+3. **Scanning.** `services/trend_scan.py` keeps a queue with one worker thread. For each business type it runs `perform_analysis` on every spot (no history row saved). Each result goes into `trend_scan_results`, and status and progress go into `trend_scan_runs`.
+4. **Cache.** A business type whose last finished run is younger than `MARKETSCOPE_TREND_SCAN_FRESH_HOURS` (24), and started after the last change to anything that affects scores (an active map layer, anchors, competitors, or the engine version), is not scanned again. Its saved results are reused, and they are shared by every user. Scans are queued on login, when trend preferences are saved, when Trends is opened, and from "Rescan now". A run where more than 20% of the spots fail counts as failed and doesn't replace the previous good run, and a failed run isn't retried automatically for 30 minutes.
+5. **What the page shows.** `services/trend_suggestions.py` groups each permitted spot under its nearest named place from `panabo.pbf`, so an area is "around Gredu", not a barangay boundary. A business's area score is the average of its best 3 spots there, and it is a suggestion when that lands in the Highly Suitable class. Businesses with enough competitor data rank first, then by score. `services/trend_recommendations.py` also returns the best areas for the primary business. "View best spot report" opens the saved report, so no rescan is needed. [ENGINE_METHODOLOGY.md](docs/ENGINE_METHODOLOGY.md) explains the rules and thresholds.
 
 **Debugging:** `GET /trends/scan-status` lists the newest run of each business type. Backend logs start with `[trend-scan]`. In SQL: `SELECT * FROM trend_scan_runs;`
 
@@ -128,9 +130,9 @@ Flood hazard and zoning areas are stored in the database, in the `map_layers` ta
 
 - **Stacking:** where shapes overlap, the shape on top of the layer wins (`services/layer_stack.py`); new shapes go on top.
 - **Hazard:** `very_high`, `high`, `moderate` (scores 5 / 12 / 18; outside every polygon is Low Risk, 25).
-- **Zoning:** the 23 zones of the Panabo City Integrated Zoning Map C.Y. 2020-2029 (`ZONING_CLASSES` in `constants/map_layers.py`, e.g. `general_commercial`, `commercial_2`, `tourism`, `general_residential`, `industrial_1`, `agri_industrial`, `quarry`). Zoning is pass/fail: a business type allowed in the zone scores 25, otherwise 0; outside every polygon scores 0. Which business types are allowed where is the `zoning_allowed_uses` table, edited in Admin → Map layers → Zoning → Allowed businesses (seeded once from `DEFAULT_ZONING_ALLOWED_USES`). The six older classes (`commercial`, `mixed_use`, …) are converted once on startup (`LEGACY_ZONE_CLASSES`).
+- **Zoning:** the 23 zones of the Panabo City Integrated Zoning Map C.Y. 2020-2029 (`ZONING_CLASSES` in `constants/map_layers.py`, e.g. `general_commercial`, `commercial_2`, `tourism`, `general_residential`, `industrial_1`, `agri_industrial`, `quarry`). Zoning is a hard constraint: where a business type isn't allowed, its score is 0 and the verdict is Not Permitted. Outside every polygon the zoning is unverified, which isn't a ban, but the site can't be Highly Suitable. Which business types are allowed where is the `zoning_allowed_uses` table, edited in Admin → Map layers → Zoning → Allowed businesses (seeded once from `DEFAULT_ZONING_ALLOWED_USES`). The six older classes (`commercial`, `mixed_use`, …) are converted once on startup (`LEGACY_ZONE_CLASSES`).
 
-One layer per type is active, and scans use only the active ones. With no active zoning layer every spot scores 0 for zoning; with no active hazard layer every spot is Low Risk.
+One layer per type is active, and scans use only the active ones. With no active zoning layer every spot's zoning is unverified. With no active hazard layer, flood hazard is left out of the score and the report says so; the site isn't called safe.
 
 **Admin workflow (Admin → Map layers):** draw shapes on the map, trace them over a PDF/PNG/JPG of a printed map (the image stays in the browser and is not saved), or import a GeoJSON, KML or zipped shapefile (the original file is saved in `map_layer_files` and can be downloaded again). On every save the backend keeps only polygons, repairs broken shapes and trims them to the Panabo main area (`PANABO_BOUNDS`). Activating or changing the active layer reloads the scoring caches and marks saved trend scans stale.
 

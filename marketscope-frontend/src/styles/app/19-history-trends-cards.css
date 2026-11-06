@@ -149,6 +149,18 @@ html[data-theme="dark"] .text-slate-500 {
   color: var(--trend-down);
 }
 
+.trends-score-badge.blocked {
+  background: var(--trend-down);
+  border: 1px solid var(--trend-down);
+  color: #ffffff;
+}
+
+.trends-score-badge.unknown {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
 .trends-score {
   font-size: 1rem;
   font-weight: 800;
@@ -181,6 +193,55 @@ html[data-theme="dark"] .text-slate-500 {
   color: var(--text-muted);
   font-size: 0.9rem;
   line-height: 1.45;
+}
+
+.trends-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.trends-tag.gap {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.trend-area-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.trend-area-marker.thin {
+  border-style: dashed;
+}
+
+.trend-area-marker.none {
+  background: #64748b;
+}
+
+.trend-area-marker.selected {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.trend-area-marker:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 html[data-theme="light"] .trends-score-badge.high {

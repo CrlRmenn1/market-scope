@@ -79,6 +79,11 @@ def normalize_history_row(row):
     for column in ("breakdown", "competitor_locations"):
         row[column] = _decode_json_column(row.get(column))
 
+    # Scans from before engine 2.0 have none of these, and the pages say so.
+    result_meta = _decode_json_column(row.pop("result_meta", None))
+    if isinstance(result_meta, dict):
+        row.update(result_meta)
+
     if row.get("competitors_found") is None:
         competitor_locations = row.get("competitor_locations") or []
         if isinstance(competitor_locations, list):
@@ -273,7 +278,8 @@ async def get_user_history(pool, user_id: int):
                 ) AS competitors_found,
                 competitor_locations,
                 scan_date AS created_at,
-                breakdown
+                breakdown,
+                result_meta
             FROM analysis_history
             WHERE user_id = $1
             ORDER BY scan_date DESC, {history_pk_column} DESC
@@ -306,7 +312,8 @@ async def get_user_history_item(pool, user_id: int, history_id: int):
                 ) AS competitors_found,
                 competitor_locations,
                 scan_date AS created_at,
-                breakdown
+                breakdown,
+                result_meta
             FROM analysis_history
             WHERE user_id = $1 AND {history_pk_column} = $2
             LIMIT 1

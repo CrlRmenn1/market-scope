@@ -45,11 +45,19 @@ from services.spaces import (
     resolve_space_context_for_coords,
 )
 from services.trend_candidates import build_scan_candidates
-from services.trend_preferences import get_trend_scan_business_keys
+from services.trend_preferences import get_all_scan_business_keys
 from services.zoning import preload_zoning_layer_cache
 
 
 PROGRESS_UPDATE_EVERY = 5
+
+# A run that failed isn't retried on its own until this long after. "Rescan now"
+# still works, so a problem doesn't turn into scanning on every page poll.
+FAILED_RETRY_COOLDOWN_SECONDS = 30 * 60
+
+# A run missing more than this share of its spots counts as failed, so it can't
+# replace a complete earlier run.
+MAX_FAILED_SPOT_SHARE = 0.2
 
 _SCAN_QUEUE = Queue()
 _IN_FLIGHT = set()  # business types that are queued or being scanned right now
@@ -64,12 +72,22 @@ def _log(message: str):
 
 
 def is_run_fresh(run) -> bool:
-    """Younger than TREND_SCAN_FRESH_HOURS, and started after the last hazard/zoning layer change."""
+    """Younger than TREND_SCAN_FRESH_HOURS, and started after the last change to anything
+    that affects scores: hazard/zoning layers, anchors, competitors, or the engine itself."""
     if not run or int(run.get("age_seconds") or 0) > TREND_SCAN_FRESH_HOURS * 3600:
         return False
     layers_changed_at = get_map_layers_changed_at()
     started_at = run.get("started_at")
     return not (layers_changed_at and started_at and started_at < layers_changed_at)
+
+
+def is_cooling_down(run) -> bool:
+    """True for a run that failed recently (see FAILED_RETRY_COOLDOWN_SECONDS)."""
+    return bool(run) and run.get("status") == "failed" and int(run.get("age_seconds") or 0) < FAILED_RETRY_COOLDOWN_SECONDS
+
+
+def too_many_failed_spots(failed_spots: int, total_spots: int) -> bool:
+    return total_spots > 0 and failed_spots / total_spots > MAX_FAILED_SPOT_SHARE
 
 
 # ---- worker lifecycle -------------------------------------------------------
@@ -135,11 +153,15 @@ def request_trend_scans(business_keys, trigger_source: str, force: bool = False)
             try:
                 with open_trend_cursor() as cursor:
                     done_run = get_latest_done_run(cursor, business_key, TREND_SCAN_RADIUS)
+                    latest_run = get_latest_run(cursor, business_key)
             except Exception as exc:
                 _log(f"{business_key}: freshness check failed, not queuing ({exc})")
                 continue
             if is_run_fresh(done_run):
                 _log(f"{business_key}: skipped, saved results are fresh (run #{done_run['id']}, trigger={trigger_source})")
+                continue
+            if is_cooling_down(latest_run):
+                _log(f"{business_key}: skipped, run #{latest_run['id']} failed recently (trigger={trigger_source})")
                 continue
 
         with _IN_FLIGHT_LOCK:
@@ -154,10 +176,10 @@ def request_trend_scans(business_keys, trigger_source: str, force: bool = False)
 
 
 def queue_scans_for_user(user_profile, trigger_source: str, force: bool = False):
-    """Queue scans for this user's primary business and same-setup businesses.
+    """Queue scans for every business type, the user's own first.
     Never raises, so it is safe to call from login and profile-save routes."""
     try:
-        return request_trend_scans(get_trend_scan_business_keys(user_profile), trigger_source, force=force)
+        return request_trend_scans(get_all_scan_business_keys(user_profile), trigger_source, force=force)
     except Exception as exc:
         _log(f"could not queue scans ({trigger_source}): {exc}")
         return []
@@ -184,10 +206,9 @@ def scan_candidate(business_key: str, candidate: dict, space_markers):
 
 
 def _ensure_geo_data_loaded():
-    """Without these caches perform_analysis falls back to neutral road/building
-    scores, so a scan right after startup would save different scores than a
-    manual scan. Each loader returns at once when already loaded, and waits
-    when the startup preload thread is still loading it."""
+    """Load these before the run starts, so its first spot doesn't take the wait.
+    Each loader returns at once when already loaded, and waits when the startup
+    preload thread is still loading it."""
     preload_hazard_layer_cache()
     preload_zoning_layer_cache()
     preload_pbf_competitor_cache()
@@ -223,8 +244,8 @@ def _run_business_scan(business_key: str, trigger_source: str):
                 if index % PROGRESS_UPDATE_EVERY == 0 or index == len(candidates):
                     update_run_progress(cursor, run_id, index)
 
-            if failed_spots == len(candidates) and candidates:
-                raise RuntimeError("every spot failed to scan")
+            if too_many_failed_spots(failed_spots, len(candidates)):
+                raise RuntimeError(f"{failed_spots} of {len(candidates)} spots failed to scan")
 
             finish_run(cursor, run_id, "done")
             delete_older_runs(cursor, business_key, keep_run_id=run_id)
@@ -250,7 +271,8 @@ def get_business_scan_state(cursor, business_key: str):
 
     state: "scanning" | "queued" | "ready" | "stale" | "failed" | "missing"
     done_run is the newest finished run (its results are shown even while a
-    rescan is going on).
+    rescan is going on). error is set whenever the newest run failed, including
+    when older results are still being shown.
     """
     latest_run = get_latest_run(cursor, business_key)
     done_run = get_latest_done_run(cursor, business_key, TREND_SCAN_RADIUS)
@@ -279,7 +301,7 @@ def get_business_scan_state(cursor, business_key: str):
         "state": state,
         "progress": progress,
         "done_run": done_run,
-        "error": latest_run.get("error") if latest_run and state == "failed" else None,
+        "error": latest_run.get("error") if latest_run and not in_flight and latest_run["status"] == "failed" else None,
     }
 
 
