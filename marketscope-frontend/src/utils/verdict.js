@@ -38,6 +38,28 @@ export const getFactorColor = (score) => {
   return 'var(--trend-down)';
 };
 
+const FACTOR_LABELS = {
+  zoning: 'Zoning Fit',
+  hazard: 'Hazard Exposure',
+  competition_density: 'Competition Density',
+  road_access: 'Road Access',
+  anchor_proximity: 'Nearby Anchors',
+  building_density: 'Building Density',
+  saturation: 'Market Potential',
+  demand: 'Infrastructure Proxies'
+};
+
+export const formatFactorLabel = (key) => FACTOR_LABELS[key] || String(key || '').replace(/_/g, ' ');
+
+// A factor's explanation as one string ('' when the scan didn't store one).
+export const factorDetailText = (factor) => {
+  const details = factor?.details;
+  if (typeof details === 'string') return details.trim();
+  if (Array.isArray(details)) return details.filter(Boolean).join(' ').trim();
+  if (details && typeof details === 'object') return Object.values(details).filter(Boolean).join(' ').trim();
+  return '';
+};
+
 export const formatFactorScore = (factor) => {
   if (factor?.constraint) {
     if (factor.state === 'permitted') return 'Allowed';
