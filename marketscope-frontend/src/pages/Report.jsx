@@ -9,7 +9,7 @@ import Modal from '../components/common/Modal';
 import { PDF_SETTINGS_TRIGGER_ID } from '../constants/layoutIds';
 import { getHazardStyle, getHazardVar } from '../utils/hazardStyle';
 import { fetchActiveMapLayer } from '../utils/mapLayers';
-import { describeWeights, formatFactorScore, getFactorColor, getVerdict, pickResultMeta } from '../utils/verdict';
+import { describeWeights, factorDetailText, formatFactorLabel, formatFactorScore, getFactorColor, getVerdict, pickResultMeta } from '../utils/verdict';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
@@ -24,6 +24,10 @@ const normalizeCoords = (coords) => {
   return { lat, lng };
 };
 
+// Resolution of the PDF's map image (about 140 dpi). Map tiles have fixed-size labels,
+// so going much higher would make the street names too small to read on paper.
+const MAP_PX_PER_MM = 5.5;
+
 const hazardNameByVar = {
   1: 'Very High Flood Hazard',
   2: 'High Flood Hazard',
@@ -32,7 +36,6 @@ const hazardNameByVar = {
 
 export default function Report({ data, targetCoords, onClose }) {
   const mapRef = useRef(null);
-  const reportExportRef = useRef(null);
   const mapInstance = useRef(null);
   const mapFeaturesRef = useRef(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
@@ -46,9 +49,7 @@ export default function Report({ data, targetCoords, onClose }) {
   const [pdfOptions, setPdfOptions] = useState({
     format: 'a4',
     orientation: 'portrait',
-    marginMm: 8,
-    quality: 0.96,
-    scale: 2
+    marginMm: 18
   });
   const resolvedTargetCoords = normalizeCoords(targetCoords) || normalizeCoords(data?.target_coords);
   const strictCompetitorsFound = Math.max(0, Number(data?.competitors_found || 0));
@@ -288,182 +289,74 @@ export default function Report({ data, targetCoords, onClose }) {
     return dateValue || '-';
   };
 
-  const formatFactorLabel = (key) => {
-    if (key === 'zoning') return 'Zoning Fit';
-    if (key === 'hazard') return 'Hazard Exposure';
-    if (key === 'competition_density') return 'Competition Density';
-    if (key === 'road_access') return 'Road Access';
-    if (key === 'anchor_proximity') return 'Nearby Anchors';
-    if (key === 'building_density') return 'Building Density';
-    if (key === 'saturation') return 'Market Potential';
-    if (key === 'demand') return 'Infrastructure Proxies';
-    return String(key || '').replace(/_/g, ' ');
-  };
+  const getFactorDetailText = (factor) => (
+    factorDetailText(factor) || 'This scan was saved before factor explanations were stored. Re-scan the location to see one.'
+  );
 
-  const getFactorDetailText = (factor) => {
-    const details = factor.details;
-    if (typeof details === 'string' && details.trim().length > 0) {
-      return details;
-    }
-    if (Array.isArray(details) && details.length > 0) {
-      return details.join(' ');
-    }
-    if (details && typeof details === 'object') {
-      const joined = Object.values(details).filter(Boolean).join(' ');
-      if (joined.trim().length > 0) return joined;
-    }
-
-    return 'This scan was saved before factor explanations were stored. Re-scan the location to see one.';
-  };
-
-  
+  // The PDF is built as a document (utils/reportPdf.js), not a picture of this screen.
+  // It always carries the AI narrative, so one is written first if there isn't one yet.
   const handlePrint = async () => {
-    if (!reportExportRef.current || isExportingPdf) return;
+    if (isExportingPdf || isGeneratingAiReport) return;
 
     setIsExportingPdf(true);
 
-    const safeName = (business_type || 'Report').replace(/\s+/g, '_');
+    const safeName = (businessLabel || business_type || 'Report').replace(/[^\w-]+/g, '_');
 
     try {
-      await exportReportPdf(`MarketScope_${safeName}_Dossier.pdf`);
+      let narrative = { narrative: aiNarrative, qc: aiQc, meta: aiMeta, error: '' };
+      if (!aiNarrative) {
+        setAiError('');
+        setIsGeneratingAiReport(true);
+        const outcome = await fetchAiNarrative();
+        applyAiNarrative(outcome);
+        setIsGeneratingAiReport(false);
+        narrative = outcome;
+      }
+
+      const [{ buildReportPdf, getSiteMapBox }, { renderSiteMapImage }] = await Promise.all([
+        import('../utils/reportPdf'),
+        import('../utils/siteMapImage')
+      ]);
+
+      // The map is drawn to the exact shape it gets on the page. Without it the PDF still works.
+      const mapBox = getSiteMapBox(pdfOptions);
+      const competitorColor = getBusinessTypeColor(business_type);
+      const mapImage = await renderSiteMapImage({
+        center: resolvedTargetCoords,
+        radiusMeters: Number(radius_meters || 340),
+        competitors: competitorLocations.map(normalizeCoords).filter(Boolean),
+        anchors: countedAnchors.map(normalizeCoords).filter(Boolean),
+        competitorColor,
+        widthPx: mapBox.width * MAP_PX_PER_MM,
+        heightPx: mapBox.height * MAP_PX_PER_MM
+      }).catch((error) => {
+        console.warn('Site map image failed:', error);
+        return null;
+      });
+
+      const doc = buildReportPdf({
+        data,
+        targetCoords: resolvedTargetCoords,
+        narrative: narrative.narrative,
+        narrativeMeta: narrative.meta,
+        narrativeQc: narrative.qc,
+        siteMap: mapImage && {
+          ...mapImage,
+          competitorColor,
+          competitorCount: strictCompetitorsFound,
+          anchorCount: countedAnchors.length
+        },
+        options: pdfOptions
+      });
+      doc.save(`MarketScope_${safeName}_Feasibility_Report.pdf`);
     } catch (error) {
       console.error('PDF export failed:', error);
       window.alert('Unable to generate PDF right now. Please try again.');
     } finally {
+      setIsGeneratingAiReport(false);
       setIsExportingPdf(false);
       setIsPdfSettingsOpen(false);
     }
-  };
-
-  const exportReportPdf = async (filename) => {
-    if (!reportExportRef.current) {
-      throw new Error('Report content is not ready for export.');
-    }
-
-    const html2pdfModule = await import('html2pdf.js');
-    const html2pdf = html2pdfModule.default;
-
-    await html2pdf()
-      .set({
-        margin: [pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm, pdfOptions.marginMm],
-        filename,
-        image: { type: 'jpeg', quality: pdfOptions.quality },
-        html2canvas: {
-          scale: pdfOptions.scale,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          scrollX: 0,
-          scrollY: 0,
-          onclone: (doc) => {
-            const clonedPage = doc.querySelector('.report-page');
-            if (clonedPage) {
-              clonedPage.classList.add('pdf-force-expand');
-            }
-
-            const style = doc.createElement('style');
-            style.textContent = `
-              .pdf-hide { display: none !important; }
-              :root,
-              html,
-              body {
-                --bg-app: #ffffff !important;
-                --bg-sheet: #ffffff !important;
-                --bg-glass: #ffffff !important;
-                --text-main: #111827 !important;
-                --text-muted: #4b5563 !important;
-                --border-color: #e5e7eb !important;
-                --surface-1-bg: #ffffff !important;
-                --surface-1-border: #e5e7eb !important;
-                --surface-1-blur: 0px !important;
-                --surface-2-bg: #ffffff !important;
-                --surface-2-border: #e5e7eb !important;
-                --surface-2-blur: 0px !important;
-                --surface-3-bg: #ffffff !important;
-                --surface-3-border: #e5e7eb !important;
-                --surface-3-blur: 0px !important;
-                background: #ffffff !important;
-                color: #111827 !important;
-              }
-              /* Glassmorphism tokens above are re-solidified for export, but
-                 belt-and-suspenders: html2canvas has poor/no backdrop-filter
-                 support, so also strip it explicitly on every card-family and
-                 header surface that could carry it. */
-              .data-card,
-              .main-score-card,
-              .disclaimer-card,
-              .report-map-container,
-              .insight-box,
-              .report-header {
-                backdrop-filter: none !important;
-                -webkit-backdrop-filter: none !important;
-              }
-              .report-page {
-                position: static !important;
-                inset: auto !important;
-                height: auto !important;
-                overflow: visible !important;
-                background: #ffffff !important;
-                color: #111827 !important;
-                display: block !important;
-              }
-              .report-header {
-                position: static !important;
-                top: auto !important;
-                z-index: auto !important;
-                padding: 0 0 12px !important;
-                margin-bottom: 14px !important;
-                background: transparent !important;
-                border-bottom: 1px solid #e5e7eb !important;
-                backdrop-filter: none !important;
-              }
-              .report-scroll-content {
-                padding: 0 !important;
-                max-width: none !important;
-                width: 100% !important;
-              }
-              .main-score-card,
-              .insight-box,
-              .report-map-container,
-              .data-card,
-              .disclaimer-card {
-                break-inside: avoid;
-                page-break-inside: avoid;
-              }
-              .report-map-legend {
-                background: #ffffff !important;
-                border-top: 1px solid #e5e7eb !important;
-                color: #374151 !important;
-              }
-              .legend-dot.target { border-color: #ffffff !important; }
-              .legend-dot.competitor { border-color: #ffffff !important; }
-              .progress-fill { transition: none !important; }
-              /* PDF-only: hide map and expand all metric details */
-              .pdf-force-expand .report-map-container {
-                display: none !important;
-              }
-              .pdf-force-expand .factor-details,
-              .pdf-force-expand .factor-details.hidden {
-                display: block !important;
-              }
-              .pdf-force-expand .detail-chevron {
-                transform: rotate(180deg) !important;
-              }
-            `;
-            doc.head.appendChild(style);
-          }
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: pdfOptions.format,
-          orientation: pdfOptions.orientation
-        },
-        pagebreak: {
-          mode: ['css', 'legacy'],
-          avoid: ['.main-score-card', '.insight-box', '.report-map-container', '.data-card', '.disclaimer-card']
-        }
-      })
-      .from(reportExportRef.current)
-      .save();
   };
 
   // The scan result exactly as shown on this page, so the AI narrative quotes the same
@@ -501,26 +394,42 @@ export default function Report({ data, targetCoords, onClose }) {
     return result;
   };
 
-  const handleGenerateAiReport = async () => {
-    if (isGeneratingAiReport) return;
-
-    setAiError('');
-    setIsGeneratingAiReport(true);
+  // Returns the outcome instead of setting state, so the PDF export can commit it
+  // synchronously. Never throws: a failed request comes back as `error`.
+  const fetchAiNarrative = async () => {
     try {
       const result = await requestAiReport(false);
-      const narrative = result?.report?.narrative || '';
-      setAiNarrative(narrative);
-      setAiQc(result?.qc || null);
-      setAiMeta(result?.generation_meta || null);
+      return {
+        narrative: result?.report?.narrative || '',
+        qc: result?.qc || null,
+        meta: result?.generation_meta || null,
+        error: ''
+      };
     } catch (error) {
-      setAiError(error?.message || 'Failed to generate AI report.');
-    } finally {
-      setIsGeneratingAiReport(false);
+      return { error: error?.message || 'Failed to generate AI report.' };
     }
   };
 
+  // On failure the error is shown and any earlier narrative is kept.
+  const applyAiNarrative = (outcome) => {
+    setAiError(outcome.error);
+    if (outcome.error) return;
+    setAiNarrative(outcome.narrative);
+    setAiQc(outcome.qc);
+    setAiMeta(outcome.meta);
+  };
+
+  const handleGenerateAiReport = async () => {
+    if (isGeneratingAiReport || isExportingPdf) return;
+
+    setAiError('');
+    setIsGeneratingAiReport(true);
+    applyAiNarrative(await fetchAiNarrative());
+    setIsGeneratingAiReport(false);
+  };
+
   return (
-    <div ref={reportExportRef} className="report-page slide-up bg-[var(--bg-app)]">
+    <div className="report-page slide-up bg-[var(--bg-app)]">
       <div className="report-header sticky top-0 z-[1200] flex items-center justify-between border-b border-[var(--border-color)] bg-[var(--bg-glass)] px-3 py-3 backdrop-blur-md sm:px-5 sm:py-4">
         <h2 className="report-title min-w-0 flex-1 truncate text-base font-semibold text-[var(--text-main)] sm:text-lg">Analysis Dossier</h2>
 
@@ -528,7 +437,7 @@ export default function Report({ data, targetCoords, onClose }) {
           <button
             className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-sheet)] px-2 py-2 text-xs font-semibold text-[var(--text-main)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] sm:px-3"
             onClick={handleGenerateAiReport}
-            disabled={isGeneratingAiReport}
+            disabled={isGeneratingAiReport || isExportingPdf}
             title="Generate LLM feasibility narrative"
           >
             <span className="hidden sm:inline">{isGeneratingAiReport ? 'Generating AI...' : 'Generate AI'}</span>
@@ -569,7 +478,7 @@ export default function Report({ data, targetCoords, onClose }) {
         ariaLabel="PDF export settings"
       >
             <h3 className="text-base font-semibold text-[var(--text-main)]">Export PDF Settings</h3>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">The exported file always uses a white report theme.</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">The PDF is laid out as a printable report with the site map and the AI narrative. If there is no narrative yet, one is written first.</p>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <label className="text-xs font-medium text-[var(--text-muted)]">
@@ -596,43 +505,16 @@ export default function Report({ data, targetCoords, onClose }) {
                 </select>
               </label>
 
-              <label className="text-xs font-medium text-[var(--text-muted)]">
-                Margin (mm)
+              <label className="col-span-2 text-xs font-medium text-[var(--text-muted)]">
+                Margins
                 <select
                   className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
                   value={pdfOptions.marginMm}
                   onChange={(e) => setPdfOptions((prev) => ({ ...prev, marginMm: Number(e.target.value) }))}
                 >
-                  <option value={6}>6</option>
-                  <option value={8}>8</option>
-                  <option value={10}>10</option>
-                  <option value={12}>12</option>
-                </select>
-              </label>
-
-              <label className="text-xs font-medium text-[var(--text-muted)]">
-                Scale
-                <select
-                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
-                  value={pdfOptions.scale}
-                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, scale: Number(e.target.value) }))}
-                >
-                  <option value={1.5}>1.5</option>
-                  <option value={2}>2.0</option>
-                  <option value={2.5}>2.5</option>
-                </select>
-              </label>
-
-              <label className="col-span-2 text-xs font-medium text-[var(--text-muted)]">
-                Image Quality
-                <select
-                  className="mt-1 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-app)] px-2 py-2 text-sm text-[var(--text-main)]"
-                  value={pdfOptions.quality}
-                  onChange={(e) => setPdfOptions((prev) => ({ ...prev, quality: Number(e.target.value) }))}
-                >
-                  <option value={0.9}>Standard (0.90)</option>
-                  <option value={0.96}>High (0.96)</option>
-                  <option value={0.99}>Max (0.99)</option>
+                  <option value={12}>Narrow (12 mm)</option>
+                  <option value={18}>Normal (18 mm)</option>
+                  <option value={25}>Wide (25 mm)</option>
                 </select>
               </label>
             </div>
@@ -650,9 +532,9 @@ export default function Report({ data, targetCoords, onClose }) {
                 type="button"
                 className="rounded-lg bg-[var(--btn-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--btn-primary-text)] transition hover:bg-[var(--btn-primary-hover)]"
                 onClick={handlePrint}
-                disabled={isExportingPdf}
+                disabled={isExportingPdf || isGeneratingAiReport}
               >
-                {isExportingPdf ? 'Generating...' : 'Generate PDF'}
+                {isGeneratingAiReport ? 'Writing AI narrative...' : isExportingPdf ? 'Generating PDF...' : 'Generate PDF'}
               </button>
             </div>
       </Modal>
@@ -736,7 +618,7 @@ export default function Report({ data, targetCoords, onClose }) {
             </div>
           ) : (
               <p className="text-sm leading-6 text-[var(--text-muted)]">
-              Generate AI to create an LLM narrative based on structured scores, zoning/hazard status, and saturation metrics.
+              Click Generate AI to write a plain-language feasibility narrative from this scan&apos;s scores, zoning, hazard and saturation data. It is also written automatically when you save the report as a PDF.
             </p>
           )}
 
